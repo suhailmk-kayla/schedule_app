@@ -1,0 +1,316 @@
+import 'package:dio/dio.dart';
+import 'package:either_dart/either.dart';
+import 'package:sqflite/sqflite.dart';
+import '../local/database_helper.dart';
+import '../../models/master_data_api.dart';
+import '../../helpers/errors/failures.dart';
+import '../../utils/api_endpoints.dart';
+
+/// Categories Repository
+/// Handles local DB operations and API sync for Categories
+/// Converted from KMP's CategoryRepository.kt
+class CategoriesRepository {
+  final DatabaseHelper _databaseHelper;
+  final Dio _dio;
+
+  CategoriesRepository({
+    required DatabaseHelper databaseHelper,
+    required Dio dio,
+  })  : _databaseHelper = databaseHelper,
+        _dio = dio;
+
+  // ============================================================================
+  // LOCAL DB READ METHODS (Used by providers for display)
+  // ============================================================================
+
+  /// Get all categories with optional search key
+  Future<Either<Failure, List<Category>>> getAllCategories({
+    String searchKey = '',
+  }) async {
+    try {
+      final db = await _databaseHelper.database;
+      final List<Map<String, dynamic>> maps;
+
+      if (searchKey.isEmpty) {
+        maps = await db.query(
+          'Category',
+          where: 'flag = ?',
+          whereArgs: [1],
+          orderBy: 'name ASC',
+        );
+      } else {
+        final searchPattern = '%$searchKey%';
+        maps = await db.query(
+          'Category',
+          where: 'flag = 1 AND LOWER(name) LIKE LOWER(?)',
+          whereArgs: [searchPattern],
+          orderBy: 'name ASC',
+        );
+      }
+
+      final categories = maps.map((map) => Category.fromMap(map)).toList();
+      return Right(categories);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get category by ID
+  Future<Either<Failure, Category?>> getCategoryById(int categoryId) async {
+    try {
+      final db = await _databaseHelper.database;
+      final maps = await db.query(
+        'Category',
+        where: 'flag = 1 AND categoryId = ?',
+        whereArgs: [categoryId],
+        orderBy: 'name ASC',
+      );
+
+      if (maps.isEmpty) {
+        return const Right(null);
+      }
+
+      final category = Category.fromMap(maps.first);
+      return Right(category);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get category by name
+  Future<Either<Failure, List<Category>>> getCategoryByName(String name) async {
+    try {
+      final db = await _databaseHelper.database;
+      final maps = await db.query(
+        'Category',
+        where: 'flag = 1 AND LOWER(name) = LOWER(?)',
+        whereArgs: [name],
+        orderBy: 'name ASC',
+      );
+
+      final categories = maps.map((map) => Category.fromMap(map)).toList();
+      return Right(categories);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get category by name excluding specific category ID
+  Future<Either<Failure, List<Category>>> getCategoryByNameWithId({
+    required String name,
+    required int categoryId,
+  }) async {
+    try {
+      final db = await _databaseHelper.database;
+      final maps = await db.query(
+        'Category',
+        where: 'flag = 1 AND LOWER(name) = LOWER(?) AND categoryId != ?',
+        whereArgs: [name, categoryId],
+        orderBy: 'name ASC',
+      );
+
+      final categories = maps.map((map) => Category.fromMap(map)).toList();
+      return Right(categories);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get last inserted category
+  Future<Either<Failure, Category?>> getLastEntry() async {
+    try {
+      final db = await _databaseHelper.database;
+      final maps = await db.query(
+        'Category',
+        orderBy: 'categoryId DESC',
+        limit: 1,
+      );
+
+      if (maps.isEmpty) {
+        return const Right(null);
+      }
+
+      final category = Category.fromMap(maps.first);
+      return Right(category);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  // ============================================================================
+  // LOCAL DB WRITE METHODS (Used by sync and write operations)
+  // ============================================================================
+
+  /// Add single category to local DB
+  Future<Either<Failure, void>> addCategory(Category category) async {
+    try {
+      final db = await _databaseHelper.database;
+      await db.insert(
+        'Category',
+        category.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Add multiple categories to local DB (transaction)
+  Future<Either<Failure, void>> addCategories(List<Category> categories) async {
+    try {
+      final db = await _databaseHelper.database;
+      await db.transaction((txn) async {
+        for (final category in categories) {
+          await txn.insert(
+            'Category',
+            category.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      });
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Update category in local DB
+  Future<Either<Failure, void>> updateCategoryLocal(Category category) async {
+    try {
+      final db = await _databaseHelper.database;
+      await db.update(
+        'Category',
+        {'name': category.name},
+        where: 'categoryId = ?',
+        whereArgs: [category.id],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Clear all categories from local DB
+  Future<Either<Failure, void>> clearAll() async {
+    try {
+      final db = await _databaseHelper.database;
+      await db.delete('Category');
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  // ============================================================================
+  // API SYNC METHODS (Used by sync repository)
+  // ============================================================================
+
+  /// Sync categories from API (batch download)
+  Future<Either<Failure, CategoryListApi>> syncCategoriesFromApi({
+    required int partNo,
+    required int limit,
+    required int userType,
+    required int userId,
+    required String updateDate,
+  }) async {
+    try {
+      final response = await _dio.get(
+        ApiEndpoints.categoryDownloads,
+        queryParameters: {
+          'part_no': partNo.toString(),
+          'limit': limit.toString(),
+          'user_type': userType.toString(),
+          'user_id': userId.toString(),
+          'update_date': updateDate,
+        },
+      );
+
+      final categoryListApi = CategoryListApi.fromJson(response.data);
+      return Right(categoryListApi);
+    } on DioException catch (e) {
+      return Left(NetworkFailure.fromDioError(e));
+    } catch (e) {
+      return Left(UnknownFailure.fromError(e));
+    }
+  }
+
+  // ============================================================================
+  // API WRITE METHODS (Used by providers for create/update)
+  // ============================================================================
+
+  /// Create category via API and update local DB
+  Future<Either<Failure, Category>> createCategory({
+    required String name,
+    String remark = '',
+  }) async {
+    try {
+      // 1. Call API
+      final response = await _dio.post(
+        ApiEndpoints.addCategory,
+        data: {
+          'name': name,
+          'remark': remark,
+        },
+      );
+
+      // 2. Parse response
+      final categoryApi = CategoryApi.fromJson(response.data);
+      if (categoryApi.status != 1) {
+        return Left(ServerFailure.fromError(
+          'Failed to create category: ${categoryApi.message}',
+        ));
+      }
+
+      // 3. Store in local DB
+      final addResult = await addCategory(categoryApi.data);
+      if (addResult.isLeft) {
+        return addResult.map((_) => categoryApi.data);
+      }
+
+      return Right(categoryApi.data);
+    } on DioException catch (e) {
+      return Left(NetworkFailure.fromDioError(e));
+    } catch (e) {
+      return Left(UnknownFailure.fromError(e));
+    }
+  }
+
+  /// Update category via API and update local DB
+  Future<Either<Failure, Category>> updateCategory({
+    required int categoryId,
+    required String name,
+  }) async {
+    try {
+      // 1. Call API
+      final response = await _dio.post(
+        ApiEndpoints.updateCategory,
+        data: {
+          'id': categoryId,
+          'name': name,
+        },
+      );
+
+      // 2. Parse response
+      final categoryApi = CategoryApi.fromJson(response.data);
+      if (categoryApi.status != 1) {
+        return Left(ServerFailure.fromError(
+          'Failed to update category: ${categoryApi.message}',
+        ));
+      }
+
+      // 3. Store in local DB
+      final updateResult = await updateCategoryLocal(categoryApi.data);
+      if (updateResult.isLeft) {
+        return updateResult.map((_) => categoryApi.data);
+      }
+
+      return Right(categoryApi.data);
+    } on DioException catch (e) {
+      return Left(NetworkFailure.fromDioError(e));
+    } catch (e) {
+      return Left(UnknownFailure.fromError(e));
+    }
+  }
+}
+

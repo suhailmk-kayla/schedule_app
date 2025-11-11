@@ -1,0 +1,664 @@
+---
+alwaysApply: true
+---
+---
+alwaysApply: true
+---
+Project: Schedule KMP → Flutter Migration (Internal Inventory App)
+
+Primary Goal
+- Convert existing Kotlin Multiplatform project to Flutter while preserving backend Laravel endpoints and business rules.
+- Focus edits on UI/UX and styling. Avoid altering core logic or business rules unless explicitly requested.
+
+CRITICAL Migration Rules (MUST FOLLOW)
+- DO NOT introduce any logic, features, or UI components that are NOT present in the existing KMP codebase.
+- DO NOT remove any functionality, features, or UI elements from the existing KMP codebase unless explicitly instructed by the user.
+- Maintain 100% feature parity: Every screen, function, button, validation, and business rule in KMP must exist in Flutter.
+- If you're unsure whether something exists in KMP, search the codebase first before implementing.
+- When converting KMP code to Flutter, preserve all conditional logic, edge cases, and error handling exactly as they are.
+- Only add new code that directly translates KMP functionality to Flutter (e.g., converting Kotlin syntax to Dart, Compose to Flutter widgets).
+- If a feature seems missing or incomplete in KMP, document it as a TODO rather than implementing it.
+
+High-Priority Editing Rules
+1) Always use const in Flutter where possible (widgets, constructors, collections).
+2) Prefer Flutter widget styling and theming over backend or business logic edits.
+3) If a change touches logic (models, repositories, domain/business rules), add a clear warning comment in the PR and request a review.
+4) Keep all existing backend endpoints and request/response shapes unchanged unless the user explicitly asks to modify them.
+5) Separate Android/iOS native configuration strictly into their platform folders in Flutter (see Platform Configuration section).
+
+Flutter Architecture (Target Structure)
+lib/
+  helpers/                # Pure functions: formatters, mappers, validators, date/number utilities
+    exceptions/           # AppException base class and all exception types
+    errors/               # Failure classes for Either pattern
+  models/                 # Data models, DTOs, JSON parsing, API request/response types
+  presentation/
+    common_widgets/       # Reusable UI components, layout primitives, adaptive widgets
+    features/             # Feature-specific screens and sub-widgets (one folder per feature)
+    provider/             # Provider classes, ChangeNotifiers, selectors
+  repositories/           # API repositories, local cache bridges, data sources
+  theme/                  # Color scheme, typography, spacing, shapes, components theme
+  utils/                  # Navigation, routing, constants, env, permissions, platform helpers
+  di.dart                 # Dependency injection setup using get_it
+
+State Management
+- Use Provider + ChangeNotifier for state.
+- Expose read-only selectors to widgets; write operations via intent methods.
+- Avoid business logic in widgets; keep widgets presentational whenever possible.
+
+Roles & Authorization Context
+- Roles: salesman, checker, admin, storekeeper, biller, supplier.
+- Do not implement role logic in the UI layer unless explicitly asked. Gate UI affordances (buttons/menus) by read-only flags provided by models/state prepared by repositories.
+- If role logic is missing client-side, surface TODO in repositories and request backend contract updates.
+
+Networking & Backend
+- Reuse the current Laravel endpoints exactly. Preserve URL paths, query params, and payload shapes.
+- MANDATORY: Use dio package for all HTTP operations. Replace KMP's Ktor/Volley implementation with dio.
+- Configure dio with interceptors for:
+  - Auth headers (Bearer token from flutter_secure_storage)
+  - Request/response logging (redact secrets and PII)
+  - Retry logic on transient errors (network failures, timeouts)
+  - Error transformation to Either<Failure, Success> pattern
+- Use either_dart for functional error handling (see Functional Programming section).
+- Timeouts: connect 10s, receive 20s unless specified otherwise.
+- Store secrets/tokens in flutter_secure_storage. Never hardcode secrets.
+- All repository methods must return Either<Failure, T> using either_dart.
+
+API Endpoints Configuration (MANDATORY)
+- MANDATORY: Create a centralized endpoints file at `utils/api_endpoints.dart` (or `repositories/api_endpoints.dart`).
+- Structure: Convert KMP's `Urls.kt` object to a Dart class/constants file.
+- Base URL: Create `utils/config.dart` for base URL configuration (convert from KMP's `Config.kt`).
+- Pattern:
+  ```dart
+  // utils/config.dart
+  class ApiConfig {
+    static const String baseUrl = 'https://schedulefoms.in/schedule/mobileApp/';
+    // For development/testing, use environment variables or build flavors
+    static const bool isProductionMode = true;
+  }
+  
+  // utils/api_endpoints.dart
+  class ApiEndpoints {
+    // Auth
+    static const String login = 'api/login';
+    static const String logout = 'api/logout';
+    static const String register = 'api/register';
+    
+    // Users
+    static const String deleteUser = 'api/users/delete';
+    static const String updateUser = 'api/users/update_user';
+    // ... all other endpoints from KMP's Urls.kt
+    
+    // Helper method to build full URL
+    static String buildUrl(String endpoint) => '${ApiConfig.baseUrl}$endpoint';
+  }
+  ```
+- Usage in repositories:
+  ```dart
+  final response = await dio.get(ApiEndpoints.buildUrl(ApiEndpoints.login));
+  // OR if dio baseUrl is set to ApiConfig.baseUrl:
+  final response = await dio.get(ApiEndpoints.login);
+  ```
+- Benefits:
+  - Single source of truth for all API endpoints
+  - Easy to update when backend URLs change
+  - Type-safe endpoint references
+  - No hardcoded URLs scattered in code
+- Convert all endpoints from KMP's `Urls.kt` exactly as they are (preserve path strings).
+- Never hardcode endpoint strings directly in repository methods; always use `ApiEndpoints` constants.
+
+Local Data & SQLDelight Context
+CRITICAL: The KMP project uses SQLDelight extensively for offline-first data caching. This MUST be replicated in Flutter.
+
+SQLDelight Responsibilities → Flutter Implementation with sqflite
+- What the sqldelight/ folder does in KMP:
+  - Defines local SQLite schema and migrations (.sq and migrations/*.sqm)
+  - Acts as offline-first cache: all master data (products, orders, customers, categories, etc.) is stored locally
+  - Sync mechanism: Downloads data from API in batches (500 items), stores in local DB, tracks sync times
+  - Tables include: Product, Orders, OrderSub, Customers, Users, SalesMan, Suppliers, Category, SubCategory, Units, Routes, CarBrand, CarName, CarModel, CarVersions, SyncTime, FailedSync, etc.
+  - Uses INSERT OR REPLACE for upsert operations
+  - Tracks last sync time per table (SyncTime table)
+  - Handles failed syncs with retry mechanism (FailedSync table)
+
+Flutter Implementation with sqflite:
+- MANDATORY: Use sqflite package (^2.x) for local SQLite database.
+- Database Setup:
+  - Create a database helper in `repositories/local/database_helper.dart`
+  - Initialize database on app start
+  - Run all migrations from KMP's migrations/ folder (1.sqm through 22.sqm)
+  - Use `path` package for database file location
+- Schema Conversion:
+  - Convert all .sq files to Dart table creation SQL strings
+  - Preserve exact table names and column names from KMP
+  - Map SQLDelight types: INTEGER → int, TEXT → String, REAL → double
+  - Keep PRIMARY KEY, UNIQUE, DEFAULT constraints
+- Repository Pattern:
+  - Each entity repository (ProductsRepository, OrdersRepository, etc.) must:
+    1. Have local DB methods using sqflite
+    2. Have API sync methods using dio
+    3. Return Either<Failure, T> for all operations
+  - Local queries: Convert SQLDelight queries to sqflite raw queries or parameterized queries
+  - Example pattern:
+    ```dart
+    // Local DB read
+    Future<Either<Failure, List<Product>>> getAllProducts({String searchKey = ''}) async {
+      try {
+        final db = await databaseHelper.database;
+        final List<Map<String, dynamic>> maps;
+        if (searchKey.isEmpty) {
+          maps = await db.query('Product', where: 'flag = ?', whereArgs: [1], orderBy: 'name ASC');
+        } else {
+          maps = await db.rawQuery('''
+            SELECT * FROM Product 
+            WHERE flag = 1 AND (LOWER(code) LIKE ? OR LOWER(name) LIKE ?)
+            ORDER BY name ASC
+          ''', ['%$searchKey%', '%$searchKey%']);
+        }
+        return Right(maps.map((map) => Product.fromMap(map)).toList());
+      } catch (e) {
+        return Left(DatabaseFailure(e.toString()));
+      }
+    }
+    
+    // Local DB write (from API sync)
+    Future<Either<Failure, void>> addProducts(List<Product> products) async {
+      try {
+        final db = await databaseHelper.database;
+        await db.transaction((txn) async {
+          for (final product in products) {
+            await txn.insert('Product', product.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+          }
+        });
+        return const Right(null);
+      } catch (e) {
+        return Left(DatabaseFailure(e.toString()));
+      }
+    }
+    ```
+- Sync Mechanism:
+  - Implement sync in repositories/sync/ directory
+  - Download from API in batches (500 items per batch, configurable)
+  - Store sync time per table in SyncTime table
+  - Track failed syncs in FailedSync table for retry
+  - Use SyncTime to check if sync is needed (compare with API's updated_date)
+  - Pattern: Check SyncTime → Download batch → Insert/Replace in DB → Update SyncTime → Repeat until empty response
+- Migrations:
+  - Convert all KMP migrations (1.sqm - 22.sqm) to sqflite migration functions
+  - Run migrations in order on database version upgrade
+  - Store database version in database_helper
+- Models:
+  - Create fromMap/toMap methods for all models (in addition to fromJson/toJson for API)
+  - Map DB column names (snake_case) to Dart field names (camelCase) in fromMap/toMap
+  - Keep API models separate from DB models if needed, or use same model with both serializers
+- Testing:
+  - Use sqflite_common_ffi for in-memory database in tests
+  - Mock dio for network calls
+  - Test repository methods with local DB operations
+
+Theming & UI/UX Standards
+- Material 3 with custom ThemeData driven by the theme/ module.
+- Colors: define semantic tokens (primary, surface, success, warning, error) and map from the current KMP palette. Keep all colors in theme/, never inline magic numbers.
+- Typography: define text styles in theme/ and use via Theme.of(context).textTheme.
+- Spacing: centralize spacing constants; prefer SizedBox and EdgeInsets from a spacing helper.
+- Shape/Radius: centralize in theme/; keep consistent corner radii and elevations.
+- Animations: use ImplicitlyAnimatedWidgets where possible. Prefer short, subtle transitions (150–250ms).
+- Accessibility: minimum touch target 44x44, sufficient contrast ratios, scalable text support.
+- Internationalization: route all user-facing strings through localization (l10n/arb). No hardcoded strings in widgets.
+
+Widgets & Composition
+- Build small, composable widgets. One file per widget when it grows beyond ~150 lines.
+- Keep build methods pure; move side-effects into controllers or providers.
+- Navigation via a single router utility in utils/; no Navigator.of(context) scattered in features.
+
+Models
+- Use immutable models with const constructors where possible.
+- JSON serialization with json_serializable. Keep API models in models/ and repository mapping in repositories/.
+- Map backend roles to enums; do not bake role-specific conditionals into widgets.
+
+KMP to Dart Model Conversion
+- Convert all Kotlin @Serializable classes to Dart models using json_serializable.
+- Kotlin patterns to Dart conversions:
+  - `@Serializable class ProductApi` → `class ProductApi` with `@JsonSerializable()` and `part` directive
+  - `val id:Long=-1` → `final int id;` with `@JsonKey(defaultValue: -1)` or nullable `int? id`
+  - `val name:String=""` → `final String name;` with `@JsonKey(defaultValue: '')` or nullable `String? name`
+  - `val items:List<OrderSub>?=null` → `final List<OrderSub>? items;`
+  - Default parameters: Use factory constructors or `@JsonKey(defaultValue: ...)` for defaults
+  - Nullable types: Kotlin `Type?` → Dart `Type?` (preserve nullability)
+  - Long → int (Dart int is 64-bit)
+  - Double → double (same)
+  - String → String (same)
+- Generate JSON code: Add `part 'model_name.g.dart';` and run `flutter pub run build_runner build`
+- Preserve exact field names from KMP models to maintain API compatibility.
+- All models must be in models/ directory with clear naming: `product_api.dart`, `order_api.dart`, etc.
+
+Repositories
+- One repository per feature or aggregate root. Keep IO concerns here.
+- Handle pagination, retries, debouncing here. Expose clean methods to providers.
+- Do not mutate widget or provider state within repositories.
+
+Offline-First Data Flow Architecture (CRITICAL)
+The KMP app uses an offline-first pattern where:
+1. **All master data is stored locally** (products, orders, customers, categories, etc.)
+2. **UI reads from local DB**, not directly from API
+3. **Sync happens separately** (manual sync or background)
+4. **Writes go to API first**, then update local DB
+
+Data Flow Pattern:
+- **Read Operations (Local-First)**:
+  ```dart
+  // Provider/ViewModel reads from local DB
+  class ProductsProvider extends ChangeNotifier {
+    final ProductsRepository _repository;
+    List<Product> _products = [];
+    
+    Future<void> loadProducts({String searchKey = ''}) async {
+      final result = await _repository.getAllProducts(searchKey: searchKey);
+      result.fold(
+        (failure) => _handleError(failure),
+        (products) {
+          _products = products;  // Data from local DB
+          notifyListeners();
+        },
+      );
+    }
+  }
+  ```
+  - Providers/ViewModels call repository methods that read from local DB
+  - No direct API calls for displaying data
+  - All queries (search, filter, get by ID) work on local DB
+
+- **Sync Operations (Separate)**:
+  ```dart
+  // Sync happens separately, not during regular reads
+  class SyncRepository {
+    Future<Either<Failure, void>> syncProducts() async {
+      // Download from API in batches
+      // Store in local DB
+      // Update SyncTime
+    }
+  }
+  ```
+  - Sync is a separate operation (triggered manually or scheduled)
+  - Downloads data from API in batches (500 items)
+  - Stores in local DB using INSERT OR REPLACE
+  - Updates SyncTime table
+
+- **Write Operations (API → Local)**:
+  ```dart
+  // When creating/updating, call API first, then update local DB
+  Future<Either<Failure, Product>> createProduct(Product product) async {
+    // 1. Call API
+    final apiResult = await _dio.post(ApiEndpoints.addProduct, data: product.toJson());
+    if (apiResult.isError) return Left(NetworkFailure(...));
+    
+    // 2. Parse response
+    final createdProduct = Product.fromJson(apiResult.data);
+    
+    // 3. Store in local DB
+    await _repository.addProduct(createdProduct);
+    
+    return Right(createdProduct);
+  }
+  ```
+  - Write operations: API call → Parse response → Update local DB
+  - Local DB is updated after successful API response
+  - This keeps local DB in sync with server
+
+- **Repository Structure**:
+  ```dart
+  class ProductsRepository {
+    // Local DB methods (used by providers for display)
+    Future<Either<Failure, List<Product>>> getAllProducts({String searchKey = ''});
+    Future<Either<Failure, Product?>> getProductById(int id);
+    
+    // Local DB write methods (used by sync and write operations)
+    Future<Either<Failure, void>> addProducts(List<Product> products);
+    Future<Either<Failure, void>> addProduct(Product product);
+    
+    // API sync methods (used by sync repository)
+    Future<Either<Failure, List<Product>>> syncProductsFromApi({int offset = 0});
+    
+    // API write methods (used by providers for create/update)
+    Future<Either<Failure, Product>> createProduct(Product product);
+    Future<Either<Failure, Product>> updateProduct(Product product);
+  }
+  ```
+
+- **Provider/ViewModel Pattern**:
+  - Providers should NOT call API directly for reads
+  - Providers call repository local DB methods
+  - Sync is handled by a separate SyncProvider/ViewModel
+  - Write operations go through repository (which handles API + local DB update)
+
+- **Benefits**:
+  - App works offline (all data is local)
+  - Fast UI (no network latency for reads)
+  - Single source of truth (local DB)
+  - Sync can happen in background without blocking UI
+
+Error Handling & Exception Management
+- MANDATORY: Use either_dart package for all error handling in repositories and business logic.
+- Pattern: All repository methods return `Either<Failure, T>` where:
+  - Left (Failure): Represents errors (network, validation, business logic failures)
+  - Right (Success): Represents successful results
+- Exception Hierarchy:
+  - Create a base `AppException` class in `helpers/exceptions/app_exception.dart`
+  - All exception classes must inherit from `AppException`
+  - Structure:
+    ```dart
+    // helpers/exceptions/app_exception.dart
+    abstract class AppException implements Exception {
+      final String message;
+      final String? code;
+      final dynamic originalError;
+      
+      const AppException({
+        required this.message,
+        this.code,
+        this.originalError,
+      });
+      
+      @override
+      String toString() => message;
+    }
+    
+    // helpers/exceptions/network_exception.dart
+    class NetworkException extends AppException {
+      const NetworkException({
+        required super.message,
+        super.code,
+        super.originalError,
+      });
+    }
+    
+    // helpers/exceptions/database_exception.dart
+    class DatabaseException extends AppException {
+      const DatabaseException({
+        required super.message,
+        super.code,
+        super.originalError,
+      });
+    }
+    
+    // helpers/exceptions/validation_exception.dart
+    class ValidationException extends AppException {
+      const ValidationException({
+        required super.message,
+        super.code,
+        super.originalError,
+      });
+    }
+    
+    // helpers/exceptions/server_exception.dart
+    class ServerException extends AppException {
+      const ServerException({
+        required super.message,
+        super.code,
+        super.originalError,
+      });
+    }
+    ```
+- Failure Types (for Either pattern):
+  - Create Failure classes in `helpers/errors/failures.dart` that wrap AppException
+  - Pattern:
+    ```dart
+    // helpers/errors/failures.dart
+    abstract class Failure {
+      final String message;
+      final String? code;
+      
+      const Failure({required this.message, this.code});
+    }
+    
+    class NetworkFailure extends Failure {
+      final NetworkException? exception;
+      const NetworkFailure({required super.message, super.code, this.exception});
+    }
+    
+    class DatabaseFailure extends Failure {
+      final DatabaseException? exception;
+      const DatabaseFailure({required super.message, super.code, this.exception});
+    }
+    
+    class ValidationFailure extends Failure {
+      final ValidationException? exception;
+      const ValidationFailure({required super.message, super.code, this.exception});
+    }
+    
+    class ServerFailure extends Failure {
+      final ServerException? exception;
+      const ServerFailure({required super.message, super.code, this.exception});
+    }
+    ```
+- Repository Error Handling Pattern:
+  ```dart
+  Future<Either<Failure, Product>> getProduct(int id) async {
+    try {
+      final response = await dio.get('/products/$id');
+      return Right(Product.fromJson(response.data));
+    } on DioException catch (e) {
+      final exception = NetworkException(
+        message: _getNetworkErrorMessage(e),
+        originalError: e,
+      );
+      return Left(NetworkFailure(
+        message: exception.message,
+        exception: exception,
+      ));
+    } on DatabaseException catch (e) {
+      return Left(DatabaseFailure(
+        message: e.message,
+        exception: e,
+      ));
+    } catch (e) {
+      return Left(ServerFailure(
+        message: 'An unexpected error occurred',
+        exception: ServerException(message: e.toString(), originalError: e),
+      ));
+    }
+  }
+  ```
+- In providers/widgets: Use `.fold()` or pattern matching to handle Either:
+  ```dart
+  result.fold(
+    (failure) => showError(failure.message),
+    (product) => updateUI(product),
+  );
+  ```
+- Present user-friendly messages in presentation layer; never leak raw exception text to users.
+- Log technical details using a centralized logger with PII redaction.
+
+Platform Configuration
+- Android: android/app/src/main/AndroidManifest.xml, build.gradle, network_security_config where needed.
+- iOS: ios/Runner/Info.plist, entitlements, notification extensions if any.
+- Push Notifications: platform setup remains in native targets; add Flutter-side bridges under utils/.
+- Do not add platform-specific code inside widgets; use conditional imports or platform channels in helpers/utils.
+
+Styling Rules (Enforced)
+- Always const where possible (constructors, lists, maps, EdgeInsets, TextStyle).
+- No in-widget color, spacing, or radius literals; use theme/ tokens and helpers.
+- No business logic or network calls inside widgets.
+- No hardcoded strings; use localization.
+
+File & Naming Conventions
+- files: snake_case.dart
+- classes: PascalCase
+- members/locals: lowerCamelCase
+- providers: Suffix with Provider
+- widgets: Suffix with Widget if generic; feature widgets may omit when obvious
+- repositories: Suffix with Repository
+- Avoid abbreviations; prefer descriptive names
+
+Testing (Lightweight by default)
+- Widget smoke tests for common_widgets and critical feature flows.
+- Provider tests for state transitions.
+- Repository tests for request/response mapping and error handling.
+
+Security & Privacy
+- Keep tokens in secure storage. Never log tokens or PII.
+- Mask sensitive fields in logs.
+- Validate all external inputs in repositories/helpers.
+
+KMP to Flutter Architecture Differences
+CRITICAL: Understand the fundamental architectural shift:
+- KMP Architecture:
+  - Native UI: Android uses Jetpack Compose, iOS uses SwiftUI
+  - Shared Business Logic: Kotlin common code handles repositories, models, networking
+  - Platform-specific: Each platform implements UI natively, calls shared Kotlin code
+- Flutter Architecture:
+  - Unified UI + Logic: Everything is written in Dart (UI widgets, business logic, repositories)
+  - Single Codebase: One Dart codebase renders natively on both platforms
+  - Platform Channels: Only use for native features (camera, file system, etc.)
+
+Migration Strategy:
+- Convert KMP's shared Kotlin business logic (repositories, models, utils) to Dart
+- Rebuild UI in Flutter widgets (no native UI code)
+- Preserve all business rules and data flow patterns from KMP
+- Map KMP's ViewModels/StateHolders to Flutter Providers
+- Convert KMP's suspend functions to Dart async/await
+- Replace KMP's Flow/StateFlow with Stream/ValueNotifier or Provider
+
+Kotlin to Dart Syntax Conversions:
+- `suspend fun` → `Future<T>` or `Future<Either<Failure, T>>`
+- `val` → `final` (immutable) or `const` (compile-time constant)
+- `var` → `var` (mutable, use sparingly)
+- `String?` → `String?` (nullable, same syntax)
+- `List<T>` → `List<T>` (same, but use `const []` when possible)
+- `HashMap<String, String>` → `Map<String, String>` or `const {}`
+- Default parameters: Kotlin `fun foo(bar: String = "default")` → Dart `foo({String bar = "default"})` (named) or `foo([String bar = "default"])` (positional)
+- Extension functions → Dart extension methods (same concept)
+- Data classes → Dart classes with const constructors and equality overrides
+- Sealed classes → Dart sealed classes (Dart 3.0+) or use abstract classes with private constructors
+- Coroutines/Flow → Dart async/await and Streams
+- `when` expressions → Dart `switch` expressions (Dart 3.0+) or if-else chains
+
+Migrations & Parity
+- MANDATORY: Maintain 100% feature parity with the KMP app. Every feature, screen, button, validation, and business rule must be preserved.
+- DO NOT add new features or UI elements that don't exist in KMP.
+- DO NOT remove any existing functionality unless explicitly instructed.
+- If you must diverge for UX (e.g., Flutter Material 3 vs Compose differences), document it at the top of the PR and in a MIGRATIONS.md section.
+- When converting models, verify field names match exactly with backend API contracts.
+- Before implementing any feature, verify it exists in the KMP codebase by searching for similar functionality.
+- If something seems missing in KMP, mark it as TODO rather than implementing it.
+
+Cursor Collaboration Preferences
+- When a change might affect logic or endpoints, stop and emit a warning in the PR description.
+- Prefer creating/updating files in the target Flutter structure. If the structure doesn't exist yet, scaffold it minimally within lib/.
+- For large refactors, propose the directory-level plan first as a short summary, then implement.
+- Keep edits focused; avoid unrelated reformatting.
+- Reference only relevant code in discussions. Use concise code excerpts.
+
+Commit & Branch Conventions
+- branch: feature/<feature-name>, fix/<issue>, chore/<task>
+- commit: type(scope): short description
+  - types: feat, fix, refactor, style, chore, test, docs
+  - examples:
+    - feat(presentation): add responsive AppBar and action menu
+    - style(theme): centralize spacing and radii tokens
+    - refactor(repositories): extract auth interceptor
+
+Dependencies (Required Packages)
+- dio: ^5.x (HTTP client)
+- either_dart: ^3.x (functional error handling)
+- provider: ^6.x (state management)
+- json_serializable: ^6.x + build_runner (JSON serialization)
+- flutter_secure_storage: ^9.x (secure token storage)
+- intl: ^0.x (localization and formatting)
+- sqflite: ^2.x (SQLite database for local caching)
+- path: ^1.x (file path utilities for database location)
+- get_it: ^7.x (dependency injection)
+
+Dependency Injection (MANDATORY)
+- MANDATORY: Use get_it package for dependency injection.
+- Create `di.dart` file at the root of `lib/` directory.
+- Register all dependencies (repositories, database, dio, etc.) in `di.dart`.
+- Pattern:
+  ```dart
+  // lib/di.dart
+  import 'package:get_it/get_it.dart';
+  import 'package:dio/dio.dart';
+  import 'package:sqflite/sqflite.dart';
+  import 'repositories/local/database_helper.dart';
+  import 'repositories/products/products_repository.dart';
+  import 'utils/config.dart';
+  import 'utils/api_endpoints.dart';
+  
+  final getIt = GetIt.instance;
+  
+  Future<void> setupDependencies() async {
+    // Register database
+    final databaseHelper = DatabaseHelper();
+    await databaseHelper.initDatabase();
+    getIt.registerSingleton<DatabaseHelper>(databaseHelper);
+    
+    // Register Dio with base URL
+    final dio = Dio(BaseOptions(
+      baseUrl: ApiConfig.baseUrl,
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 20),
+    ));
+    // Add interceptors here (auth, logging, etc.)
+    getIt.registerSingleton<Dio>(dio);
+    
+    // Register repositories
+    getIt.registerLazySingleton<ProductsRepository>(
+      () => ProductsRepository(
+        databaseHelper: getIt<DatabaseHelper>(),
+        dio: getIt<Dio>(),
+      ),
+    );
+    
+    // Register other repositories...
+  }
+  ```
+- Usage in providers/widgets:
+  ```dart
+  // In provider or widget
+  final productsRepo = getIt<ProductsRepository>();
+  ```
+- Initialize dependencies in `main.dart` before running the app:
+  ```dart
+  void main() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    await setupDependencies();
+    runApp(const MyApp());
+  }
+  ```
+- Benefits:
+  - Centralized dependency management
+  - Easy to mock for testing
+  - Loose coupling between components
+  - Singleton or factory registration as needed
+
+PR Checklist (Auto-Verify)
+- [ ] CRITICAL: No new features/logic/UI added that doesn't exist in KMP
+- [ ] CRITICAL: No existing functionality removed from KMP
+- [ ] Feature parity verified: All KMP screens/features present in Flutter
+- [ ] UI-only changes (no business logic touched) or explicit warning added
+- [ ] Uses const wherever possible
+- [ ] No inline styling literals; uses theme tokens
+- [ ] Strings localized
+- [ ] Provider state separated from widgets
+- [ ] Endpoints unchanged
+- [ ] Centralized API endpoints file created (utils/api_endpoints.dart)
+- [ ] All endpoints use ApiEndpoints constants (no hardcoded URLs)
+- [ ] Base URL configured in utils/config.dart
+- [ ] Android/iOS config isolated to platform folders
+- [ ] Repository methods return Either<Failure, T>
+- [ ] AppException base class created with inherited exception classes
+- [ ] Failure classes wrap AppException for Either pattern
+- [ ] Dependency injection setup with get_it in di.dart
+- [ ] All dependencies registered in di.dart
+- [ ] Models use json_serializable with proper part directives
+- [ ] dio used for all network operations (not http package)
+- [ ] Kotlin models converted to Dart with correct types (Long→int, nullable preserved)
+- [ ] sqflite used for local database (not Drift or other ORMs)
+- [ ] Local DB schema matches KMP SQLDelight tables
+- [ ] Sync mechanism implemented (SyncTime, FailedSync tracking)
+- [ ] Models have both fromJson/toJson (API) and fromMap/toMap (DB) methods
+- [ ] Offline-first pattern: Providers read from local DB, not API
+- [ ] Sync operations are separate from regular read operations
+- [ ] Write operations: API call first, then update local DB
+- [ ] Repository has separate methods for local DB reads and API sync
+
+
