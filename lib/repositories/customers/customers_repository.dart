@@ -23,8 +23,10 @@ class CustomersRepository {
   // LOCAL DB READ METHODS (Used by providers for display)
   // ============================================================================
 
-  /// Get all customers with optional search and route filter
-  Future<Either<Failure, List<Customer>>> getAllCustomers({
+  /// Get all customers with names (JOIN with SalesMan and Routes)
+  /// Returns CustomerWithNames with salesman and route names
+  /// Converted from KMP's getAllCustomers/getAllCustomersForAdmin
+  Future<Either<Failure, List<CustomerWithNames>>> getAllCustomers({
     String searchKey = '',
     int routeId = -1,
     bool forAdmin = false,
@@ -35,16 +37,24 @@ class CustomersRepository {
 
       if (searchKey.isEmpty) {
         if (routeId == -1) {
-          maps = await db.query(
-            'Customers',
-            where: forAdmin ? '1=1' : 'flag = ?',
-            whereArgs: forAdmin ? [] : [1],
-            orderBy: 'name ASC',
-          );
-        } else {
+          // All customers, no route filter
           maps = await db.rawQuery(
             '''
-            SELECT c.* FROM Customers AS c
+            SELECT c.*, s.name AS saleman, r.name AS route
+            FROM Customers AS c
+            LEFT JOIN SalesMan s ON c.salesmanId = s.userId
+            LEFT JOIN Routes r ON r.routeId = c.routId
+            WHERE ${forAdmin ? '1=1' : 'c.flag=1'}
+            ORDER BY c.name ASC
+            ''',
+          );
+        } else {
+          // Filter by route
+          maps = await db.rawQuery(
+            '''
+            SELECT c.*, s.name AS saleman, r.name AS route
+            FROM Customers AS c
+            LEFT JOIN SalesMan s ON c.salesmanId = s.userId
             LEFT JOIN Routes r ON r.routeId = c.routId
             WHERE ${forAdmin ? '1=1' : 'c.flag=1'} AND r.routeId = ?
             ORDER BY c.name ASC
@@ -53,11 +63,13 @@ class CustomersRepository {
           );
         }
       } else {
+        // Search with optional route filter
         final searchPattern = '%$searchKey%';
         if (routeId == -1) {
           maps = await db.rawQuery(
             '''
-            SELECT c.* FROM Customers AS c
+            SELECT c.*, s.name AS saleman, r.name AS route
+            FROM Customers AS c
             LEFT JOIN SalesMan s ON c.salesmanId = s.userId
             LEFT JOIN Routes r ON r.routeId = c.routId
             WHERE ${forAdmin ? '1=1' : 'c.flag=1'} AND (
@@ -73,7 +85,8 @@ class CustomersRepository {
         } else {
           maps = await db.rawQuery(
             '''
-            SELECT c.* FROM Customers AS c
+            SELECT c.*, s.name AS saleman, r.name AS route
+            FROM Customers AS c
             LEFT JOIN SalesMan s ON c.salesmanId = s.userId
             LEFT JOIN Routes r ON r.routeId = c.routId
             WHERE ${forAdmin ? '1=1' : 'c.flag=1'} AND (
@@ -89,7 +102,7 @@ class CustomersRepository {
         }
       }
 
-      final customers = maps.map((map) => Customer.fromMap(map)).toList();
+      final customers = maps.map((map) => CustomerWithNames.fromMap(map)).toList();
       return Right(customers);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));

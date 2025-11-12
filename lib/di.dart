@@ -28,13 +28,12 @@ import 'repositories/failed_sync/failed_sync_repository.dart';
 import 'repositories/order_sub_suggestions/order_sub_suggestions_repository.dart';
 import 'repositories/packed_subs/packed_subs_repository.dart';
 import 'repositories/out_of_stock/out_of_stock_repository.dart';
-import 'utils/config.dart';
-import 'utils/interceptors/auth_interceptor.dart';
-import 'utils/interceptors/logging_interceptor.dart';
-import 'utils/interceptors/retry_interceptor.dart';
+import 'utils/dio_helper.dart';
 import 'presentation/provider/auth_provider.dart';
 import 'presentation/provider/home_provider.dart';
 import 'presentation/provider/users_provider.dart';
+import 'presentation/provider/routes_provider.dart';
+import 'presentation/provider/salesman_provider.dart';
 
 final getIt = GetIt.instance;
 
@@ -46,23 +45,8 @@ Future<void> setupDependencies() async {
   await databaseHelper.initDatabase();
   getIt.registerSingleton<DatabaseHelper>(databaseHelper);
 
-  // Register Dio with base URL
-  final dio = Dio(BaseOptions(
-    baseUrl: ApiConfig.baseUrl,
-    connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 20),
-  ));
-  
-  // Add interceptors (order matters: auth first, then logging, then retry)
-  dio.interceptors.add(AuthInterceptor());
-  dio.interceptors.add(LoggingInterceptor(enabled: !ApiConfig.isProductionMode));
-  dio.interceptors.add(RetryInterceptor(
-    dio: dio, // Pass Dio instance for retry
-    maxRetries: 3,
-    retryDelay: const Duration(seconds: 1),
-  ));
-  
-  getIt.registerSingleton<Dio>(dio);
+  // Register Dio instance from DioHelper (singleton with all interceptors configured)
+  getIt.registerSingleton<Dio>(DioHelper.instance);
 
   // Register repositories
   getIt.registerLazySingleton<ProductsRepository>(
@@ -256,6 +240,7 @@ Future<void> setupDependencies() async {
       orderSubSuggestionsRepository: getIt<OrderSubSuggestionsRepository>(),
       failedSyncRepository: getIt<FailedSyncRepository>(),
       syncTimeRepository: getIt<SyncTimeRepository>(),
+      packedSubsRepository: getIt<PackedSubsRepository>(),
     ),
   );
 
@@ -268,6 +253,19 @@ Future<void> setupDependencies() async {
 
   getIt.registerLazySingleton<UsersProvider>(
     () => UsersProvider(usersRepository: getIt<UsersRepository>()),
+  );
+
+  getIt.registerLazySingleton<RoutesProvider>(
+    () => RoutesProvider(
+      routesRepository: getIt<RoutesRepository>(),
+      salesManRepository: getIt<SalesManRepository>(),
+    ),
+  );
+
+  getIt.registerLazySingleton<SalesmanProvider>(
+    () => SalesmanProvider(
+      salesManRepository: getIt<SalesManRepository>(),
+    ),
   );
 }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:schedule_frontend_flutter/utils/asset_images.dart';
 import '../../repositories/orders/orders_repository.dart';
 import '../../repositories/out_of_stock/out_of_stock_repository.dart';
 import '../../utils/storage_helper.dart';
@@ -102,6 +103,7 @@ class HomeProvider extends ChangeNotifier {
     // Orders - All except Supplier (userType != 4)
     if (userType != 4) {
       menuList.add(MenuItem(
+        imagePath: AssetImages.imagesOrder,
         type: MenuType.orders,
         title: 'Orders',
         icon: Icons.shopping_cart,
@@ -113,6 +115,7 @@ class HomeProvider extends ChangeNotifier {
     if (userType == 4 || userType == 1 || userType == 2) {
       final outOfStockText = userType == 4 ? 'Orders' : 'Out of Stock';
       menuList.add(MenuItem(
+        imagePath: AssetImages.imagesOutofstock,
         type: MenuType.outOfStock,
         title: outOfStockText,
         icon: Icons.inventory_2,
@@ -123,6 +126,7 @@ class HomeProvider extends ChangeNotifier {
     // Products - Admin (1), Salesman (3)
     if (userType == 1 || userType == 3) {
       menuList.add(MenuItem(
+        imagePath: AssetImages.imagesProducts,
         type: MenuType.products,
         title: 'Products',
         icon: Icons.inventory,
@@ -133,6 +137,7 @@ class HomeProvider extends ChangeNotifier {
     // Customers - Admin (1), Salesman (3)
     if (userType == 1 || userType == 3) {
       menuList.add(MenuItem(
+        imagePath: AssetImages.imagesCustomer,
         type: MenuType.customers,
         title: 'Customers',
         icon: Icons.people,
@@ -143,6 +148,7 @@ class HomeProvider extends ChangeNotifier {
     // Suppliers - Admin only (1)
     if (userType == 1) {
       menuList.add(MenuItem(
+        imagePath: AssetImages.imagesSupplier,
         type: MenuType.suppliers,
         title: 'Suppliers',
         icon: Icons.local_shipping,
@@ -153,6 +159,7 @@ class HomeProvider extends ChangeNotifier {
     // Users - Admin only (1)
     if (userType == 1) {
       menuList.add(MenuItem(
+        imagePath: AssetImages.imagesUsers,
         type: MenuType.users,
         title: 'Users',
         icon: Icons.person,
@@ -163,6 +170,7 @@ class HomeProvider extends ChangeNotifier {
     // Salesman - Admin only (1)
     if (userType == 1) {
       menuList.add(MenuItem(
+        imagePath: AssetImages.imagesSalesman,
         type: MenuType.salesman,
         title: 'Sales Man',
         icon: Icons.person_outline,
@@ -173,6 +181,7 @@ class HomeProvider extends ChangeNotifier {
     // Routes - Admin only (1)
     if (userType == 1) {
       menuList.add(MenuItem(
+        imagePath: AssetImages.imagesRoute,
         type: MenuType.routes,
         title: 'Routes',
         icon: Icons.route,
@@ -183,6 +192,7 @@ class HomeProvider extends ChangeNotifier {
     // Product Settings - Admin only (1)
     if (userType == 1) {
       menuList.add(MenuItem(
+        imagePath: AssetImages.imagesProductSetting,
         type: MenuType.productSettings,
         title: 'Product Settings',
         icon: Icons.settings,
@@ -201,12 +211,14 @@ class MenuItem {
   final String title;
   final IconData icon;
   final int count;
+  final String imagePath;
 
   const MenuItem({
     required this.type,
     required this.title,
     required this.icon,
     this.count = 0,
+    required this.imagePath,
   });
 }
 
@@ -222,6 +234,10 @@ enum MenuType {
   salesman,
   routes,
   productSettings,
+  units,
+  category,
+  subCategory,
+  cars,
   syncDetails,
   settings,
   about,

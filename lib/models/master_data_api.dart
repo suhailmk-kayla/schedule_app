@@ -452,6 +452,88 @@ class Customer {
   }
 }
 
+/// Customer With Names Model
+/// Represents Customer with joined Salesman and Route names
+/// Converted from KMP's GetAllCustomersWithNames data class
+/// Used for displaying customers in list with salesman and route names
+class CustomerWithNames {
+  // Customer fields
+  final int id;
+  final int customerId;
+  final String code;
+  final String name;
+  final String phone;
+  final String address;
+  final int routId;
+  final int salesmanId;
+  final int rating;
+  final String deviceToken;
+  final String createdDateTime;
+  final String updatedDateTime;
+  final int flag;
+
+  // Joined fields from SalesMan and Routes tables
+  final String? saleman; // Salesman name (nullable)
+  final String? route; // Route name (nullable)
+
+  const CustomerWithNames({
+    required this.id,
+    required this.customerId,
+    required this.code,
+    required this.name,
+    required this.phone,
+    required this.address,
+    required this.routId,
+    required this.salesmanId,
+    required this.rating,
+    required this.deviceToken,
+    required this.createdDateTime,
+    required this.updatedDateTime,
+    required this.flag,
+    this.saleman,
+    this.route,
+  });
+
+  /// Convert from database map (JOIN query result)
+  /// Matches KMP's GetAllCustomersWithNames constructor
+  factory CustomerWithNames.fromMap(Map<String, dynamic> map) {
+    return CustomerWithNames(
+      id: map['id'] as int? ?? 0,
+      customerId: map['customerId'] as int? ?? map['id'] as int? ?? 0,
+      code: map['code'] as String? ?? '',
+      name: map['name'] as String? ?? '',
+      phone: map['phone'] as String? ?? '',
+      address: map['address'] as String? ?? '',
+      routId: map['routId'] as int? ?? -1,
+      salesmanId: map['salesmanId'] as int? ?? -1,
+      rating: map['rating'] as int? ?? -1,
+      deviceToken: map['deviceToken'] as String? ?? '',
+      createdDateTime: map['createdDateTime'] as String? ?? '',
+      updatedDateTime: map['updatedDateTime'] as String? ?? '',
+      flag: map['flag'] as int? ?? 1,
+      saleman: map['saleman'] as String?,
+      route: map['route'] as String?,
+    );
+  }
+
+  /// Convert to Customer model (for compatibility)
+  Customer toCustomer() {
+    return Customer(
+      id: customerId,
+      name: name,
+      code: code,
+      phoneNo: phone,
+      address: address,
+      routId: routId,
+      salesManId: salesmanId,
+      rating: rating,
+      flag: flag,
+      createdAt: createdDateTime.isNotEmpty ? createdDateTime : null,
+      updatedAt: updatedDateTime.isNotEmpty ? updatedDateTime : null,
+    );
+  }
+}
+
 // ============================================================================
 // USER MODELS
 // ============================================================================
@@ -793,6 +875,33 @@ class Route {
       'flag': 1,
     };
   }
+}
+
+/// Route with Salesman Model
+/// Used for join query results (GetAllRoutesWithSaleman)
+/// Converted from KMP's GetAllRoutesWithSaleman
+class RouteWithSalesman {
+  final String salesman; // Salesman name from join
+  final Route route; // Route data
+
+  const RouteWithSalesman({
+    required this.salesman,
+    required this.route,
+  });
+
+  /// Convert from database map (join query result)
+  factory RouteWithSalesman.fromMap(Map<String, dynamic> map) {
+    return RouteWithSalesman(
+      salesman: map['salesman'] as String? ?? '',
+      route: Route.fromMap(map),
+    );
+  }
+
+  /// Get route ID (for compatibility)
+  int get routeId => route.id;
+  
+  /// Get route name (for compatibility)
+  String get name => route.name;
 }
 
 // ============================================================================

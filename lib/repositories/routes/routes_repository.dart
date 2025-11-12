@@ -60,6 +60,50 @@ class RoutesRepository {
     }
   }
 
+  /// Get all routes with salesman name (join query)
+  /// Converted from KMP's getAllRoutesWithSaleman query
+  Future<Either<Failure, List<RouteWithSalesman>>> getAllRoutesWithSalesman({
+    String searchKey = '',
+  }) async {
+    try {
+      final db = await _databaseHelper.database;
+      final List<Map<String, dynamic>> maps;
+
+      if (searchKey.isEmpty) {
+        maps = await db.rawQuery(
+          '''
+          SELECT s.name AS salesman, r.* 
+          FROM Routes AS r
+          LEFT JOIN SalesMan AS s ON r.salesmanId = s.userId
+          WHERE r.flag = 1 
+          ORDER BY r.name ASC
+          ''',
+        );
+      } else {
+        final searchPattern = '%$searchKey%';
+        maps = await db.rawQuery(
+          '''
+          SELECT s.name AS salesman, r.* 
+          FROM Routes AS r
+          LEFT JOIN SalesMan AS s ON r.salesmanId = s.userId
+          WHERE r.flag = 1 AND (
+            LOWER(r.name) LIKE LOWER(?) OR 
+            LOWER(r.code) LIKE LOWER(?) OR 
+            LOWER(s.name) LIKE LOWER(?)
+          )
+          ORDER BY r.name ASC
+          ''',
+          [searchPattern, searchPattern, searchPattern],
+        );
+      }
+
+      final routes = maps.map((map) => RouteWithSalesman.fromMap(map)).toList();
+      return Right(routes);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
   /// Get route by name
   Future<Either<Failure, List<Route>>> getRouteByName(String name) async {
     try {

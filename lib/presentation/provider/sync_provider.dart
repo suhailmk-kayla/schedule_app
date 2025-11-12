@@ -19,6 +19,7 @@ import '../../repositories/order_sub_suggestions/order_sub_suggestions_repositor
 import '../../repositories/out_of_stock/out_of_stock_repository.dart';
 import '../../repositories/sync_time/sync_time_repository.dart';
 import '../../repositories/failed_sync/failed_sync_repository.dart';
+import '../../repositories/packed_subs/packed_subs_repository.dart';
 import '../../models/sync_models.dart';
 import '../../models/salesman_model.dart';
 import '../../models/supplier_model.dart';
@@ -49,6 +50,7 @@ class SyncProvider extends ChangeNotifier {
   final OutOfStockRepository _outOfStockRepository;
   final SyncTimeRepository _syncTimeRepository;
   final FailedSyncRepository _failedSyncRepository;
+  final PackedSubsRepository _packedSubsRepository;
 
   // Batch size
   static const int _limit = 500;
@@ -133,6 +135,7 @@ class SyncProvider extends ChangeNotifier {
     required OutOfStockRepository outOfStockRepository,
     required SyncTimeRepository syncTimeRepository,
     required FailedSyncRepository failedSyncRepository,
+    required PackedSubsRepository packedSubsRepository,
   })  : _productsRepository = productsRepository,
         _categoriesRepository = categoriesRepository,
         _subCategoriesRepository = subCategoriesRepository,
@@ -151,7 +154,8 @@ class SyncProvider extends ChangeNotifier {
         _orderSubSuggestionsRepository = orderSubSuggestionsRepository,
         _outOfStockRepository = outOfStockRepository,
         _syncTimeRepository = syncTimeRepository,
-        _failedSyncRepository = failedSyncRepository;
+        _failedSyncRepository = failedSyncRepository,
+        _packedSubsRepository = packedSubsRepository;
 
   // ============================================================================
   // Public Methods
@@ -844,38 +848,79 @@ class SyncProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> _downloadSalesmen() async {
-    _updateTask('Salesman details downloading...');
+  /// Download salesmen (full sync or single record retry)
+  /// Converted from KMP's downloadSalesman function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all salesmen in batches
+  /// 2. Single record retry (id != -1): Downloads specific salesman and handles FailedSync
+  Future<void> _downloadSalesmen({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Salesman details downloading...');
+    }
+    
     final updateDate = await _getSyncTimeForTable('SalesMan');
     final userType = await StorageHelper.getUserType();
     final userId = await StorageHelper.getUserId();
+    
     final result = await _salesManRepository.syncSalesMenFromApi(
       partNo: _salesmanPart,
       limit: _limit,
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
 
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry (matches KMP line 825-826)
+          _failedSyncRepository.addFailedSync(
+            tableId: 15, // NotificationId.SALESMAN = 15
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message (matches KMP line 829)
+          _updateError(failure.message, true);
+        }
+      },
       (response) async {
         final data = response['data'] as List<dynamic>?;
         final updatedDate = response['updated_date'] as String? ?? '';
         final salesmen = data?.map((e) => SalesMan.fromMap(e as Map<String, dynamic>)).toList() ?? [];
         
-        if (salesmen.isEmpty) {
-          _isSalesmanDownloaded = true;
-          await _syncTimeRepository.addSyncTime(
-            tableName: 'SalesMan',
-            updateDate: updatedDate,
-          );
-          _salesmanPart = 0;
-          await _startSyncDatabase();
+        if (id == -1) {
+          // Full sync mode (matches KMP lines 836-845)
+          if (salesmen.isEmpty) {
+            _isSalesmanDownloaded = true;
+            await _syncTimeRepository.addSyncTime(
+              tableName: 'SalesMan',
+              updateDate: updatedDate,
+            );
+            _salesmanPart = 0;
+            await _startSyncDatabase();
+          } else {
+            await _salesManRepository.addSalesMen(salesmen);
+            _salesmanPart++;
+            await _startSyncDatabase();
+          }
         } else {
-          await _salesManRepository.addSalesMen(salesmen);
-          _salesmanPart++;
-          await _startSyncDatabase();
+          // Single record retry mode (matches KMP lines 846-849)
+          if (salesmen.isNotEmpty) {
+            await _salesManRepository.addSalesMen(salesmen);
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
@@ -1023,11 +1068,28 @@ class SyncProvider extends ChangeNotifier {
     );
   }
 
+  /// Retry sync for failed item based on tableId
+  /// Converted from KMP's download function (lines 1262-1295)
   Future<void> _syncFailedItem(FailedSync failedSync) async {
-    // Retry sync for failed item based on tableId
-    // This is a simplified version - in production, you'd handle each table type
-    // For now, we'll just delete the failed sync after retry attempt
-    await _failedSyncRepository.deleteFailedSync(failedSync.id);
+    final failedId = failedSync.id;
+    final tableId = failedSync.tableId;
+    final dataId = failedSync.dataId;
+
+    // Route to appropriate download method based on tableId (matches KMP's when expression)
+    switch (tableId) {
+      case 15: // NotificationId.SALESMAN = 15 (matches KMP line 1282)
+        await _downloadSalesmen(
+          id: dataId,
+          failedId: failedId,
+          finished: () {}, // Retry mode doesn't continue sync chain
+        );
+        break;
+      // TODO: Add other table types as needed (Product, Order, etc.)
+      default:
+        // Unknown table type, just delete the failed sync
+        await _failedSyncRepository.deleteFailedSync(failedId);
+        break;
+    }
   }
 
   // ============================================================================
@@ -1060,6 +1122,37 @@ class SyncProvider extends ChangeNotifier {
   void _clearError() {
     _errorMessage = null;
     _showError = false;
+  }
+
+  /// Clear all tables (used during logout)
+  /// Converted from KMP's clearAllTable function
+  Future<void> clearAllTable() async {
+    developer.log('SyncProvider: clearAllTable() - Clearing all tables');
+    try {
+      await _productsRepository.clearAll();
+      await _unitsRepository.clearAll();
+      await _categoriesRepository.clearAll();
+      await _subCategoriesRepository.clearAll();
+      await _carBrandRepository.clearAll();
+      await _carNameRepository.clearAll();
+      await _carVersionRepository.clearAll();
+      await _carModelRepository.clearAll();
+      await _usersRepository.clearAll();
+      await _routesRepository.clearAll();
+      await _salesManRepository.clearAll();
+      await _suppliersRepository.clearAll();
+      await _customersRepository.clearAll();
+      await _ordersRepository.clearAll();
+      await _outOfStockRepository.clearAll();
+      await _orderSubSuggestionsRepository.clearAll();
+      await _failedSyncRepository.clearAll();
+      await _syncTimeRepository.clearAll();
+      await _packedSubsRepository.clearAll();
+      developer.log('SyncProvider: clearAllTable() - All tables cleared');
+    } catch (e) {
+      developer.log('SyncProvider: clearAllTable() - Error: $e');
+      rethrow;
+    }
   }
 
   void _updateProgress() {

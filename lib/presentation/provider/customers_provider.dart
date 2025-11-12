@@ -32,8 +32,8 @@ class CustomersProvider extends ChangeNotifier {
   // State Variables
   // ============================================================================
 
-  List<Customer> _customers = [];
-  List<Customer> get customers => _customers;
+  List<CustomerWithNames> _customers = [];
+  List<CustomerWithNames> get customers => _customers;
 
   List<Route> _routeList = [];
   List<Route> get routeList => _routeList;
@@ -135,13 +135,13 @@ class CustomersProvider extends ChangeNotifier {
   }
 
   /// Get or create order for customer
-  Future<Order?> getOrderByCustomer(Customer customer) async {
+  Future<Order?> getOrderByCustomer(CustomerWithNames customer) async {
     _setLoading(true);
     _clearError();
 
     final date = _getDBFormatDate();
     final result = await _ordersRepository.getOrdersByCustomer(
-      customerId: customer.id,
+      customerId: customer.customerId,
       date: date,
     );
 
@@ -156,9 +156,7 @@ class CustomersProvider extends ChangeNotifier {
     );
 
     // If no order found, create a temp order
-    if (order == null) {
-      order = await _createTempOrder(customer);
-    }
+    order ??= await _createTempOrder(customer.toCustomer());
 
     _setLoading(false);
     return order;

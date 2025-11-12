@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../provider/home_provider.dart';
-import '../../provider/auth_provider.dart';
-import '../auth/splash_screen.dart';
 import '../products/products_screen.dart';
 import '../users/users_screen.dart';
+import '../routes/routes_screen.dart';
+import '../salesman/salesman_screen.dart';
+import '../customers/customers_screen.dart';
+import '../product_settings/product_settings_screen.dart';
+import 'home_drawer.dart';
 
 /// Home Screen
 /// Main dashboard screen
@@ -32,32 +35,16 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Home'),
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () {
-            // TODO: Open drawer
-          },
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              final navigator = Navigator.of(context);
-              final authProvider =
-                  Provider.of<AuthProvider>(context, listen: false);
-              await authProvider.logout();
-              if (!mounted) return;
-              // Navigate to SplashScreen which will show LoginScreen
-              navigator.pushAndRemoveUntil(
-                MaterialPageRoute(
-                  builder: (context) => const SplashScreen(),
-                ),
-                (route) => false, // Remove all previous routes
-              );
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () {
+              Scaffold.of(context).openDrawer();
             },
           ),
-        ],
+        ),
       ),
+      drawer: const HomeDrawer(),
       body: Consumer<HomeProvider>(
         builder: (context, homeProvider, child) {
           if (homeProvider.isLoading) {
@@ -107,6 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
               itemCount: menuItems.length,
               itemBuilder: (context, index) {
                 return _MenuItemCard(
+                  imagePath: menuItems[index].imagePath,
                   menuItem: menuItems[index],
                   onTap: () {
                     _handleMenuTap(context, menuItems[index].type);
@@ -132,9 +120,9 @@ class _HomeScreenState extends State<HomeScreen> {
       case MenuType.products:
         Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductsScreen()));
         break;
-      case MenuType.customers:
-        // Navigator.push(context, MaterialPageRoute(builder: (_) => CustomersScreen()));
-        break;
+             case MenuType.customers:
+               Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomersScreen()));
+               break;
       case MenuType.suppliers:
         // Navigator.push(context, MaterialPageRoute(builder: (_) => SuppliersScreen()));
         break;
@@ -142,13 +130,18 @@ class _HomeScreenState extends State<HomeScreen> {
         Navigator.push(context, MaterialPageRoute(builder: (_) => const UsersScreen()));
         break;
       case MenuType.salesman:
-        // Navigator.push(context, MaterialPageRoute(builder: (_) => SalesmanScreen()));
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const SalesmanScreen()));
         break;
       case MenuType.routes:
-        // Navigator.push(context, MaterialPageRoute(builder: (_) => RoutesScreen()));
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const RoutesScreen()));
         break;
       case MenuType.productSettings:
-        // Navigator.push(context, MaterialPageRoute(builder: (_) => ProductSettingsScreen()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const ProductSettingsScreen(),
+          ),
+        );
         break;
       default:
         break;
@@ -161,10 +154,12 @@ class _HomeScreenState extends State<HomeScreen> {
 class _MenuItemCard extends StatelessWidget {
   final MenuItem menuItem;
   final VoidCallback onTap;
+  final String imagePath;
 
   const _MenuItemCard({
     required this.menuItem,
     required this.onTap,
+    required this.imagePath
   });
 
   @override
@@ -208,11 +203,7 @@ class _MenuItemCard extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    menuItem.icon,
-                    size: 32,
-                    color: Colors.black,
-                  ),
+                  Image.asset(imagePath,width: 32,height: 32,),
                   const SizedBox(height: 8),
                   Text(
                     menuItem.title,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/asset_images.dart';
 import '../../provider/auth_provider.dart';
 import '../home/home_screen.dart';
 import 'login_screen.dart';
@@ -75,6 +76,10 @@ class _SplashScreenState extends State<SplashScreen> {
                 width: 100,
                 height: 100,
                 decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: AssetImage(AssetImages.imagesLogo),
+                    fit: BoxFit.cover,
+                  ),
                   color: Colors.white,
                   shape: BoxShape.circle,
                   boxShadow: [
@@ -85,11 +90,7 @@ class _SplashScreenState extends State<SplashScreen> {
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.inventory_2,
-                  size: 50,
-                  color: Colors.blue,
-                ),
+                
               ),
               const SizedBox(height: 24),
               AnimatedOpacity(

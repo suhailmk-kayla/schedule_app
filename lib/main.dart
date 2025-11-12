@@ -10,9 +10,12 @@ import 'presentation/provider/orders_provider.dart';
 import 'presentation/provider/sync_provider.dart';
 import 'presentation/provider/home_provider.dart';
 import 'presentation/provider/users_provider.dart';
+import 'presentation/provider/routes_provider.dart';
+import 'presentation/provider/salesman_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // final result = await createAdminAccount();
 
   // Initialize OneSignal for push notifications (must be before setupDependencies)
   try {
@@ -55,6 +58,12 @@ class MyApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(
           create: (_) => getIt<UsersProvider>(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => getIt<RoutesProvider>(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => getIt<SalesmanProvider>(),
         ),
       ],
       child: MaterialApp(
