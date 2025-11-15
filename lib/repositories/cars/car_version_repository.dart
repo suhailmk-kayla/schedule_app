@@ -12,12 +12,22 @@ import '../../utils/api_endpoints.dart';
 class CarVersionRepository {
   final DatabaseHelper _databaseHelper;
   final Dio _dio;
+  
+  // Cache database instance to avoid async getter overhead on every call
+  Database? _cachedDatabase;
 
   CarVersionRepository({
     required DatabaseHelper databaseHelper,
     required Dio dio,
   })  : _databaseHelper = databaseHelper,
         _dio = dio;
+  
+  /// Get database instance (cached after first access)
+  Future<Database> get _database async {
+    if (_cachedDatabase != null) return _cachedDatabase!;
+    _cachedDatabase = await _databaseHelper.database;
+    return _cachedDatabase!;
+  }
 
   // ============================================================================
   // LOCAL DB READ METHODS (Used by providers for display)
@@ -30,7 +40,7 @@ class CarVersionRepository {
     required int modelId,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'CarVersion',
         where: 'flag = 1 AND carBrandId = ? AND carNameId = ? AND carModelId = ?',
@@ -53,7 +63,7 @@ class CarVersionRepository {
     required int modelId,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'CarVersion',
         where: 'flag = 1 AND LOWER(name) = LOWER(?) AND carBrandId = ? AND carNameId = ? AND carModelId = ?',
@@ -71,7 +81,7 @@ class CarVersionRepository {
   /// Get last inserted car version
   Future<Either<Failure, Version?>> getLastEntry() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'CarVersion',
         orderBy: 'carVersionId DESC',
@@ -96,7 +106,7 @@ class CarVersionRepository {
   /// Add single car version to local DB
   Future<Either<Failure, void>> addCarVersion(Version carVersion) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'CarVersion',
         carVersion.toMap(),
@@ -109,17 +119,20 @@ class CarVersionRepository {
   }
 
   /// Add multiple car versions to local DB (transaction)
+  /// Priority 1: Optimized batch insert (uses batch.commit instead of await in loop)
   Future<Either<Failure, void>> addCarVersions(List<Version> carVersions) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final carVersion in carVersions) {
-          await txn.insert(
+          batch.insert(
             'CarVersion',
             carVersion.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -133,7 +146,7 @@ class CarVersionRepository {
     required String name,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'CarVersion',
         {'name': name},
@@ -149,7 +162,7 @@ class CarVersionRepository {
   /// Clear all car versions from local DB
   Future<Either<Failure, void>> clearAll() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.delete('CarVersion');
       return const Right(null);
     } catch (e) {

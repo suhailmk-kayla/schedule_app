@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:schedule_frontend_flutter/presentation/features/orders/orders_screen.dart';
+import 'package:schedule_frontend_flutter/presentation/features/product_settings/product_settings_screen.dart';
 import '../../provider/home_provider.dart';
 import '../../provider/auth_provider.dart';
 import '../../provider/sync_provider.dart';
@@ -14,7 +16,6 @@ import '../customers/customers_screen.dart';
 import '../users/users_screen.dart';
 import '../salesman/salesman_screen.dart';
 import '../routes/routes_screen.dart';
-import '../product_settings/product_settings_screen.dart';
 
 /// Home Drawer
 /// Displays user info, menu items, and logout
@@ -48,6 +49,10 @@ class _HomeDrawerState extends State<HomeDrawer> {
     switch (menuType) {
       case MenuType.orders:
         // TODO: Navigate to OrdersScreen
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const OrdersScreen()),
+        );
         break;
       case MenuType.outOfStock:
         // TODO: Navigate to OutOfStockScreen
@@ -88,12 +93,13 @@ class _HomeDrawerState extends State<HomeDrawer> {
       case MenuType.productSettings:
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (_) => const ProductSettingsScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const ProductSettingsScreen()),
         );
+        // TODO: Navigate to ProductSettingsScreen
         break;
       case MenuType.syncDetails:
+        // Navigate to SyncScreen - it will automatically start syncing
+        // Matching KMP's behavior: SyncScreen auto-starts sync on initState
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const SyncScreen()),
@@ -166,7 +172,7 @@ class _HomeDrawerState extends State<HomeDrawer> {
           ),
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
+              // Navigator.pop(context);
               _handleLogout();
             },
             child: const Text('Yes'),
@@ -420,13 +426,13 @@ class _HomeDrawerState extends State<HomeDrawer> {
       type: MenuType.syncDetails,
       title: 'Force Sync',
       icon: Icons.sync,
-      imagePath: AssetImages.imagesDatastrategy, // Using data-strategy as sync icon
+      // imagePath: AssetImages.imagesDatastrategy, // Using data-strategy as sync icon
     ));
     menuList.add(MenuItem(
       type: MenuType.about,
       title: 'About',
       icon: Icons.info_outline,
-      imagePath: AssetImages.imagesDatastrategy, // Using placeholder
+      // imagePath: AssetImages.imagesDatastrategy, // Using placeholder
     ));
 
     return menuList;
@@ -459,7 +465,7 @@ class _DrawerMenuItem extends StatelessWidget {
               children: [
                 // Icon/Image
                 Image.asset(
-                  menuItem.imagePath,
+                  menuItem.imagePath ?? '',
                   width: 36,
                   height: 36,
                   errorBuilder: (context, error, stackTrace) {

@@ -12,12 +12,22 @@ import '../../utils/api_endpoints.dart';
 class OrderSubSuggestionsRepository {
   final DatabaseHelper _databaseHelper;
   final Dio _dio;
+  
+  // Cache database instance to avoid async getter overhead on every call
+  Database? _cachedDatabase;
 
   OrderSubSuggestionsRepository({
     required DatabaseHelper databaseHelper,
     required Dio dio,
   })  : _databaseHelper = databaseHelper,
         _dio = dio;
+  
+  /// Get database instance (cached after first access)
+  Future<Database> get _database async {
+    if (_cachedDatabase != null) return _cachedDatabase!;
+    _cachedDatabase = await _databaseHelper.database;
+    return _cachedDatabase!;
+  }
 
   // ============================================================================
   // LOCAL DB READ METHODS (Used by providers for display)
@@ -28,7 +38,7 @@ class OrderSubSuggestionsRepository {
     int orderSubId,
   ) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.rawQuery(
         '''
         SELECT sug.*, pro.name AS productName
@@ -53,7 +63,7 @@ class OrderSubSuggestionsRepository {
     required int productId,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'OrderSubSuggestions',
         where: 'orderSubId = ? AND productId = ? AND flag = 1',
@@ -70,7 +80,7 @@ class OrderSubSuggestionsRepository {
   /// Get last inserted suggestion ID
   Future<Either<Failure, int?>> getLastEntryId() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'OrderSubSuggestions',
         columns: ['sugId'],
@@ -97,7 +107,7 @@ class OrderSubSuggestionsRepository {
     OrderSubSuggestion suggestion,
   ) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'OrderSubSuggestions',
         suggestion.toMap(),
@@ -114,15 +124,17 @@ class OrderSubSuggestionsRepository {
     List<OrderSubSuggestion> suggestions,
   ) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final suggestion in suggestions) {
-          await txn.insert(
+          batch.insert(
             'OrderSubSuggestions',
             suggestion.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -135,7 +147,7 @@ class OrderSubSuggestionsRepository {
     int orderSubId,
   ) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.delete(
         'OrderSubSuggestions',
         where: 'orderSubId = ?',
@@ -150,7 +162,7 @@ class OrderSubSuggestionsRepository {
   /// Remove suggestion by ID
   Future<Either<Failure, void>> removeSuggestion(int sugId) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.delete(
         'OrderSubSuggestions',
         where: 'sugId = ?',
@@ -165,7 +177,7 @@ class OrderSubSuggestionsRepository {
   /// Clear all suggestions from local DB
   Future<Either<Failure, void>> clearAll() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.delete('OrderSubSuggestions');
       return const Right(null);
     } catch (e) {

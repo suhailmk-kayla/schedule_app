@@ -132,10 +132,14 @@ Product _$ProductFromJson(Map<String, dynamic> json) => Product(
       (json['auto_sendto_supplier_flag'] as num?)?.toInt() ?? -1,
   base_unit_id: (json['base_unit_id'] as num?)?.toInt() ?? -1,
   default_unit_id: (json['default_unit_id'] as num?)?.toInt() ?? -1,
-  price: (json['price'] as num?)?.toDouble() ?? 0.0,
-  mrp: (json['mrp'] as num?)?.toDouble() ?? 0.0,
-  retail_price: (json['retail_price'] as num?)?.toDouble() ?? 0.0,
-  fitting_charge: (json['fitting_charge'] as num?)?.toDouble() ?? 0.0,
+  price: json['price'] == null ? 0.0 : _toDouble(json['price']),
+  mrp: json['mrp'] == null ? 0.0 : _toDouble(json['mrp']),
+  retail_price: json['retail_price'] == null
+      ? 0.0
+      : _toDouble(json['retail_price']),
+  fitting_charge: json['fitting_charge'] == null
+      ? 0.0
+      : _toDouble(json['fitting_charge']),
   note: json['note'] as String? ?? '',
   photo: json['photo'] as String? ?? '',
 );

@@ -1,7 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Required for Android 13+ (API 33+) to show notifications -->
+    <!-- OneSignal SDK handles the runtime permission request, but manifest declaration is mandatory -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:label="schedule_frontend_flutter"
         android:name="${applicationName}"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
@@ -30,6 +36,14 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        
+        <!-- OneSignal Configuration -->
+        <meta-data
+            android:name="onesignal_app_id"
+            android:value="55ea1b60-efde-401e-b4cf-5fcbd9524fcc" />
+        <meta-data
+            android:name="onesignal_google_project_number"
+            android:value="REMOTE" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

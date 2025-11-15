@@ -18,13 +18,25 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
   bool _showLogin = false;
+  late AnimationController _animationController;
 
   @override
   void initState() {
     super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
     _initialize();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   Future<void> _initialize() async {
@@ -71,26 +83,56 @@ class _SplashScreenState extends State<SplashScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Logo placeholder - replace with actual logo asset
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  image: DecorationImage(
-                    image: AssetImage(AssetImages.imagesLogo),
-                    fit: BoxFit.cover,
-                  ),
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
+              // Logo with animated border
+              SizedBox(
+                width: 110,
+                height: 110,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    _showLogin?SizedBox():
+                    // Animated rotating border
+                    AnimatedBuilder(
+                      animation: _animationController,
+                      builder: (context, child) {
+                        return Transform.rotate(
+                          angle: _animationController.value * 2 * 3.14159,
+                          child: SizedBox(
+                            width: 110,
+                            height: 110,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 3,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white.withValues(alpha: 0.8),
+                              ),
+                              backgroundColor: Colors.transparent,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    // Logo container
+                    Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        image: const DecorationImage(
+                          image: AssetImage(AssetImages.imagesLogo),
+                          fit: BoxFit.cover,
+                        ),
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 10,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-                
               ),
               const SizedBox(height: 24),
               AnimatedOpacity(

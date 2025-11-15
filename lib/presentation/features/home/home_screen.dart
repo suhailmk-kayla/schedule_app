@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../provider/home_provider.dart';
+import '../../../utils/notification_manager.dart';
 import '../products/products_screen.dart';
 import '../users/users_screen.dart';
 import '../routes/routes_screen.dart';
 import '../salesman/salesman_screen.dart';
 import '../customers/customers_screen.dart';
 import '../product_settings/product_settings_screen.dart';
+import '../orders/orders_screen.dart';
+import '../out_of_stock/out_of_stock_list_screen.dart';
+import '../suppliers/suppliers_screen.dart';
 import 'home_drawer.dart';
 
 /// Home Screen
@@ -32,21 +36,32 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home'),
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () {
-              Scaffold.of(context).openDrawer();
-            },
+    return Consumer<NotificationManager>(
+      builder: (context, notificationManager, _) {
+        // Listen to notification trigger and refresh data
+        if (notificationManager.notificationTrigger) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+            homeProvider.refreshCounts();
+            notificationManager.resetTrigger();
+          });
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Home'),
+            leading: Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () {
+                  Scaffold.of(context).openDrawer();
+                },
+              ),
+            ),
           ),
-        ),
-      ),
-      drawer: const HomeDrawer(),
-      body: Consumer<HomeProvider>(
-        builder: (context, homeProvider, child) {
+          drawer: const HomeDrawer(),
+          body: Consumer<HomeProvider>(
+            builder: (context, homeProvider, child) {
           if (homeProvider.isLoading) {
             return const Center(
               child: CircularProgressIndicator(),
@@ -94,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
               itemCount: menuItems.length,
               itemBuilder: (context, index) {
                 return _MenuItemCard(
-                  imagePath: menuItems[index].imagePath,
+                  imagePath: menuItems[index].imagePath ?? '',
                   menuItem: menuItems[index],
                   onTap: () {
                     _handleMenuTap(context, menuItems[index].type);
@@ -103,8 +118,10 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
           );
-        },
-      ),
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -112,10 +129,16 @@ class _HomeScreenState extends State<HomeScreen> {
     // TODO: Navigate to appropriate screen based on menu type
     switch (menuType) {
       case MenuType.orders:
-        // Navigator.push(context, MaterialPageRoute(builder: (_) => OrdersScreen()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const OrdersScreen()),
+        );
         break;
       case MenuType.outOfStock:
-        // Navigator.push(context, MaterialPageRoute(builder: (_) => OutOfStockScreen()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const OutOfStockListScreen()),
+        );
         break;
       case MenuType.products:
         Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductsScreen()));
@@ -124,7 +147,10 @@ class _HomeScreenState extends State<HomeScreen> {
                Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomersScreen()));
                break;
       case MenuType.suppliers:
-        // Navigator.push(context, MaterialPageRoute(builder: (_) => SuppliersScreen()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SuppliersScreen()),
+        );
         break;
       case MenuType.users:
         Navigator.push(context, MaterialPageRoute(builder: (_) => const UsersScreen()));

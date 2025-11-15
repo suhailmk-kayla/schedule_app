@@ -1,6 +1,6 @@
-/// Dependency Injection Setup
-/// Using get_it package
-/// All dependencies should be registered here
+// Dependency Injection Setup
+// Using get_it package
+// All dependencies should be registered here
 import 'package:get_it/get_it.dart';
 import 'package:dio/dio.dart';
 import 'package:schedule_frontend_flutter/presentation/provider/customers_provider.dart';
@@ -29,11 +29,18 @@ import 'repositories/order_sub_suggestions/order_sub_suggestions_repository.dart
 import 'repositories/packed_subs/packed_subs_repository.dart';
 import 'repositories/out_of_stock/out_of_stock_repository.dart';
 import 'utils/dio_helper.dart';
+import 'utils/push_notification_sender.dart';
 import 'presentation/provider/auth_provider.dart';
 import 'presentation/provider/home_provider.dart';
 import 'presentation/provider/users_provider.dart';
 import 'presentation/provider/routes_provider.dart';
 import 'presentation/provider/salesman_provider.dart';
+import 'presentation/provider/out_of_stock_provider.dart';
+import 'presentation/provider/suppliers_provider.dart';
+import 'presentation/provider/units_provider.dart';
+import 'presentation/provider/categories_provider.dart';
+import 'presentation/provider/sub_categories_provider.dart';
+import 'presentation/provider/cars_provider.dart';
 
 final getIt = GetIt.instance;
 
@@ -102,6 +109,9 @@ Future<void> setupDependencies() async {
     () => UsersRepository(
       databaseHelper: getIt<DatabaseHelper>(),
       dio: getIt<Dio>(),
+      pushNotificationSender: getIt<PushNotificationSender>(),
+      salesManRepository: getIt<SalesManRepository>(),
+      suppliersRepository: getIt<SuppliersRepository>(),
     ),
   );
 
@@ -154,6 +164,13 @@ Future<void> setupDependencies() async {
     ),
   );
 
+  // Register PushNotificationSender (after SalesMan and Suppliers, before UsersRepository)
+  getIt.registerLazySingleton<PushNotificationSender>(
+    () => PushNotificationSender(
+      dio: getIt<Dio>(),
+    ),
+  );
+
   getIt.registerLazySingleton<SyncTimeRepository>(
     () => SyncTimeRepository(
       databaseHelper: getIt<DatabaseHelper>(),
@@ -199,6 +216,7 @@ Future<void> setupDependencies() async {
       categoriesRepository: getIt<CategoriesRepository>(),
       subCategoriesRepository: getIt<SubCategoriesRepository>(),
       unitsRepository: getIt<UnitsRepository>(),
+      suppliersRepository: getIt<SuppliersRepository>(),
     ),
   );
 
@@ -252,7 +270,10 @@ Future<void> setupDependencies() async {
   );
 
   getIt.registerLazySingleton<UsersProvider>(
-    () => UsersProvider(usersRepository: getIt<UsersRepository>()),
+    () => UsersProvider(
+      usersRepository: getIt<UsersRepository>(),
+      userCategoryRepository: getIt<UserCategoryRepository>(),
+    ),
   );
 
   getIt.registerLazySingleton<RoutesProvider>(
@@ -265,6 +286,47 @@ Future<void> setupDependencies() async {
   getIt.registerLazySingleton<SalesmanProvider>(
     () => SalesmanProvider(
       salesManRepository: getIt<SalesManRepository>(),
+    ),
+  );
+
+  getIt.registerLazySingleton<OutOfStockProvider>(
+    () => OutOfStockProvider(
+      outOfStockRepository: getIt<OutOfStockRepository>(),
+      packedSubsRepository: getIt<PackedSubsRepository>(),
+    ),
+  );
+
+  getIt.registerLazySingleton<SuppliersProvider>(
+    () => SuppliersProvider(
+      suppliersRepository: getIt<SuppliersRepository>(),
+    ),
+  );
+
+  getIt.registerLazySingleton<UnitsProvider>(
+    () => UnitsProvider(
+      unitsRepository: getIt<UnitsRepository>(),
+    ),
+  );
+
+  getIt.registerLazySingleton<CategoriesProvider>(
+    () => CategoriesProvider(
+      categoriesRepository: getIt<CategoriesRepository>(),
+    ),
+  );
+
+  getIt.registerLazySingleton<SubCategoriesProvider>(
+    () => SubCategoriesProvider(
+      subCategoriesRepository: getIt<SubCategoriesRepository>(),
+      categoriesRepository: getIt<CategoriesRepository>(),
+    ),
+  );
+
+  getIt.registerLazySingleton<CarsProvider>(
+    () => CarsProvider(
+      carBrandRepository: getIt<CarBrandRepository>(),
+      carNameRepository: getIt<CarNameRepository>(),
+      carModelRepository: getIt<CarModelRepository>(),
+      carVersionRepository: getIt<CarVersionRepository>(),
     ),
   );
 }

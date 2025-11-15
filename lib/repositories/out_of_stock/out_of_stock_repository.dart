@@ -12,24 +12,35 @@ import '../../utils/api_endpoints.dart';
 class OutOfStockRepository {
   final DatabaseHelper _databaseHelper;
   final Dio _dio;
+  
+  // Cache database instance to avoid async getter overhead on every call
+  Database? _cachedDatabase;
 
   OutOfStockRepository({
     required DatabaseHelper databaseHelper,
     required Dio dio,
   })  : _databaseHelper = databaseHelper,
         _dio = dio;
+  
+  /// Get database instance (cached after first access)
+  Future<Database> get _database async {
+    if (_cachedDatabase != null) return _cachedDatabase!;
+    _cachedDatabase = await _databaseHelper.database;
+    return _cachedDatabase!;
+  }
 
   // ============================================================================
   // LOCAL DB READ METHODS (Used by providers for display)
   // ============================================================================
 
-  /// Get all out of stock masters with optional search and date filter
-  Future<Either<Failure, List<OutOfStock>>> getOutOfStockMasters({
+  /// Get all out of stock masters with details (matching KMP's getOutOfStocksMaster)
+  /// Returns OutOfStockMasterWithDetails with joined fields
+  Future<Either<Failure, List<OutOfStockMasterWithDetails>>> getOutOfStockMastersWithDetails({
     String searchKey = '',
     String date = '',
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final List<Map<String, dynamic>> maps;
 
       if (searchKey.isEmpty) {
@@ -110,19 +121,19 @@ class OutOfStockRepository {
         );
       }
 
-      final outOfStocks = maps.map((map) => OutOfStock.fromMap(map)).toList();
+      final outOfStocks = maps.map((map) => OutOfStockMasterWithDetails.fromMap(map)).toList();
       return Right(outOfStocks);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
     }
   }
 
-  /// Get out of stock master by ID
-  Future<Either<Failure, OutOfStock?>> getOutOfStockMasterById(
+  /// Get out of stock master by ID with details (matching KMP's getOutOfStockMaster)
+  Future<Either<Failure, OutOfStockMasterWithDetails?>> getOutOfStockMasterWithDetailsById(
     int oospMasterId,
   ) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.rawQuery(
         '''
         SELECT
@@ -165,19 +176,19 @@ class OutOfStockRepository {
         return const Right(null);
       }
 
-      final outOfStock = OutOfStock.fromMap(maps.first);
+      final outOfStock = OutOfStockMasterWithDetails.fromMap(maps.first);
       return Right(outOfStock);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
     }
   }
 
-  /// Get out of stock subs by master ID
-  Future<Either<Failure, List<OutOfStockSub>>> getOutOfStockSubsByMasterId(
+  /// Get out of stock subs by master ID with details (matching KMP's getOutOfStocksSub)
+  Future<Either<Failure, List<OutOfStockSubWithDetails>>> getOutOfStockSubsWithDetailsByMasterId(
     int oospMasterId,
   ) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.rawQuery(
         '''
         SELECT
@@ -222,21 +233,21 @@ class OutOfStockRepository {
         [oospMasterId],
       );
 
-      final outOfStockSubs = maps.map((map) => OutOfStockSub.fromMap(map)).toList();
+      final outOfStockSubs = maps.map((map) => OutOfStockSubWithDetails.fromMap(map)).toList();
       return Right(outOfStockSubs);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
     }
   }
 
-  /// Get out of stock subs by supplier ID with optional search and date
-  Future<Either<Failure, List<OutOfStockSub>>> getOutOfStockSubsBySupplier({
+  /// Get out of stock subs by supplier ID with details (matching KMP's getOutOfStocksSub for supplier)
+  Future<Either<Failure, List<OutOfStockSubWithDetails>>> getOutOfStockSubsWithDetailsBySupplier({
     required int supplierId,
     String searchKey = '',
     String date = '',
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final List<Map<String, dynamic>> maps;
 
       if (searchKey.isEmpty) {
@@ -287,7 +298,7 @@ class OutOfStockRepository {
         );
       }
 
-      final outOfStockSubs = maps.map((map) => OutOfStockSub.fromMap(map)).toList();
+      final outOfStockSubs = maps.map((map) => OutOfStockSubWithDetails.fromMap(map)).toList();
       return Right(outOfStockSubs);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -297,7 +308,7 @@ class OutOfStockRepository {
   /// Get out of stock sub by ID
   Future<Either<Failure, OutOfStockSub?>> getOutOfStockSubById(int oospId) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.rawQuery(
         '''
         SELECT
@@ -356,7 +367,7 @@ class OutOfStockRepository {
   /// Get count of unviewed out of stock masters
   Future<Either<Failure, int>> getUnviewedMasterCount() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'OutOfStockMaster',
         where: 'flag = 1 AND isViewed = 0',
@@ -370,7 +381,7 @@ class OutOfStockRepository {
   /// Get count of unviewed out of stock products
   Future<Either<Failure, int>> getUnviewedProductCount() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'OutOfStockProducts',
         where: 'flag = 1 AND isViewed = 0',
@@ -384,7 +395,7 @@ class OutOfStockRepository {
   /// Get last inserted out of stock master
   Future<Either<Failure, OutOfStock?>> getLastMasterEntry() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'OutOfStockMaster',
         orderBy: 'oospMasterId DESC',
@@ -405,7 +416,7 @@ class OutOfStockRepository {
   /// Get last inserted out of stock product
   Future<Either<Failure, OutOfStockSub?>> getLastEntry() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'OutOfStockProducts',
         orderBy: 'oospId DESC',
@@ -430,7 +441,7 @@ class OutOfStockRepository {
   /// Add out of stock master to local DB
   Future<Either<Failure, void>> addOutOfStockMaster(OutOfStock outOfStock) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'OutOfStockMaster',
         outOfStock.toMap(),
@@ -447,15 +458,17 @@ class OutOfStockRepository {
     List<OutOfStock> outOfStocks,
   ) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final outOfStock in outOfStocks) {
-          await txn.insert(
+          batch.insert(
             'OutOfStockMaster',
             outOfStock.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -468,7 +481,7 @@ class OutOfStockRepository {
     OutOfStockSub outOfStockSub,
   ) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'OutOfStockProducts',
         outOfStockSub.toMap(),
@@ -485,15 +498,17 @@ class OutOfStockRepository {
     List<OutOfStockSub> outOfStockSubs,
   ) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final outOfStockSub in outOfStockSubs) {
-          await txn.insert(
+          batch.insert(
             'OutOfStockProducts',
             outOfStockSub.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -507,7 +522,7 @@ class OutOfStockRepository {
     required int supplierId,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'OutOfStockProducts',
         {'supplierId': supplierId},
@@ -526,7 +541,7 @@ class OutOfStockRepository {
     required int oospFlag,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final now = DateTime.now().toIso8601String();
       await db.update(
         'OutOfStockProducts',
@@ -549,7 +564,7 @@ class OutOfStockRepository {
     required int isCheckedFlag,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'OutOfStockProducts',
         {'isCheckedflag': isCheckedFlag},
@@ -565,7 +580,7 @@ class OutOfStockRepository {
   /// Update complete flag for master
   Future<Either<Failure, void>> updateCompleteFlag(int oospMasterId) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final now = DateTime.now().toIso8601String();
       await db.update(
         'OutOfStockMaster',
@@ -588,7 +603,7 @@ class OutOfStockRepository {
     required int isViewed,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'OutOfStockMaster',
         {'isViewed': isViewed},
@@ -607,7 +622,7 @@ class OutOfStockRepository {
     required int isViewed,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'OutOfStockProducts',
         {'isViewed': isViewed},
@@ -623,7 +638,7 @@ class OutOfStockRepository {
   /// Clear all out of stock data
   Future<Either<Failure, void>> clearAll() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
         await txn.delete('OutOfStockProducts');
         await txn.delete('OutOfStockMaster');

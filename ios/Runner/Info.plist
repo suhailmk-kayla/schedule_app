@@ -45,5 +45,13 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>OneSignal_app_id</key>
+	<string>55ea1b60-efde-401e-b4cf-5fcbd9524fcc</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+		<string>processing</string>
+		<string>fetch</string>
+	</array>
 </dict>
 </plist>

@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 import 'package:either_dart/either.dart';
 import 'package:sqflite/sqflite.dart';
@@ -12,12 +14,22 @@ import '../../utils/api_endpoints.dart';
 class UserCategoryRepository {
   final DatabaseHelper _databaseHelper;
   final Dio _dio;
+  
+  // Cache database instance to avoid async getter overhead on every call
+  Database? _cachedDatabase;
 
   UserCategoryRepository({
     required DatabaseHelper databaseHelper,
     required Dio dio,
   })  : _databaseHelper = databaseHelper,
         _dio = dio;
+  
+  /// Get database instance (cached after first access)
+  Future<Database> get _database async {
+    if (_cachedDatabase != null) return _cachedDatabase!;
+    _cachedDatabase = await _databaseHelper.database;
+    return _cachedDatabase!;
+  }
 
   // ============================================================================
   // LOCAL DB READ METHODS (Used by providers for display)
@@ -28,7 +40,7 @@ class UserCategoryRepository {
     String searchKey = '',
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final List<Map<String, dynamic>> maps;
 
       if (searchKey.isEmpty) {
@@ -58,7 +70,7 @@ class UserCategoryRepository {
   /// Get last inserted user category
   Future<Either<Failure, UserCategory?>> getLastEntry() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'UsersCategory',
         orderBy: 'userCategoryId DESC',
@@ -83,7 +95,7 @@ class UserCategoryRepository {
   /// Add single user category to local DB
   Future<Either<Failure, void>> addUserCategory(UserCategory category) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'UsersCategory',
         category.toMap(),
@@ -100,15 +112,17 @@ class UserCategoryRepository {
     List<UserCategory> categories,
   ) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final category in categories) {
-          await txn.insert(
+          batch.insert(
             'UsersCategory',
             category.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -139,10 +153,13 @@ class UserCategoryRepository {
           'update_date': updateDate,
         },
       );
+      developer.log('Response: ${response.data}');
       return Right(Map<String, dynamic>.from(response.data));
     } on DioException catch (e) {
+      developer.log('Error syncing user categories: ${e.response?.data}');
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
+      developer.log('Error syncing user categories: ${e}');
       return Left(UnknownFailure.fromError(e));
     }
   }

@@ -141,8 +141,8 @@ Future<void> createAdminAccount() async {
   print('Creating new admin account...');
   
   final result = await registerAdmin(
-    code: 'ADMIN014', // Change this to a unique code
-    name: 'TESTADMIN14', // Change this
+    code: 'ADMIN3', // Change this to a unique code
+    name: 'TESTADMIN3', // Change this
     phoneNo: '7306548087', // Change this
     password: '123456', // Change this to a secure password
     address: 'Admin Address', // Optional

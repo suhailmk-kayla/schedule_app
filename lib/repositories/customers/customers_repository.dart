@@ -12,12 +12,22 @@ import '../../utils/api_endpoints.dart';
 class CustomersRepository {
   final DatabaseHelper _databaseHelper;
   final Dio _dio;
+  
+  // Cache database instance to avoid async getter overhead on every call
+  Database? _cachedDatabase;
 
   CustomersRepository({
     required DatabaseHelper databaseHelper,
     required Dio dio,
   })  : _databaseHelper = databaseHelper,
         _dio = dio;
+  
+  /// Get database instance (cached after first access)
+  Future<Database> get _database async {
+    if (_cachedDatabase != null) return _cachedDatabase!;
+    _cachedDatabase = await _databaseHelper.database;
+    return _cachedDatabase!;
+  }
 
   // ============================================================================
   // LOCAL DB READ METHODS (Used by providers for display)
@@ -32,7 +42,7 @@ class CustomersRepository {
     bool forAdmin = false,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final List<Map<String, dynamic>> maps;
 
       if (searchKey.isEmpty) {
@@ -112,7 +122,7 @@ class CustomersRepository {
   /// Get customer by ID
   Future<Either<Failure, Customer?>> getCustomerById(int customerId) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.rawQuery(
         '''
         SELECT c.*, s.name AS saleman, r.name AS route
@@ -140,7 +150,7 @@ class CustomersRepository {
   /// Get customer by code
   Future<Either<Failure, List<Customer>>> getCustomerByCode(String code) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Customers',
         where: 'code = ?',
@@ -161,7 +171,7 @@ class CustomersRepository {
     required int customerId,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Customers',
         where: 'code = ? AND customerId != ?',
@@ -179,7 +189,7 @@ class CustomersRepository {
   /// Get last inserted customer
   Future<Either<Failure, Customer?>> getLastEntry() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Customers',
         orderBy: 'customerId DESC',
@@ -204,7 +214,7 @@ class CustomersRepository {
   /// Add single customer to local DB
   Future<Either<Failure, void>> addCustomer(Customer customer) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'Customers',
         customer.toMap(),
@@ -219,15 +229,17 @@ class CustomersRepository {
   /// Add multiple customers to local DB (transaction)
   Future<Either<Failure, void>> addCustomers(List<Customer> customers) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final customer in customers) {
-          await txn.insert(
+          batch.insert(
             'Customers',
             customer.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -241,7 +253,7 @@ class CustomersRepository {
     required int flag,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'Customers',
         {'flag': flag},
@@ -257,7 +269,7 @@ class CustomersRepository {
   /// Clear all customers from local DB
   Future<Either<Failure, void>> clearAll() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.delete('Customers');
       return const Right(null);
     } catch (e) {
@@ -269,24 +281,41 @@ class CustomersRepository {
   // API SYNC METHODS (Used by sync repository)
   // ============================================================================
 
-  /// Sync customers from API (batch download)
+  /// Sync customers from API (batch download or single record retry)
+  /// Converted from KMP's downloadCustomer function
+  /// Supports two modes:
+  /// 1. Full sync (id == -1): Downloads all customers in batches with part_no, limit, user_type, user_id, update_date
+  /// 2. Single record retry (id != -1): Downloads specific customer by id only
   Future<Either<Failure, CustomerListApi>> syncCustomersFromApi({
     required int partNo,
     required int limit,
     required int userType,
     required int userId,
     required String updateDate,
+    int id = -1, // -1 for full sync, specific id for retry
   }) async {
     try {
-      final response = await _dio.get(
-        ApiEndpoints.customerDownload,
-        queryParameters: {
+      final Map<String, String> queryParams;
+      
+      if (id == -1) {
+        // Full sync mode: send all parameters (matches KMP's params function when id == -1)
+        queryParams = {
           'part_no': partNo.toString(),
           'limit': limit.toString(),
           'user_type': userType.toString(),
           'user_id': userId.toString(),
           'update_date': updateDate,
-        },
+        };
+      } else {
+        // Single record retry mode: send only id (matches KMP's params function when id != -1)
+        queryParams = {
+          'id': id.toString(),
+        };
+      }
+      
+      final response = await _dio.get(
+        ApiEndpoints.customerDownload,
+        queryParameters: queryParams,
       );
 
       final customerListApi = CustomerListApi.fromJson(response.data);

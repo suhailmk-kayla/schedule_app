@@ -161,13 +161,13 @@ class Product {
   final int base_unit_id;
   @JsonKey(defaultValue: -1)
   final int default_unit_id;
-  @JsonKey(defaultValue: 0.0)
+  @JsonKey(defaultValue: 0.0,fromJson: _toDouble)
   final double price;
-  @JsonKey(defaultValue: 0.0)
+  @JsonKey(defaultValue: 0.0,fromJson: _toDouble)
   final double mrp;
-  @JsonKey(defaultValue: 0.0)
+  @JsonKey(defaultValue: 0.0,fromJson: _toDouble)
   final double retail_price;
-  @JsonKey(defaultValue: 0.0)
+  @JsonKey(defaultValue: 0.0,fromJson: _toDouble)
   final double fitting_charge;
   @JsonKey(defaultValue: '')
   final String note;
@@ -308,3 +308,8 @@ class ProductCar {
 }
 
 
+double _toDouble(dynamic value) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value) ?? 0.0;
+  return 0.0;
+}

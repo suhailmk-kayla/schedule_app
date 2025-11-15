@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import '../../provider/sync_provider.dart';
 import '../home/home_screen.dart';
 import '../../../utils/storage_helper.dart';
+import '../../../utils/asset_images.dart';
 
 /// Sync Screen
 /// Handles data synchronization
@@ -15,12 +16,18 @@ class SyncScreen extends StatefulWidget {
   State<SyncScreen> createState() => _SyncScreenState();
 }
 
-class _SyncScreenState extends State<SyncScreen> {
+class _SyncScreenState extends State<SyncScreen>
+    with SingleTickerProviderStateMixin {
   bool _hasListener = false;
+  late AnimationController _animationController;
 
   @override
   void initState() {
     super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
     developer.log('SyncScreen: initState() called');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startSync();
@@ -103,6 +110,7 @@ class _SyncScreenState extends State<SyncScreen> {
 
   @override
   void dispose() {
+    _animationController.dispose();
     developer.log('SyncScreen: dispose() called');
     if (_hasListener) {
       final syncProvider = Provider.of<SyncProvider>(context, listen: false);
@@ -140,25 +148,54 @@ class _SyncScreenState extends State<SyncScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Logo
-                      Container(
-                        width: 100,
-                        height: 100,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.2),
-                              blurRadius: 10,
-                              offset: const Offset(0, 5),
+                      // Logo with animated border
+                      SizedBox(
+                        width: 110,
+                        height: 110,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            // Animated rotating border
+                            AnimatedBuilder(
+                              animation: _animationController,
+                              builder: (context, child) {
+                                return Transform.rotate(
+                                  angle: _animationController.value * 2 * 3.14159,
+                                  child: SizedBox(
+                                    width: 110,
+                                    height: 110,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 3,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white.withValues(alpha: 0.8),
+                                      ),
+                                      backgroundColor: Colors.transparent,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            // Logo container
+                            Container(
+                              width: 100,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                image: const DecorationImage(
+                                  image: AssetImage(AssetImages.imagesLogo),
+                                  fit: BoxFit.cover,
+                                ),
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.2),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 5),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
-                        ),
-                        child: const Icon(
-                          Icons.sync,
-                          size: 50,
-                          color: Colors.blue,
                         ),
                       ),
                       const SizedBox(height: 32),

@@ -1,21 +1,48 @@
 import 'package:flutter/foundation.dart';
 import '../../repositories/users/users_repository.dart';
+import '../../repositories/user_category/user_category_repository.dart';
 import '../../models/master_data_api.dart';
+import '../../models/user_category_model.dart';
+
+/// User with Category Name
+/// Helper class to display user with its category name
+class UserWithCategory {
+  final User user;
+  final String categoryName;
+
+  const UserWithCategory({
+    required this.user,
+    required this.categoryName,
+  });
+}
 
 class UsersProvider extends ChangeNotifier {
   final UsersRepository _usersRepository;
+  final UserCategoryRepository _userCategoryRepository;
 
-  UsersProvider({required UsersRepository usersRepository})
-      : _usersRepository = usersRepository;
+  UsersProvider({
+    required UsersRepository usersRepository,
+    required UserCategoryRepository userCategoryRepository,
+  })  : _usersRepository = usersRepository,
+        _userCategoryRepository = userCategoryRepository;
 
   List<User> _users = [];
   List<User> get users => _users;
+
+  UserWithCategory? _currentUser;
+  UserWithCategory? get currentUser => _currentUser;
+
+  List<UserCategory> _userCategories = [];
+  List<UserCategory> get userCategories => _userCategories;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
+
+  bool _isUserActive = true;
+  bool get isUserActive => _isUserActive;
 
   Future<void> loadUsers({String searchKey = ''}) async {
     _isLoading = true;
@@ -29,6 +56,209 @@ class UsersProvider extends ChangeNotifier {
     );
 
     _isLoading = false;
+    notifyListeners();
+  }
+
+  /// Load user by ID with category name
+  /// Converted from KMP's getUserWthId
+  Future<void> loadUserById(int userId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final result = await _usersRepository.getUserByIdWithCategoryName(userId);
+    result.fold(
+      (failure) {
+        _errorMessage = failure.message;
+        _currentUser = null;
+        _isLoading = false;
+        notifyListeners();
+      },
+      (map) {
+        if (map == null) {
+          _errorMessage = 'User not found';
+          _currentUser = null;
+        } else {
+          final user = User.fromMap(map);
+          final categoryName = map['categoryName'] as String? ?? '';
+          _currentUser = UserWithCategory(
+            user: user,
+            categoryName: categoryName,
+          );
+        }
+        _isLoading = false;
+        notifyListeners();
+      },
+    );
+  }
+
+  /// Change user password
+  /// Converted from KMP's changeUserPassword
+  Future<bool> changeUserPassword({
+    required int userId,
+    required String password,
+    required String confirmPassword,
+  }) async {
+    if (password != confirmPassword) {
+      _errorMessage = 'Passwords do not match';
+      notifyListeners();
+      return false;
+    }
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final result = await _usersRepository.changeUserPassword(
+      userId: userId,
+      password: password,
+      confirmPassword: confirmPassword,
+    );
+
+    return result.fold(
+      (failure) {
+        _errorMessage = failure.message;
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      },
+      (_) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      },
+    );
+  }
+
+  /// Logout user from all devices
+  /// Converted from KMP's logoutFromDevices
+  Future<bool> logoutFromDevices(int userId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final result = await _usersRepository.logoutFromDevices(userId: userId);
+
+    return result.fold(
+      (failure) {
+        _errorMessage = failure.message;
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      },
+      (_) {
+        _isLoading = false;
+        // After logout, check if user is still active
+        checkUserActive(userId);
+        notifyListeners();
+        return true;
+      },
+    );
+  }
+
+  /// Delete user
+  /// Converted from KMP's deleteUser
+  Future<bool> deleteUser({
+    required int userId,
+    required int categoryId,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final result = await _usersRepository.deleteUser(
+      userId: userId,
+      categoryId: categoryId,
+    );
+
+    return result.fold(
+      (failure) {
+        _errorMessage = failure.message;
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      },
+      (_) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      },
+    );
+  }
+
+  /// Check if user is active
+  /// Converted from KMP's checkUserActive
+  Future<void> checkUserActive(int userId) async {
+    final result = await _usersRepository.checkUserActive(userId: userId);
+    result.fold(
+      (_) {
+        _isUserActive = false;
+        notifyListeners();
+      },
+      (isActive) {
+        _isUserActive = isActive;
+        notifyListeners();
+      },
+    );
+  }
+
+  /// Get all user categories
+  /// Converted from KMP's getAllCategories
+  Future<void> getAllUserCategories() async {
+    final result = await _userCategoryRepository.getAllUserCategories();
+    result.fold(
+      (failure) {
+        _errorMessage = failure.message;
+        notifyListeners();
+      },
+      (categories) {
+        _userCategories = categories;
+        notifyListeners();
+      },
+    );
+  }
+
+  /// Create new user
+  /// Converted from KMP's saveUser
+  Future<bool> createUser({
+    required String code,
+    required String name,
+    required String phone,
+    required int categoryId,
+    required String address,
+    required String password,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final result = await _usersRepository.createUser(
+      code: code,
+      name: name,
+      phone: phone,
+      categoryId: categoryId,
+      address: address,
+      password: password,
+    );
+
+    return result.fold(
+      (failure) {
+        _errorMessage = failure.message;
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      },
+      (_) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      },
+    );
+  }
+
+  /// Clear error message
+  void clearError() {
+    _errorMessage = null;
     notifyListeners();
   }
 }

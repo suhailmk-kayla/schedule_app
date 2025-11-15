@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/asset_images.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/salesman_provider.dart';
 import '../../../models/salesman_model.dart';
 
@@ -68,7 +70,18 @@ class _SalesmanScreenState extends State<SalesmanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Consumer<NotificationManager>(
+      builder: (context, notificationManager, _) {
+        // Listen to notification trigger and refresh data
+        if (notificationManager.notificationTrigger) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final provider = Provider.of<SalesmanProvider>(context, listen: false);
+            provider.loadSalesmen(searchKey: _searchController.text.trim());
+            notificationManager.resetTrigger();
+          });
+        }
+
+        return Scaffold(
       appBar: AppBar(
         title: const Text('Salesman List'),
         leading: IconButton(
@@ -189,6 +202,8 @@ class _SalesmanScreenState extends State<SalesmanScreen> {
         backgroundColor: Colors.black,
         child: const Icon(Icons.add, color: Colors.white),
       ),
+        );
+      },
     );
   }
 }
@@ -209,62 +224,61 @@ class _SalesmanListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
-      elevation: 4,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Row(
-          children: [
-            const SizedBox(width: 10),
-            // Salesman icon
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
+      elevation:2,
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Row(
+            children: [
+              const SizedBox(width: 10),
+              // Salesman icon
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.all(5),
+                child: Image.asset(AssetImages.imagesSalesman),
               ),
-              padding: const EdgeInsets.all(5),
-              child: const Icon(
-                Icons.person,
-                size: 32,
-                color: Colors.blue,
-              ),
-            ),
-            const SizedBox(width: 10),
-            // Salesman name and code
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    salesman.name,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
+              const SizedBox(width: 10),
+              // Salesman name and code
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      salesman.name,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'Code: ${salesman.code}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
+                    Text(
+                      'Code: ${salesman.code}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            // Report/List icon button
-            IconButton(
-              icon: const Icon(Icons.list_alt, size: 24),
-              onPressed: onReportTap,
-            ),
-          ],
+              // Report/List icon button
+              IconButton(
+                icon: const Icon(Icons.list_alt, size: 24),
+                onPressed: onReportTap,
+              ),
+            ],
+          ),
         ),
       ),
     );

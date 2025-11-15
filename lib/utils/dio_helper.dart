@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:schedule_frontend_flutter/utils/storage_helper.dart';
 import 'config.dart';
 import 'interceptors/auth_interceptor.dart';
 import 'interceptors/logging_interceptor.dart';
@@ -19,12 +20,14 @@ class DioHelper {
 
   /// Create and configure Dio instance with interceptors
   static Dio _createDio() {
+    // final token = StorageHelper.getUserToken();
     final dio = Dio(
       BaseOptions(
         baseUrl: ApiConfig.baseUrl,
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 20),
         headers: {
+          // 'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },

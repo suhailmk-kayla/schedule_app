@@ -12,12 +12,22 @@ import '../../utils/api_endpoints.dart';
 class CarBrandRepository {
   final DatabaseHelper _databaseHelper;
   final Dio _dio;
+  
+  // Cache database instance to avoid async getter overhead on every call
+  Database? _cachedDatabase;
 
   CarBrandRepository({
     required DatabaseHelper databaseHelper,
     required Dio dio,
   })  : _databaseHelper = databaseHelper,
         _dio = dio;
+  
+  /// Get database instance (cached after first access)
+  Future<Database> get _database async {
+    if (_cachedDatabase != null) return _cachedDatabase!;
+    _cachedDatabase = await _databaseHelper.database;
+    return _cachedDatabase!;
+  }
 
   // ============================================================================
   // LOCAL DB READ METHODS (Used by providers for display)
@@ -26,7 +36,7 @@ class CarBrandRepository {
   /// Get all car brands
   Future<Either<Failure, List<Brand>>> getAllCarBrands() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'CarBrand',
         where: 'flag = ?',
@@ -44,7 +54,7 @@ class CarBrandRepository {
   /// Get car brand by name
   Future<Either<Failure, List<Brand>>> getCarBrandByName(String name) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'CarBrand',
         where: 'flag = 1 AND LOWER(name) = LOWER(?)',
@@ -62,7 +72,7 @@ class CarBrandRepository {
   /// Get last inserted car brand
   Future<Either<Failure, Brand?>> getLastEntry() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'CarBrand',
         where: 'flag = 1',
@@ -88,7 +98,7 @@ class CarBrandRepository {
   /// Add single car brand to local DB
   Future<Either<Failure, void>> addCarBrand(Brand brand) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'CarBrand',
         brand.toMap(),
@@ -101,17 +111,20 @@ class CarBrandRepository {
   }
 
   /// Add multiple car brands to local DB (transaction)
+  /// Priority 1: Optimized batch insert (uses batch.commit instead of await in loop)
   Future<Either<Failure, void>> addCarBrands(List<Brand> brands) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final brand in brands) {
-          await txn.insert(
+          batch.insert(
             'CarBrand',
             brand.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -125,7 +138,7 @@ class CarBrandRepository {
     required String name,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'CarBrand',
         {'name': name},
@@ -141,7 +154,7 @@ class CarBrandRepository {
   /// Clear all car brands from local DB
   Future<Either<Failure, void>> clearAll() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.delete('CarBrand');
       return const Right(null);
     } catch (e) {

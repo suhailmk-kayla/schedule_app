@@ -12,12 +12,22 @@ import '../../utils/api_endpoints.dart';
 class OrdersRepository {
   final DatabaseHelper _databaseHelper;
   final Dio _dio;
+  
+  // Cache database instance to avoid async getter overhead on every call
+  Database? _cachedDatabase;
 
   OrdersRepository({
     required DatabaseHelper databaseHelper,
     required Dio dio,
   })  : _databaseHelper = databaseHelper,
         _dio = dio;
+  
+  /// Get database instance (cached after first access)
+  Future<Database> get _database async {
+    if (_cachedDatabase != null) return _cachedDatabase!;
+    _cachedDatabase = await _databaseHelper.database;
+    return _cachedDatabase!;
+  }
 
   // ============================================================================
   // LOCAL DB READ METHODS (Used by providers for display)
@@ -31,7 +41,7 @@ class OrdersRepository {
     int? salesmanId,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final List<Map<String, dynamic>> maps;
 
       // Build query based on filters
@@ -93,7 +103,7 @@ class OrdersRepository {
   /// Get order by ID
   Future<Either<Failure, Order?>> getOrderById(int orderId) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Orders',
         where: 'orderId = ?',
@@ -118,7 +128,7 @@ class OrdersRepository {
     required String date,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Orders',
         where: '(flag = 1 OR flag = 2 OR flag = 3) AND customerId = ? AND dateAndTime LIKE ?',
@@ -137,7 +147,7 @@ class OrdersRepository {
   /// Get temp/draft orders
   Future<Either<Failure, List<Order>>> getTempOrders() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Orders',
         where: 'flag = 2',
@@ -155,7 +165,7 @@ class OrdersRepository {
   /// Get order subs by order ID
   Future<Either<Failure, List<OrderSub>>> getOrderSubsByOrderId(int orderId) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'OrderSub',
         where: 'flag = 1 AND orderId = ?',
@@ -173,7 +183,7 @@ class OrdersRepository {
   /// Get order sub by ID
   Future<Either<Failure, OrderSub?>> getOrderSubById(int orderSubId) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'OrderSub',
         where: 'flag = 1 AND orderSubId = ?',
@@ -195,7 +205,7 @@ class OrdersRepository {
   /// Get last inserted order
   Future<Either<Failure, Order?>> getLastOrderEntry() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Orders',
         orderBy: 'orderId DESC',
@@ -216,7 +226,7 @@ class OrdersRepository {
   /// Get last inserted order sub
   Future<Either<Failure, OrderSub?>> getLastOrderSubEntry() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'OrderSub',
         orderBy: 'orderSubId DESC',
@@ -238,7 +248,7 @@ class OrdersRepository {
   /// Converted from KMP's getOrderByViewed
   Future<Either<Failure, int>> getUnviewedOrderCount() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Orders',
         where: 'flag = 1 AND isProcessFinish = 0',
@@ -256,7 +266,7 @@ class OrdersRepository {
   /// Add single order to local DB
   Future<Either<Failure, void>> addOrder(Order order) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'Orders',
         order.toMap(),
@@ -271,15 +281,17 @@ class OrdersRepository {
   /// Add multiple orders to local DB (transaction)
   Future<Either<Failure, void>> addOrders(List<Order> orders) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final order in orders) {
-          await txn.insert(
+          batch.insert(
             'Orders',
             order.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -290,7 +302,7 @@ class OrdersRepository {
   /// Add single order sub to local DB
   Future<Either<Failure, void>> addOrderSub(OrderSub orderSub) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'OrderSub',
         orderSub.toMap(),
@@ -305,15 +317,17 @@ class OrdersRepository {
   /// Add multiple order subs to local DB (transaction)
   Future<Either<Failure, void>> addOrderSubs(List<OrderSub> orderSubs) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final orderSub in orderSubs) {
-          await txn.insert(
+          batch.insert(
             'OrderSub',
             orderSub.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -328,7 +342,7 @@ class OrdersRepository {
     required String customerName,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
         await txn.update(
           'Orders',
@@ -355,7 +369,7 @@ class OrdersRepository {
     required String note,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'Orders',
         {'note': note},
@@ -374,7 +388,7 @@ class OrdersRepository {
     required int flag,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
         await txn.update(
           'Orders',
@@ -398,7 +412,7 @@ class OrdersRepository {
   /// Delete order sub by ID
   Future<Either<Failure, void>> deleteOrderSub(int orderSubId) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.delete(
         'OrderSub',
         where: 'orderSubId = ?',
@@ -413,7 +427,7 @@ class OrdersRepository {
   /// Clear all orders and order subs
   Future<Either<Failure, void>> clearAll() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
         await txn.delete('OrderSub');
         await txn.delete('Orders');

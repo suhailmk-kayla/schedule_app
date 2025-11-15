@@ -12,12 +12,22 @@ import '../../utils/api_endpoints.dart';
 class SuppliersRepository {
   final DatabaseHelper _databaseHelper;
   final Dio _dio;
+  
+  // Cache database instance to avoid async getter overhead on every call
+  Database? _cachedDatabase;
 
   SuppliersRepository({
     required DatabaseHelper databaseHelper,
     required Dio dio,
   })  : _databaseHelper = databaseHelper,
         _dio = dio;
+  
+  /// Get database instance (cached after first access)
+  Future<Database> get _database async {
+    if (_cachedDatabase != null) return _cachedDatabase!;
+    _cachedDatabase = await _databaseHelper.database;
+    return _cachedDatabase!;
+  }
 
   // ============================================================================
   // LOCAL DB READ METHODS (Used by providers for display)
@@ -28,7 +38,7 @@ class SuppliersRepository {
     String searchKey = '',
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final List<Map<String, dynamic>> maps;
 
       if (searchKey.isEmpty) {
@@ -58,7 +68,7 @@ class SuppliersRepository {
   /// Get supplier by user ID
   Future<Either<Failure, Supplier?>> getSupplierByUserId(int userId) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Suppliers',
         where: 'flag = 1 AND userId = ?',
@@ -81,7 +91,7 @@ class SuppliersRepository {
   /// Get last inserted supplier
   Future<Either<Failure, Supplier?>> getLastEntry() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Suppliers',
         orderBy: 'supplierId DESC',
@@ -106,7 +116,7 @@ class SuppliersRepository {
   /// Add single supplier to local DB
   Future<Either<Failure, void>> addSupplier(Supplier supplier) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'Suppliers',
         supplier.toMap(),
@@ -121,15 +131,17 @@ class SuppliersRepository {
   /// Add multiple suppliers to local DB (transaction)
   Future<Either<Failure, void>> addSuppliers(List<Supplier> suppliers) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final supplier in suppliers) {
-          await txn.insert(
+          batch.insert(
             'Suppliers',
             supplier.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -146,7 +158,7 @@ class SuppliersRepository {
     required String address,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'Suppliers',
         {
@@ -170,7 +182,7 @@ class SuppliersRepository {
     required int flag,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'Suppliers',
         {'flag': flag},
@@ -186,7 +198,7 @@ class SuppliersRepository {
   /// Clear all suppliers from local DB
   Future<Either<Failure, void>> clearAll() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.delete('Suppliers');
       return const Right(null);
     } catch (e) {
@@ -198,24 +210,41 @@ class SuppliersRepository {
   // API SYNC METHODS (Used by sync repository)
   // ============================================================================
 
-  /// Sync suppliers from API (batch download)
+  /// Sync suppliers from API (batch download or single record retry)
+  /// Converted from KMP's downloadSupplier function
+  /// Supports two modes:
+  /// 1. Full sync (id == -1): Downloads all suppliers in batches with part_no, limit, user_type, user_id, update_date
+  /// 2. Single record retry (id != -1): Downloads specific supplier by id only
   Future<Either<Failure, Map<String, dynamic>>> syncSuppliersFromApi({
     required int partNo,
     required int limit,
     required int userType,
     required int userId,
     required String updateDate,
+    int id = -1, // -1 for full sync, specific id for retry
   }) async {
     try {
-      final response = await _dio.get(
-        ApiEndpoints.supplierDownload,
-        queryParameters: {
+      final Map<String, String> queryParams;
+      
+      if (id == -1) {
+        // Full sync mode: send all parameters (matches KMP's params function when id == -1)
+        queryParams = {
           'part_no': partNo.toString(),
           'limit': limit.toString(),
           'user_type': userType.toString(),
           'user_id': userId.toString(),
           'update_date': updateDate,
-        },
+        };
+      } else {
+        // Single record retry mode: send only id (matches KMP's params function when id != -1)
+        queryParams = {
+          'id': id.toString(),
+        };
+      }
+      
+      final response = await _dio.get(
+        ApiEndpoints.supplierDownload,
+        queryParameters: queryParams,
       );
       return Right(Map<String, dynamic>.from(response.data));
     } on DioException catch (e) {

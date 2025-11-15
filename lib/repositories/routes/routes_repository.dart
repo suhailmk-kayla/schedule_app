@@ -12,12 +12,22 @@ import '../../utils/api_endpoints.dart';
 class RoutesRepository {
   final DatabaseHelper _databaseHelper;
   final Dio _dio;
+  
+  // Cache database instance to avoid async getter overhead on every call
+  Database? _cachedDatabase;
 
   RoutesRepository({
     required DatabaseHelper databaseHelper,
     required Dio dio,
   })  : _databaseHelper = databaseHelper,
         _dio = dio;
+  
+  /// Get database instance (cached after first access)
+  Future<Database> get _database async {
+    if (_cachedDatabase != null) return _cachedDatabase!;
+    _cachedDatabase = await _databaseHelper.database;
+    return _cachedDatabase!;
+  }
 
   // ============================================================================
   // LOCAL DB READ METHODS (Used by providers for display)
@@ -28,7 +38,7 @@ class RoutesRepository {
     String searchKey = '',
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final List<Map<String, dynamic>> maps;
 
       if (searchKey.isEmpty) {
@@ -66,7 +76,7 @@ class RoutesRepository {
     String searchKey = '',
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final List<Map<String, dynamic>> maps;
 
       if (searchKey.isEmpty) {
@@ -107,7 +117,7 @@ class RoutesRepository {
   /// Get route by name
   Future<Either<Failure, List<Route>>> getRouteByName(String name) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Routes',
         where: 'flag = 1 AND LOWER(name) = LOWER(?)',
@@ -128,7 +138,7 @@ class RoutesRepository {
     required int routeId,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Routes',
         where: 'flag = 1 AND LOWER(name) = LOWER(?) AND routeId != ?',
@@ -146,7 +156,7 @@ class RoutesRepository {
   /// Get routes by salesman ID
   Future<Either<Failure, List<Route>>> getRoutesBySalesman(int salesmanId) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Routes',
         where: 'flag = 1 AND salesmanId = ?',
@@ -164,7 +174,7 @@ class RoutesRepository {
   /// Get last inserted route
   Future<Either<Failure, Route?>> getLastEntry() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Routes',
         orderBy: 'routeId DESC',
@@ -189,7 +199,7 @@ class RoutesRepository {
   /// Add single route to local DB
   Future<Either<Failure, void>> addRoute(Route route) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'Routes',
         route.toMap(),
@@ -204,15 +214,17 @@ class RoutesRepository {
   /// Add multiple routes to local DB (transaction)
   Future<Either<Failure, void>> addRoutes(List<Route> routes) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final route in routes) {
-          await txn.insert(
+          batch.insert(
             'Routes',
             route.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -223,7 +235,7 @@ class RoutesRepository {
   /// Update route in local DB
   Future<Either<Failure, void>> updateRouteLocal(Route route) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'Routes',
         {'name': route.name},
@@ -239,7 +251,7 @@ class RoutesRepository {
   /// Clear all routes from local DB
   Future<Either<Failure, void>> clearAll() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.delete('Routes');
       return const Right(null);
     } catch (e) {
@@ -251,24 +263,41 @@ class RoutesRepository {
   // API SYNC METHODS (Used by sync repository)
   // ============================================================================
 
-  /// Sync routes from API (batch download)
+  /// Sync routes from API (batch download or single record retry)
+  /// Converted from KMP's downloadRoutes function
+  /// Supports two modes:
+  /// 1. Full sync (id == -1): Downloads all routes in batches with part_no, limit, user_type, user_id, update_date
+  /// 2. Single record retry (id != -1): Downloads specific route by id only
   Future<Either<Failure, RouteListApi>> syncRoutesFromApi({
     required int partNo,
     required int limit,
     required int userType,
     required int userId,
     required String updateDate,
+    int id = -1, // -1 for full sync, specific id for retry
   }) async {
     try {
-      final response = await _dio.get(
-        ApiEndpoints.routesDownload,
-        queryParameters: {
+      final Map<String, String> queryParams;
+      
+      if (id == -1) {
+        // Full sync mode: send all parameters (matches KMP's params function when id == -1)
+        queryParams = {
           'part_no': partNo.toString(),
           'limit': limit.toString(),
           'user_type': userType.toString(),
           'user_id': userId.toString(),
           'update_date': updateDate,
-        },
+        };
+      } else {
+        // Single record retry mode: send only id (matches KMP's params function when id != -1)
+        queryParams = {
+          'id': id.toString(),
+        };
+      }
+      
+      final response = await _dio.get(
+        ApiEndpoints.routesDownload,
+        queryParameters: queryParams,
       );
 
       final routeListApi = RouteListApi.fromJson(response.data);

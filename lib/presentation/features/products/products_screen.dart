@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/storage_helper.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/products_provider.dart';
 import 'product_details_screen.dart';
+import 'create_product_screen.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
@@ -12,6 +15,7 @@ class ProductsScreen extends StatefulWidget {
 
 class _ProductsScreenState extends State<ProductsScreen> {
   final TextEditingController _searchController = TextEditingController();
+  static const bool isShowAddOrder = true; // Show FAB for admin
 
   @override
   void initState() {
@@ -31,12 +35,23 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Products'),
-      ),
-      body: Consumer<ProductsProvider>(
-        builder: (context, provider, _) {
+    return Consumer<NotificationManager>(
+      builder: (context, notificationManager, _) {
+        // Listen to notification trigger and refresh data
+        if (notificationManager.notificationTrigger) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final provider = Provider.of<ProductsProvider>(context, listen: false);
+            provider.loadProducts(searchKey: _searchController.text.trim());
+            notificationManager.resetTrigger();
+          });
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Products'),
+          ),
+          body: Consumer<ProductsProvider>(
+            builder: (context, provider, _) {
           return Column(
             children: [
               Padding(
@@ -187,7 +202,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                   aspectRatio: 1,
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
-                                    child: _ProductImage(url: (p.photo ?? p.photo ?? '').toString()),
+                                    child: ProductImage(url: p.photo),
                                   ),
                                 ),
                               ),
@@ -254,13 +269,38 @@ class _ProductsScreenState extends State<ProductsScreen> {
           );
         },
       ),
+      floatingActionButton: FutureBuilder<int>(
+        future: StorageHelper.getUserType(),
+        builder: (context, snapshot) {
+          final isAdmin = snapshot.data == 1;
+          if (isShowAddOrder && isAdmin) {
+            return FloatingActionButton(
+              onPressed: _handleAddNew,
+              backgroundColor: Colors.black,
+              child: const Icon(Icons.add, color: Colors.white),
+            );
+          }
+          return const SizedBox.shrink();
+        },
+      ),
+        );
+      },
+    );
+  }
+
+  void _handleAddNew() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const CreateProductScreen(),
+      ),
     );
   }
 }
 
-class _ProductImage extends StatelessWidget {
+class ProductImage extends StatelessWidget {
   final String url;
-  const _ProductImage({required this.url});
+  const ProductImage({required this.url});
 
   @override
   Widget build(BuildContext context) {

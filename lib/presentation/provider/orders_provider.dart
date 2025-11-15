@@ -45,6 +45,9 @@ class OrdersProvider extends ChangeNotifier {
   String _date = '';
   String get date => _date;
 
+  int _dateFilterIndex = 1; // 0=All, 1=Today, 2=Yesterday, 3=Custom
+  int get dateFilterIndex => _dateFilterIndex;
+
   int _routeId = -1;
   int get routeId => _routeId;
   String _routeSt = 'All Routes';
@@ -80,6 +83,12 @@ class OrdersProvider extends ChangeNotifier {
   /// Set date filter
   void setDate(String date) {
     _date = date;
+    notifyListeners();
+  }
+
+  /// Set date filter index
+  void setDateFilterIndex(int index) {
+    _dateFilterIndex = index;
     notifyListeners();
   }
 

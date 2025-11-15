@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/asset_images.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/customers_provider.dart';
 import '../../../models/master_data_api.dart';
 import '../../../utils/storage_helper.dart';
@@ -90,7 +92,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Widget build(BuildContext context) {
     final isShowAddOrder = widget.orderId == null || widget.orderId!.isEmpty;
 
-    return Scaffold(
+    return Consumer<NotificationManager>(
+      builder: (context, notificationManager, _) {
+        // Listen to notification trigger and refresh data
+        if (notificationManager.notificationTrigger) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final provider = Provider.of<CustomersProvider>(context, listen: false);
+            provider.loadCustomers();
+            notificationManager.resetTrigger();
+          });
+        }
+
+        return Scaffold(
       appBar: AppBar(
         title: const Text('Customers List'),
         leading: IconButton(
@@ -203,9 +216,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   );
                 }
 
-                return ListView.separated(
+                return ListView.builder(
                   itemCount: provider.customers.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  // separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final customer = provider.customers[index];
                     return _CustomerListItem(
@@ -236,6 +249,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
           return const SizedBox.shrink();
         },
       ),
+        );
+      },
     );
   }
 }
@@ -265,7 +280,7 @@ class _CustomerListItem extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
-      elevation: 4,
+      elevation: 2,
       child: InkWell(
         onTap: onItemClick,
         borderRadius: BorderRadius.circular(12),
@@ -279,15 +294,13 @@ class _CustomerListItem extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  image: DecorationImage(image: AssetImage(AssetImages.imagesCustomer)),
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
+                  // borderRadius: BorderRadius.circular(8),
                 ),
                 padding: const EdgeInsets.all(5),
-                child: const Icon(
-                  Icons.person,
-                  size: 36,
-                  color: Colors.blue,
-                ),
+                
               ),
               const SizedBox(width: 6),
               // Customer details

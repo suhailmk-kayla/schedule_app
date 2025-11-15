@@ -12,12 +12,22 @@ import '../../utils/api_endpoints.dart';
 class CarNameRepository {
   final DatabaseHelper _databaseHelper;
   final Dio _dio;
+  
+  // Cache database instance to avoid async getter overhead on every call
+  Database? _cachedDatabase;
 
   CarNameRepository({
     required DatabaseHelper databaseHelper,
     required Dio dio,
   })  : _databaseHelper = databaseHelper,
         _dio = dio;
+  
+  /// Get database instance (cached after first access)
+  Future<Database> get _database async {
+    if (_cachedDatabase != null) return _cachedDatabase!;
+    _cachedDatabase = await _databaseHelper.database;
+    return _cachedDatabase!;
+  }
 
   // ============================================================================
   // LOCAL DB READ METHODS (Used by providers for display)
@@ -26,7 +36,7 @@ class CarNameRepository {
   /// Get all car names by brand ID
   Future<Either<Failure, List<Name>>> getCarNamesByBrandId(int brandId) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'CarName',
         where: 'flag = 1 AND carBrandId = ?',
@@ -47,7 +57,7 @@ class CarNameRepository {
     required int brandId,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'CarName',
         where: 'flag = 1 AND LOWER(name) = LOWER(?) AND carBrandId = ?',
@@ -65,7 +75,7 @@ class CarNameRepository {
   /// Get last inserted car name
   Future<Either<Failure, Name?>> getLastEntry() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'CarName',
         orderBy: 'carNameId DESC',
@@ -83,6 +93,61 @@ class CarNameRepository {
     }
   }
 
+  /// Get all cars with brand name (for list display)
+  /// Returns raw maps with carBrand and carName data
+  /// Converted from KMP's getAllCars
+  Future<Either<Failure, List<Map<String, dynamic>>>> getAllCars({
+    String searchKey = '',
+  }) async {
+    try {
+      final db = await _database;
+      final List<Map<String, dynamic>> maps;
+
+      if (searchKey.isEmpty) {
+        maps = await db.rawQuery(
+          '''
+          SELECT
+            CarBrand.name AS carBrand,
+            CarName.*
+          FROM
+            CarName
+          LEFT JOIN
+            CarBrand ON CarBrand.carBrandId = CarName.carBrandId
+          WHERE
+            CarName.flag = 1
+          ORDER BY
+            CarName.name ASC
+          ''',
+        );
+      } else {
+        final searchPattern = '%$searchKey%';
+        maps = await db.rawQuery(
+          '''
+          SELECT
+            CarBrand.name AS carBrand,
+            CarName.*
+          FROM
+            CarName
+          LEFT JOIN
+            CarBrand ON CarBrand.carBrandId = CarName.carBrandId
+          WHERE
+            CarName.flag = 1 AND (
+              LOWER(CarBrand.name) LIKE LOWER(?) OR 
+              LOWER(CarName.name) LIKE LOWER(?)
+            )
+          ORDER BY
+            CarName.name ASC
+          ''',
+          [searchPattern, searchPattern],
+        );
+      }
+
+      return Right(maps);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
   // ============================================================================
   // LOCAL DB WRITE METHODS (Used by sync and write operations)
   // ============================================================================
@@ -90,7 +155,7 @@ class CarNameRepository {
   /// Add single car name to local DB
   Future<Either<Failure, void>> addCarName(Name carName) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'CarName',
         carName.toMap(),
@@ -105,15 +170,17 @@ class CarNameRepository {
   /// Add multiple car names to local DB (transaction)
   Future<Either<Failure, void>> addCarNames(List<Name> carNames) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final carName in carNames) {
-          await txn.insert(
+          batch.insert(
             'CarName',
             carName.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -127,7 +194,7 @@ class CarNameRepository {
     required String name,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'CarName',
         {'name': name},
@@ -143,7 +210,7 @@ class CarNameRepository {
   /// Clear all car names from local DB
   Future<Either<Failure, void>> clearAll() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.delete('CarName');
       return const Right(null);
     } catch (e) {

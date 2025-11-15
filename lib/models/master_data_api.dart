@@ -1333,3 +1333,145 @@ class OutOfStockSubApi {
   Map<String, dynamic> toJson() => _$OutOfStockSubApiToJson(this);
 }
 
+// ============================================================================
+// OUT OF STOCK "WITH DETAILS" MODELS (for join queries)
+// ============================================================================
+
+/// OutOfStockMasterWithDetails
+/// Wrapper model that includes joined fields from database queries
+/// Matching KMP's OutOFStockMasterWithDetails
+class OutOfStockMasterWithDetails {
+  final OutOfStock outOfStock;
+  
+  // Joined fields from query
+  final String unitName;
+  final String unitDispName;
+  final String productName;
+  final String salesman;
+  final String supplier;
+  final String storekeeper;
+  final String customerName;
+  final int isViewed; // From OutOfStockMaster table
+
+  const OutOfStockMasterWithDetails({
+    required this.outOfStock,
+    this.unitName = '',
+    this.unitDispName = '',
+    this.productName = '',
+    this.salesman = '',
+    this.supplier = '',
+    this.storekeeper = '',
+    this.customerName = '',
+    this.isViewed = 0,
+  });
+
+  /// Convert from database map (join query result)
+  factory OutOfStockMasterWithDetails.fromMap(Map<String, dynamic> map) {
+    return OutOfStockMasterWithDetails(
+      outOfStock: OutOfStock.fromMap(map),
+      unitName: map['unitName'] as String? ?? '',
+      unitDispName: map['unitDispName'] as String? ?? '',
+      productName: map['productName'] as String? ?? '',
+      salesman: map['salesman'] as String? ?? '',
+      supplier: map['supplier'] as String? ?? '',
+      storekeeper: map['storekeeper'] as String? ?? '',
+      customerName: map['customerName'] as String? ?? '',
+      isViewed: map['isViewed'] as int? ?? 0,
+    );
+  }
+
+  // Convenience getters matching KMP property names
+  int get oospMasterId => outOfStock.id;
+  int get orderSubId => outOfStock.outosOrderSubId;
+  int get custId => outOfStock.outosCustId;
+  int get salesmanId => outOfStock.outosSalesManId;
+  int get storekeeperId => outOfStock.outosStockKeeperId;
+  String get dateAndTime => outOfStock.outosDateAndTime;
+  int get productId => outOfStock.outosProdId;
+  int get unitId => outOfStock.outosUnitId;
+  int get carId => outOfStock.outosCarId;
+  double get qty => outOfStock.outosQty;
+  double get availQty => outOfStock.outosAvailableQty;
+  double get baseQty => outOfStock.outosUnitBaseQty;
+  String get note => outOfStock.outosNote ?? '';
+  String get narration => outOfStock.outosNarration ?? '';
+  String get createdDateTime => outOfStock.createdAt ?? '';
+  String get updatedDateTime => outOfStock.updatedAt ?? '';
+  int get isCompleteflag => outOfStock.outosIsCompleatedFlag;
+  int get flag => outOfStock.outosFlag ?? 0;
+  String get UUID => outOfStock.uuid;
+}
+
+/// OutOfStockSubWithDetails
+/// Wrapper model that includes joined fields from database queries
+/// Matching KMP's OutOFStockWithDetails
+class OutOfStockSubWithDetails {
+  final OutOfStockSub outOfStockSub;
+  
+  // Joined fields from query
+  final String unitName;
+  final String unitDispName;
+  final String productName;
+  final String salesman;
+  final String storekeeper;
+  final String supplierName;
+  final String customerName;
+  final int isPacked; // From PackedSubs check
+  final int isViewed; // From OutOfStockProducts table
+
+  const OutOfStockSubWithDetails({
+    required this.outOfStockSub,
+    this.unitName = '',
+    this.unitDispName = '',
+    this.productName = '',
+    this.salesman = '',
+    this.storekeeper = '',
+    this.supplierName = '',
+    this.customerName = '',
+    this.isPacked = 0,
+    this.isViewed = 0,
+  });
+
+  /// Convert from database map (join query result)
+  factory OutOfStockSubWithDetails.fromMap(Map<String, dynamic> map) {
+    return OutOfStockSubWithDetails(
+      outOfStockSub: OutOfStockSub.fromMap(map),
+      unitName: map['unitName'] as String? ?? '',
+      unitDispName: map['unitDispName'] as String? ?? '',
+      productName: map['productName'] as String? ?? '',
+      salesman: map['salesman'] as String? ?? '',
+      storekeeper: map['storekeeper'] as String? ?? '',
+      supplierName: map['supplierName'] as String? ?? '',
+      customerName: map['customerName'] as String? ?? '',
+      isPacked: map['isPacked'] as int? ?? 0,
+      isViewed: map['isViewed'] as int? ?? 0,
+    );
+  }
+
+  // Convenience getters matching KMP property names
+  int get oospId => outOfStockSub.id;
+  int get oospMasterId => outOfStockSub.outosSubOutosId;
+  int get orderSubId => outOfStockSub.outosSubOrderSubId;
+  int get custId => outOfStockSub.outosSubCustId;
+  int get salesmanId => outOfStockSub.outosSubSalesManId;
+  int get storekeeperId => outOfStockSub.outosSubStockKeeperId;
+  String get dateAndTime => outOfStockSub.outosSubDateAndTime;
+  int get supplierId => outOfStockSub.outosSubSuppId;
+  int get productId => outOfStockSub.outosSubProdId;
+  int get unitId => outOfStockSub.outosSubUnitId;
+  int get carId => outOfStockSub.outosSubCarId;
+  double get rate => outOfStockSub.outosSubRate;
+  double get updateRate => outOfStockSub.outosSubUpdatedRate;
+  double get qty => outOfStockSub.outosSubQty;
+  double get availQty => outOfStockSub.outosSubAvailableQty;
+  double get baseQty => outOfStockSub.outosSubUnitBaseQty;
+  String get note => outOfStockSub.outosSubNote ?? '';
+  String get narration => outOfStockSub.outosSubNarration ?? '';
+  int get oospFlag => outOfStockSub.outosSubStatusFlag;
+  String get createdDateTime => outOfStockSub.createdAt;
+  String get updatedDateTime => outOfStockSub.updatedAt;
+  int get isCheckedflag => outOfStockSub.outosSubIsCheckedFlag;
+  int get flag => outOfStockSub.outosSubFlag ?? 0;
+  String get UUID => outOfStockSub.uuid;
+}
+

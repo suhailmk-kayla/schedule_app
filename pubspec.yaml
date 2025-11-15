@@ -66,6 +66,10 @@ dependencies:
   # Push Notifications
   onesignal_flutter: ^5.3.4
   change_app_package_name: ^1.5.0
+  fluttertoast: ^9.0.0
+  
+  # Image Picker
+  image_picker: ^1.0.7
 
 dev_dependencies:
   flutter_test:

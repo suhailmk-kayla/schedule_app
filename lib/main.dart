@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/helpers/admin_registration_helper.dart';
 import 'di.dart';
 import 'utils/push_notification_helper.dart';
+import 'utils/notification_manager.dart';
 import 'presentation/features/auth/splash_screen.dart';
 import 'presentation/provider/auth_provider.dart';
 import 'presentation/provider/products_provider.dart';
@@ -12,6 +14,12 @@ import 'presentation/provider/home_provider.dart';
 import 'presentation/provider/users_provider.dart';
 import 'presentation/provider/routes_provider.dart';
 import 'presentation/provider/salesman_provider.dart';
+import 'presentation/provider/out_of_stock_provider.dart';
+import 'presentation/provider/suppliers_provider.dart';
+import 'presentation/provider/units_provider.dart';
+import 'presentation/provider/categories_provider.dart';
+import 'presentation/provider/sub_categories_provider.dart';
+import 'presentation/provider/cars_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,6 +46,10 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // NotificationManager must be registered first so other providers can listen to it
+        ChangeNotifierProvider(
+          create: (_) => NotificationManager(),
+        ),
         ChangeNotifierProvider(
           create: (_) => getIt<AuthProvider>()..initialize(),
         ),
@@ -64,6 +76,24 @@ class MyApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(
           create: (_) => getIt<SalesmanProvider>(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => getIt<OutOfStockProvider>(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => getIt<SuppliersProvider>(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => getIt<UnitsProvider>(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => getIt<CategoriesProvider>(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => getIt<SubCategoriesProvider>(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => getIt<CarsProvider>(),
         ),
       ],
       child: MaterialApp(

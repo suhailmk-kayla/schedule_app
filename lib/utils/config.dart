@@ -5,7 +5,7 @@ class ApiConfig {
   // For development/testing, use environment variables or build flavors
   // const val API_BASE_URL="http://10.0.2.2:8000/" // for emulator
   // const val API_BASE_URL="http://127.0.0.1:8000/"
-  static const bool isProductionMode = true;
+  static const bool isProductionMode = false;
 
   static const String noteSplitDel = '***###***';
   // static const String replacedSubDelOrderSubId = '***$###$***OrderSubId=';

@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/asset_images.dart';
+import 'package:schedule_frontend_flutter/utils/storage_helper.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../../helpers/user_type_helper.dart';
 import '../../provider/users_provider.dart';
+import 'user_details_screen.dart';
+import 'create_user_screen.dart';
+import 'dart:developer' as developer;
 
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
@@ -12,6 +18,19 @@ class UsersScreen extends StatefulWidget {
 
 class _UsersScreenState extends State<UsersScreen> {
   final TextEditingController _searchController = TextEditingController();
+
+  void _handleAddNew() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const CreateUserScreen(),
+      ),
+    ).then((_) {
+      developer.log('CreateUserScreen returned');
+      // Refresh users list after returning
+      Provider.of<UsersProvider>(context, listen: false).loadUsers();
+    });
+  }
 
   @override
   void initState() {
@@ -30,11 +49,22 @@ class _UsersScreenState extends State<UsersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Users'),
-      ),
-      body: Column(
+    return Consumer<NotificationManager>(
+      builder: (context, notificationManager, _) {
+        // Listen to notification trigger and refresh data
+        if (notificationManager.notificationTrigger) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final provider = Provider.of<UsersProvider>(context, listen: false);
+            provider.loadUsers(searchKey: _searchController.text.trim());
+            notificationManager.resetTrigger();
+          });
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Users'),
+          ),
+          body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(12.0),
@@ -72,6 +102,10 @@ class _UsersScreenState extends State<UsersScreen> {
                   itemBuilder: (context, index) {
                     final u = provider.users[index];
                     return ListTile(
+                      leading: CircleAvatar(
+                        backgroundImage: AssetImage(AssetImages.imagesUsers),
+                        
+                      ),
                       title: Text(u.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -81,7 +115,14 @@ class _UsersScreenState extends State<UsersScreen> {
                           Text('Category: ${UserTypeHelper.nameFromCatId(u.catId)}'),
                         ],
                       ),
-                      // onTap: () { /* Admin could edit user - out of scope */ },
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => UserDetailsScreen(userId: u.id),
+                          ),
+                        );
+                      },
                     );
                   },
                 );
@@ -90,6 +131,22 @@ class _UsersScreenState extends State<UsersScreen> {
           ),
         ],
       ),
+      floatingActionButton: FutureBuilder<int>(
+        future: StorageHelper.getUserType(),
+        builder: (context, snapshot) {
+          final isAdmin = snapshot.data == 1;
+          if (isAdmin) {
+            return FloatingActionButton(
+              onPressed: _handleAddNew,
+              backgroundColor: Colors.black,
+              child: const Icon(Icons.add, color: Colors.white),
+            );
+          }
+          return const SizedBox.shrink();
+        },
+      ),
+        );
+      },
     );
   }
 }

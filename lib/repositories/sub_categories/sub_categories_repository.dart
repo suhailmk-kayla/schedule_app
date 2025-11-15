@@ -12,12 +12,22 @@ import '../../utils/api_endpoints.dart';
 class SubCategoriesRepository {
   final DatabaseHelper _databaseHelper;
   final Dio _dio;
+  
+  // Cache database instance to avoid async getter overhead on every call
+  Database? _cachedDatabase;
 
   SubCategoriesRepository({
     required DatabaseHelper databaseHelper,
     required Dio dio,
   })  : _databaseHelper = databaseHelper,
         _dio = dio;
+  
+  /// Get database instance (cached after first access)
+  Future<Database> get _database async {
+    if (_cachedDatabase != null) return _cachedDatabase!;
+    _cachedDatabase = await _databaseHelper.database;
+    return _cachedDatabase!;
+  }
 
   // ============================================================================
   // LOCAL DB READ METHODS (Used by providers for display)
@@ -28,7 +38,7 @@ class SubCategoriesRepository {
     String searchKey = '',
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final List<Map<String, dynamic>> maps;
 
       if (searchKey.isEmpty) {
@@ -65,12 +75,53 @@ class SubCategoriesRepository {
     }
   }
 
+  /// Get all sub categories with category name (returns raw maps for categoryName extraction)
+  Future<Either<Failure, List<Map<String, dynamic>>>> getAllSubCategoriesWithCategoryName({
+    String searchKey = '',
+  }) async {
+    try {
+      final db = await _database;
+      final List<Map<String, dynamic>> maps;
+
+      if (searchKey.isEmpty) {
+        maps = await db.rawQuery(
+          '''
+          SELECT s.*, c.name AS categoryName
+          FROM SubCategory AS s
+          LEFT JOIN Category AS c ON c.categoryId = s.parentId
+          WHERE s.flag = 1
+          ORDER BY s.name ASC
+          ''',
+        );
+      } else {
+        final searchPattern = '%$searchKey%';
+        maps = await db.rawQuery(
+          '''
+          SELECT s.*, c.name AS categoryName
+          FROM SubCategory AS s
+          LEFT JOIN Category AS c ON c.categoryId = s.parentId
+          WHERE s.flag = 1 AND (
+            LOWER(s.name) LIKE LOWER(?) OR 
+            LOWER(c.name) LIKE LOWER(?)
+          )
+          ORDER BY s.name ASC
+          ''',
+          [searchPattern, searchPattern],
+        );
+      }
+
+      return Right(maps);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
   /// Get sub categories by parent category ID
   Future<Either<Failure, List<SubCategory>>> getSubCategoriesByCategoryId(
     int parentId,
   ) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'SubCategory',
         where: 'flag = 1 AND parentId = ?',
@@ -91,7 +142,7 @@ class SubCategoriesRepository {
     required int parentId,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'SubCategory',
         where: 'flag = 1 AND LOWER(name) = LOWER(?) AND parentId = ?',
@@ -113,7 +164,7 @@ class SubCategoriesRepository {
     required int subCategoryId,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'SubCategory',
         where: 'flag = 1 AND LOWER(name) = LOWER(?) AND parentId = ? AND subCategoryId != ?',
@@ -131,7 +182,7 @@ class SubCategoriesRepository {
   /// Get last inserted sub category
   Future<Either<Failure, SubCategory?>> getLastEntry() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'SubCategory',
         orderBy: 'subCategoryId DESC',
@@ -156,7 +207,7 @@ class SubCategoriesRepository {
   /// Add single sub category to local DB
   Future<Either<Failure, void>> addSubCategory(SubCategory subCategory) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'SubCategory',
         subCategory.toMap(),
@@ -173,15 +224,17 @@ class SubCategoriesRepository {
     List<SubCategory> subCategories,
   ) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final subCategory in subCategories) {
-          await txn.insert(
+          batch.insert(
             'SubCategory',
             subCategory.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -195,7 +248,7 @@ class SubCategoriesRepository {
     required String name,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'SubCategory',
         {'name': name},
@@ -211,7 +264,7 @@ class SubCategoriesRepository {
   /// Clear all sub categories from local DB
   Future<Either<Failure, void>> clearAll() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.delete('SubCategory');
       return const Right(null);
     } catch (e) {
@@ -223,24 +276,41 @@ class SubCategoriesRepository {
   // API SYNC METHODS (Used by sync repository)
   // ============================================================================
 
-  /// Sync sub categories from API (batch download)
+  /// Sync sub categories from API (batch download or single record retry)
+  /// Converted from KMP's downloadSubCategory function
+  /// Supports two modes:
+  /// 1. Full sync (id == -1): Downloads all sub categories in batches with part_no, limit, user_type, user_id, update_date
+  /// 2. Single record retry (id != -1): Downloads specific sub category by id only
   Future<Either<Failure, SubCategoryListApi>> syncSubCategoriesFromApi({
     required int partNo,
     required int limit,
     required int userType,
     required int userId,
     required String updateDate,
+    int id = -1, // -1 for full sync, specific id for retry
   }) async {
     try {
-      final response = await _dio.get(
-        ApiEndpoints.subCategoryDownloads,
-        queryParameters: {
+      final Map<String, String> queryParams;
+      
+      if (id == -1) {
+        // Full sync mode: send all parameters (matches KMP's params function when id == -1)
+        queryParams = {
           'part_no': partNo.toString(),
           'limit': limit.toString(),
           'user_type': userType.toString(),
           'user_id': userId.toString(),
           'update_date': updateDate,
-        },
+        };
+      } else {
+        // Single record retry mode: send only id (matches KMP's params function when id != -1)
+        queryParams = {
+          'id': id.toString(),
+        };
+      }
+      
+      final response = await _dio.get(
+        ApiEndpoints.subCategoryDownloads,
+        queryParameters: queryParams,
       );
 
       final subCategoryListApi = SubCategoryListApi.fromJson(response.data);
@@ -298,6 +368,7 @@ class SubCategoriesRepository {
   /// Update sub category via API and update local DB
   Future<Either<Failure, SubCategory>> updateSubCategory({
     required int subCategoryId,
+    required int parentId,
     required String name,
   }) async {
     try {
@@ -306,6 +377,7 @@ class SubCategoriesRepository {
         ApiEndpoints.updateSubCategory,
         data: {
           'id': subCategoryId,
+          'cat_id': parentId,
           'name': name,
         },
       );

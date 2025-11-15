@@ -12,12 +12,22 @@ import '../../utils/api_endpoints.dart';
 class CategoriesRepository {
   final DatabaseHelper _databaseHelper;
   final Dio _dio;
+  
+  // Cache database instance to avoid async getter overhead on every call
+  Database? _cachedDatabase;
 
   CategoriesRepository({
     required DatabaseHelper databaseHelper,
     required Dio dio,
   })  : _databaseHelper = databaseHelper,
         _dio = dio;
+  
+  /// Get database instance (cached after first access)
+  Future<Database> get _database async {
+    if (_cachedDatabase != null) return _cachedDatabase!;
+    _cachedDatabase = await _databaseHelper.database;
+    return _cachedDatabase!;
+  }
 
   // ============================================================================
   // LOCAL DB READ METHODS (Used by providers for display)
@@ -28,7 +38,7 @@ class CategoriesRepository {
     String searchKey = '',
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final List<Map<String, dynamic>> maps;
 
       if (searchKey.isEmpty) {
@@ -58,7 +68,7 @@ class CategoriesRepository {
   /// Get category by ID
   Future<Either<Failure, Category?>> getCategoryById(int categoryId) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Category',
         where: 'flag = 1 AND categoryId = ?',
@@ -80,7 +90,7 @@ class CategoriesRepository {
   /// Get category by name
   Future<Either<Failure, List<Category>>> getCategoryByName(String name) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Category',
         where: 'flag = 1 AND LOWER(name) = LOWER(?)',
@@ -101,7 +111,7 @@ class CategoriesRepository {
     required int categoryId,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Category',
         where: 'flag = 1 AND LOWER(name) = LOWER(?) AND categoryId != ?',
@@ -119,7 +129,7 @@ class CategoriesRepository {
   /// Get last inserted category
   Future<Either<Failure, Category?>> getLastEntry() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'Category',
         orderBy: 'categoryId DESC',
@@ -144,7 +154,7 @@ class CategoriesRepository {
   /// Add single category to local DB
   Future<Either<Failure, void>> addCategory(Category category) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'Category',
         category.toMap(),
@@ -157,17 +167,20 @@ class CategoriesRepository {
   }
 
   /// Add multiple categories to local DB (transaction)
+  /// Priority 1: Optimized batch insert (uses batch.commit instead of await in loop)
   Future<Either<Failure, void>> addCategories(List<Category> categories) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final category in categories) {
-          await txn.insert(
+          batch.insert(
             'Category',
             category.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -178,7 +191,7 @@ class CategoriesRepository {
   /// Update category in local DB
   Future<Either<Failure, void>> updateCategoryLocal(Category category) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'Category',
         {'name': category.name},
@@ -194,7 +207,7 @@ class CategoriesRepository {
   /// Clear all categories from local DB
   Future<Either<Failure, void>> clearAll() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.delete('Category');
       return const Right(null);
     } catch (e) {
@@ -206,24 +219,41 @@ class CategoriesRepository {
   // API SYNC METHODS (Used by sync repository)
   // ============================================================================
 
-  /// Sync categories from API (batch download)
+  /// Sync categories from API (batch download or single record retry)
+  /// Converted from KMP's downloadCategory function
+  /// Supports two modes:
+  /// 1. Full sync (id == -1): Downloads all categories in batches with part_no, limit, user_type, user_id, update_date
+  /// 2. Single record retry (id != -1): Downloads specific category by id only
   Future<Either<Failure, CategoryListApi>> syncCategoriesFromApi({
     required int partNo,
     required int limit,
     required int userType,
     required int userId,
     required String updateDate,
+    int id = -1, // -1 for full sync, specific id for retry
   }) async {
     try {
-      final response = await _dio.get(
-        ApiEndpoints.categoryDownloads,
-        queryParameters: {
+      final Map<String, String> queryParams;
+      
+      if (id == -1) {
+        // Full sync mode: send all parameters (matches KMP's params function when id == -1)
+        queryParams = {
           'part_no': partNo.toString(),
           'limit': limit.toString(),
           'user_type': userType.toString(),
           'user_id': userId.toString(),
           'update_date': updateDate,
-        },
+        };
+      } else {
+        // Single record retry mode: send only id (matches KMP's params function when id != -1)
+        queryParams = {
+          'id': id.toString(),
+        };
+      }
+      
+      final response = await _dio.get(
+        ApiEndpoints.categoryDownloads,
+        queryParameters: queryParams,
       );
 
       final categoryListApi = CategoryListApi.fromJson(response.data);

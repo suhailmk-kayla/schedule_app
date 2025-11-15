@@ -211,14 +211,14 @@ class MenuItem {
   final String title;
   final IconData icon;
   final int count;
-  final String imagePath;
+  final String? imagePath;
 
   const MenuItem({
     required this.type,
     required this.title,
     required this.icon,
     this.count = 0,
-    required this.imagePath,
+    this.imagePath,
   });
 }
 

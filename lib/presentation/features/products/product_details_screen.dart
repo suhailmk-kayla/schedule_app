@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/presentation/features/products/products_screen.dart';
 import '../../provider/products_provider.dart';
 import '../../../models/product_api.dart';
 
@@ -60,15 +61,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.image, size: 40, color: Colors.grey),
-              ),
+              SizedBox(
+                height: 200,
+                width: 200,
+                child: ProductImage(url: p.photo)),
+              // Container(
+              //   width: 96,
+              //   height: 96,
+              //   decoration: BoxDecoration(
+              //     color: Colors.grey.shade200,
+              //     borderRadius: BorderRadius.circular(8),
+              //   ),
+              //   child: const Icon(Icons.image, size: 40, color: Colors.grey),
+              // ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(

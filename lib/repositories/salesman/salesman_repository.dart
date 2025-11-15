@@ -12,12 +12,22 @@ import '../../utils/api_endpoints.dart';
 class SalesManRepository {
   final DatabaseHelper _databaseHelper;
   final Dio _dio;
+  
+  // Cache database instance to avoid async getter overhead on every call
+  Database? _cachedDatabase;
 
   SalesManRepository({
     required DatabaseHelper databaseHelper,
     required Dio dio,
   })  : _databaseHelper = databaseHelper,
         _dio = dio;
+  
+  /// Get database instance (cached after first access)
+  Future<Database> get _database async {
+    if (_cachedDatabase != null) return _cachedDatabase!;
+    _cachedDatabase = await _databaseHelper.database;
+    return _cachedDatabase!;
+  }
 
   // ============================================================================
   // LOCAL DB READ METHODS (Used by providers for display)
@@ -28,7 +38,7 @@ class SalesManRepository {
     String searchKey = '',
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final List<Map<String, dynamic>> maps;
 
       if (searchKey.isEmpty) {
@@ -58,7 +68,7 @@ class SalesManRepository {
   /// Get salesman by user ID
   Future<Either<Failure, SalesMan?>> getSalesManByUserId(int userId) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'SalesMan',
         where: 'flag = 1 AND userId = ?',
@@ -81,7 +91,7 @@ class SalesManRepository {
   /// Get last inserted salesman
   Future<Either<Failure, SalesMan?>> getLastEntry() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       final maps = await db.query(
         'SalesMan',
         orderBy: 'salesManId DESC',
@@ -104,9 +114,13 @@ class SalesManRepository {
   // ============================================================================
 
   /// Add single salesman to local DB
+  /// TODO: Fix replacement issue - ConflictAlgorithm.replace replaces based on PRIMARY KEY (id),
+  /// but we need it to replace based on salesManId UNIQUE constraint (matching KMP behavior).
+  /// KMP uses: INSERT OR REPLACE INTO SalesMan(id, salesManId, ...) VALUES (NULL, ?, ...)
+  /// This ensures replacement happens on salesManId, not the auto-increment id.
   Future<Either<Failure, void>> addSalesMan(SalesMan salesman) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.insert(
         'SalesMan',
         salesman.toMap(),
@@ -119,17 +133,23 @@ class SalesManRepository {
   }
 
   /// Add multiple salesmen to local DB (transaction)
+  /// TODO: Fix replacement issue - ConflictAlgorithm.replace replaces based on PRIMARY KEY (id),
+  /// but we need it to replace based on salesManId UNIQUE constraint (matching KMP behavior).
+  /// KMP uses: INSERT OR REPLACE INTO SalesMan(id, salesManId, ...) VALUES (NULL, ?, ...)
+  /// This ensures replacement happens on salesManId, not the auto-increment id.
   Future<Either<Failure, void>> addSalesMen(List<SalesMan> salesmen) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.transaction((txn) async {
+        final batch = txn.batch();
         for (final salesman in salesmen) {
-          await txn.insert(
+          batch.insert(
             'SalesMan',
             salesman.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -146,7 +166,7 @@ class SalesManRepository {
     required String address,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'SalesMan',
         {
@@ -170,7 +190,7 @@ class SalesManRepository {
     required int flag,
   }) async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.update(
         'SalesMan',
         {'flag': flag},
@@ -186,7 +206,7 @@ class SalesManRepository {
   /// Clear all salesmen from local DB
   Future<Either<Failure, void>> clearAll() async {
     try {
-      final db = await _databaseHelper.database;
+      final db = await _database;
       await db.delete('SalesMan');
       return const Right(null);
     } catch (e) {
