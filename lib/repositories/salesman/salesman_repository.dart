@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 import 'package:either_dart/either.dart';
 import 'package:sqflite/sqflite.dart';
@@ -114,45 +116,83 @@ class SalesManRepository {
   // ============================================================================
 
   /// Add single salesman to local DB
-  /// TODO: Fix replacement issue - ConflictAlgorithm.replace replaces based on PRIMARY KEY (id),
-  /// but we need it to replace based on salesManId UNIQUE constraint (matching KMP behavior).
-  /// KMP uses: INSERT OR REPLACE INTO SalesMan(id, salesManId, ...) VALUES (NULL, ?, ...)
-  /// This ensures replacement happens on salesManId, not the auto-increment id.
+  /// Uses raw SQL INSERT OR REPLACE to match KMP behavior exactly:
+  /// INSERT OR REPLACE INTO SalesMan(id, salesManId, ...) VALUES (NULL, ?, ...)
+  /// This ensures replacement happens on salesManId UNIQUE constraint, not PRIMARY KEY
+  /// The id (PRIMARY KEY AUTOINCREMENT) is auto-managed by the database (we pass NULL)
   Future<Either<Failure, void>> addSalesMan(SalesMan salesman) async {
     try {
       final db = await _database;
-      await db.insert(
-        'SalesMan',
-        salesman.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      final map = salesman.toMapLocalDatabase();
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO SalesMan(
+          id, salesManId, userId, code, name, phone, address, 
+          deviceToken, createdDateTime, updatedDateTime, flag
+        ) VALUES (
+          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''',
+        [
+          map['salesManId'],
+          map['userId'],
+          map['code'],
+          map['name'],
+          map['phone'],
+          map['address'],
+          map['deviceToken'],
+          map['createdDateTime'],
+          map['updatedDateTime'],
+          map['flag'],
+        ],
       );
       return const Right(null);
     } catch (e) {
+      developer.log('SalesManRepository: Error adding salesman: $e');
       return Left(DatabaseFailure.fromError(e));
     }
   }
 
   /// Add multiple salesmen to local DB (transaction)
-  /// TODO: Fix replacement issue - ConflictAlgorithm.replace replaces based on PRIMARY KEY (id),
-  /// but we need it to replace based on salesManId UNIQUE constraint (matching KMP behavior).
-  /// KMP uses: INSERT OR REPLACE INTO SalesMan(id, salesManId, ...) VALUES (NULL, ?, ...)
-  /// This ensures replacement happens on salesManId, not the auto-increment id.
+  /// Uses raw SQL INSERT OR REPLACE to match KMP behavior exactly:
+  /// INSERT OR REPLACE INTO SalesMan(id, salesManId, ...) VALUES (NULL, ?, ...)
+  /// This ensures replacement happens on salesManId UNIQUE constraint, not PRIMARY KEY
+  /// The id (PRIMARY KEY AUTOINCREMENT) is auto-managed by the database (we pass NULL)
+  /// Matches KMP's SalesManRepository.add transaction pattern
   Future<Either<Failure, void>> addSalesMen(List<SalesMan> salesmen) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
         for (final salesman in salesmen) {
-          batch.insert(
-            'SalesMan',
-            salesman.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          final map = salesman.toMapLocalDatabase();
+          await txn.rawInsert(
+            '''
+            INSERT OR REPLACE INTO SalesMan(
+              id, salesManId, userId, code, name, phone, address, 
+              deviceToken, createdDateTime, updatedDateTime, flag
+            ) VALUES (
+              NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ''',
+            [
+              map['salesManId'],
+              map['userId'],
+              map['code'],
+              map['name'],
+              map['phone'],
+              map['address'],
+              map['deviceToken'],
+              map['createdDateTime'],
+              map['updatedDateTime'],
+              map['flag'],
+            ],
           );
         }
-        await batch.commit(noResult: true);
+        developer.log('SalesManRepository: ${salesmen.length} salesmen added successfully');
       });
       return const Right(null);
     } catch (e) {
+      developer.log('SalesManRepository: Error adding salesmen: $e');
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -251,6 +291,7 @@ class SalesManRepository {
       }
       
       final response = await _dio.get(
+      
         ApiEndpoints.salesManDownload,
         queryParameters: queryParams,
       );

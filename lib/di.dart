@@ -30,6 +30,7 @@ import 'repositories/packed_subs/packed_subs_repository.dart';
 import 'repositories/out_of_stock/out_of_stock_repository.dart';
 import 'utils/dio_helper.dart';
 import 'utils/push_notification_sender.dart';
+import 'utils/push_notification_builder.dart';
 import 'presentation/provider/auth_provider.dart';
 import 'presentation/provider/home_provider.dart';
 import 'presentation/provider/users_provider.dart';
@@ -171,6 +172,13 @@ Future<void> setupDependencies() async {
     ),
   );
 
+  // Register PushNotificationBuilder (after UsersRepository)
+  getIt.registerLazySingleton<PushNotificationBuilder>(
+    () => PushNotificationBuilder(
+      usersRepository: getIt<UsersRepository>(),
+    ),
+  );
+
   getIt.registerLazySingleton<SyncTimeRepository>(
     () => SyncTimeRepository(
       databaseHelper: getIt<DatabaseHelper>(),
@@ -226,6 +234,8 @@ Future<void> setupDependencies() async {
       routesRepository: getIt<RoutesRepository>(),
       salesManRepository: getIt<SalesManRepository>(),
       ordersRepository: getIt<OrdersRepository>(),
+      pushNotificationSender: getIt<PushNotificationSender>(),
+      pushNotificationBuilder: getIt<PushNotificationBuilder>(),
     ),
   );
 

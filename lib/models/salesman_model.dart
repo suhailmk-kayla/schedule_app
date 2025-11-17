@@ -94,5 +94,21 @@ factory SalesMan.fromMapServerData(Map<String, dynamic> map) {
       'flag': flag,
     };
   }
+
+    Map<String, dynamic> toMapLocalDatabase() {
+    return {
+      'salesManId': salesManId,
+      // 'id': id,
+      'userId': userId,
+      'code': code,
+      'name': name,
+      'phone': phone,
+      'address': address,
+      'deviceToken': deviceToken,
+      'createdDateTime': createdDateTime,
+      'updatedDateTime': updatedDateTime,
+      'flag': flag,
+    };
+  }
 }
 

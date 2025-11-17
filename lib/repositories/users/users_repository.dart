@@ -480,8 +480,8 @@ class UsersRepository {
             // Note: Supplier model uses 'id' field which maps to 'supplierId' in DB
             // The 'id' from userData is the supplierId (business ID)
             final newSupplier = Supplier(
-              id: userData.id, // This is supplierId (business ID, not auto-increment PK)
-              userId: createdUser.id,
+              // id: userData.id, // This is supplierId (business ID, not auto-increment PK)
+              // userId: createdUser.id,
               code: userData.code,
               name: userData.name,
               phone: userData.phoneNo,

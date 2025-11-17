@@ -24,45 +24,53 @@ class PushNotificationSender {
   /// 
   /// [dataIds] - List of PushData objects containing table and id
   /// [message] - Optional message for the notification (default: "Data updates")
+  /// [customUserIds] - Optional custom user list. If provided, uses this instead of auto-building
   Future<void> sendPushNotification({
     required List<PushData> dataIds,
     String message = 'Data updates',
+    List<Map<String, dynamic>>? customUserIds,
   }) async {
     try {
-      // 1. Get all users
-      final usersResult = await _usersRepository.getAllUsers();
-
-      // 2. Get current user ID
-      final currentUserId = await StorageHelper.getUserId();
-
-      // 3. Build user IDs list (excluding current user and suppliers)
+      // 3. Build user IDs list
       final List<Map<String, dynamic>> userIds = [];
 
-      usersResult.fold(
-        (failure) {
-          developer.log(
-            'PushNotificationSender: Failed to get users: ${failure.message}',
-          );
-        },
-        (users) {
-          for (final user in users) {
-            // Exclude current user (matches KMP line 404)
-            if (user.id == currentUserId) {
-              continue;
-            }
+      if (customUserIds != null) {
+        // Use custom user list if provided (for KMP-specific logic like excluding salesmen)
+        userIds.addAll(customUserIds);
+      } else {
+        // Auto-build user list (default behavior)
+        // 1. Get all users
+        final usersResult = await _usersRepository.getAllUsers();
 
-            // Exclude suppliers (categoryId == 4) - matches KMP line 403
-            if (user.catId == 4) {
-              continue;
-            }
+        // 2. Get current user ID
+        final currentUserId = await StorageHelper.getUserId();
 
-            userIds.add({
-              'user_id': user.id,
-              'silent_push': 1,
-            });
-          }
-        },
-      );
+        usersResult.fold(
+          (failure) {
+            developer.log(
+              'PushNotificationSender: Failed to get users: ${failure.message}',
+            );
+          },
+          (users) {
+            for (final user in users) {
+              // Exclude current user (matches KMP line 404)
+              if (user.id == currentUserId) {
+                continue;
+              }
+
+              // Exclude suppliers (categoryId == 4) - matches KMP line 403
+              if (user.catId == 4) {
+                continue;
+              }
+
+              userIds.add({
+                'user_id': user.id,
+                'silent_push': 1,
+              });
+            }
+          },
+        );
+      }
 
       // If no users to notify, skip sending
       if (userIds.isEmpty) {

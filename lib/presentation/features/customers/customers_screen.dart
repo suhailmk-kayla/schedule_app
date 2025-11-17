@@ -5,6 +5,7 @@ import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/customers_provider.dart';
 import '../../../models/master_data_api.dart';
 import '../../../utils/storage_helper.dart';
+import 'create_customer_screen.dart';
 
 /// Customers Screen
 /// Displays list of customers with search, route filter, and order creation
@@ -84,8 +85,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   void _handleAddNew() {
-    // TODO: Navigate to create customer screen
-    // Navigator.push(context, MaterialPageRoute(builder: (_) => CreateCustomerScreen()));
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const CreateCustomerScreen(),
+      ),
+    ).then((result) {
+      // Refresh customers list if customer was created successfully
+      if (result == true && mounted) {
+        final provider = Provider.of<CustomersProvider>(context, listen: false);
+        provider.loadCustomers();
+      }
+    });
   }
 
   @override

@@ -1323,7 +1323,10 @@ class SyncProvider extends ChangeNotifier {
       (response) async {
         final data = response['data'] as List<dynamic>?;
         final updatedDate = response['updated_date'] as String? ?? '';
-        final suppliers = data?.map((e) => Supplier.fromMap(e as Map<String, dynamic>)).toList() ?? [];
+        final suppliers = data
+                ?.map((e) => Supplier.fromMapServerData(e as Map<String, dynamic>))
+                .toList() ??
+            [];
         
         if (suppliers.isEmpty) {
           _isSupplierDownloaded = true;

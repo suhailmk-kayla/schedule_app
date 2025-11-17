@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:developer' as developer;
 import '../../repositories/customers/customers_repository.dart';
 import '../../repositories/routes/routes_repository.dart';
 import '../../repositories/salesman/salesman_repository.dart';
@@ -6,7 +7,11 @@ import '../../repositories/orders/orders_repository.dart';
 import '../../models/master_data_api.dart';
 import '../../models/order_api.dart';
 import '../../models/salesman_model.dart';
+import '../../models/push_data.dart';
 import '../../utils/storage_helper.dart';
+import '../../utils/push_notification_sender.dart';
+import '../../utils/push_notification_builder.dart';
+import '../../utils/notification_id.dart';
 import 'package:intl/intl.dart';
 
 /// Customers Provider
@@ -17,16 +22,22 @@ class CustomersProvider extends ChangeNotifier {
   final RoutesRepository _routesRepository;
   final SalesManRepository _salesManRepository;
   final OrdersRepository _ordersRepository;
+  final PushNotificationSender _pushNotificationSender;
+  final PushNotificationBuilder _pushNotificationBuilder;
 
   CustomersProvider({
     required CustomersRepository customersRepository,
     required RoutesRepository routesRepository,
     required SalesManRepository salesManRepository,
     required OrdersRepository ordersRepository,
+    required PushNotificationSender pushNotificationSender,
+    required PushNotificationBuilder pushNotificationBuilder,
   })  : _customersRepository = customersRepository,
         _routesRepository = routesRepository,
         _salesManRepository = salesManRepository,
-        _ordersRepository = ordersRepository;
+        _ordersRepository = ordersRepository,
+        _pushNotificationSender = pushNotificationSender,
+        _pushNotificationBuilder = pushNotificationBuilder;
 
   // ============================================================================
   // State Variables
@@ -163,6 +174,7 @@ class CustomersProvider extends ChangeNotifier {
   }
 
   /// Create customer via API and update local DB
+  /// Matches KMP's saveCustomer function (lines 121-158)
   Future<bool> createCustomer({
     required String code,
     required String name,
@@ -189,9 +201,18 @@ class CustomersProvider extends ChangeNotifier {
       return false;
     }
 
+    // Build notification user list BEFORE API call (matches KMP lines 127-136)
+    final userId = await StorageHelper.getUserId();
+    final userType = await StorageHelper.getUserType();
+    final notificationUserIds = await _pushNotificationBuilder.buildCustomerNotificationList(
+      currentUserId: userId,
+      userType: userType,
+      salesmanId: salesmanId,
+    );
+
     // Create customer object
     final customer = Customer(
-      id: 0,
+      // id: 0,
       code: code,
       name: name,
       phoneNo: phone,
@@ -208,6 +229,19 @@ class CustomersProvider extends ChangeNotifier {
       (failure) => _setError(failure.message),
       (createdCustomer) {
         success = true;
+        
+        // Send push notification (matches KMP lines 146-152)
+        final dataIds = [
+          PushData(table: NotificationId.customer, id: createdCustomer.id),
+        ];
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Customer updates',
+          customUserIds: notificationUserIds,
+        ).catchError((e) {
+          developer.log('CustomersProvider: Error sending push notification: $e');
+        });
+        
         loadCustomers(); // Reload list
       },
     );
@@ -217,6 +251,7 @@ class CustomersProvider extends ChangeNotifier {
   }
 
   /// Update customer via API and update local DB
+  /// Matches KMP's updateCustomer function (lines 159-193)
   Future<bool> updateCustomer({
     required int customerId,
     required String code,
@@ -247,6 +282,24 @@ class CustomersProvider extends ChangeNotifier {
       return false;
     }
 
+    // Get old salesman ID (matches KMP line 165)
+    final oldCustomerResult = await _customersRepository.getCustomerById(customerId);
+    int oldSalesmanId = -1;
+    oldCustomerResult.fold(
+      (failure) => null,
+      (customer) => oldSalesmanId = customer?.salesManId ?? -1,
+    );
+
+    // Build notification user list BEFORE API call (matches KMP lines 166-176)
+    final userId = await StorageHelper.getUserId();
+    final userType = await StorageHelper.getUserType();
+    final notificationUserIds = await _pushNotificationBuilder.buildCustomerNotificationList(
+      currentUserId: userId,
+      userType: userType,
+      salesmanId: salesmanId,
+      oldSalesmanId: oldSalesmanId,
+    );
+
     // Create customer object with updated data
     final customer = Customer(
       id: customerId,
@@ -266,6 +319,19 @@ class CustomersProvider extends ChangeNotifier {
       (failure) => _setError(failure.message),
       (updatedCustomer) {
         success = true;
+        
+        // Send push notification (matches KMP lines 183-185)
+        final dataIds = [
+          PushData(table: NotificationId.customer, id: customerId),
+        ];
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Customer updates',
+          customUserIds: notificationUserIds,
+        ).catchError((e) {
+          developer.log('CustomersProvider: Error sending push notification: $e');
+        });
+        
         loadCustomers(); // Reload list
       },
     );
@@ -275,6 +341,7 @@ class CustomersProvider extends ChangeNotifier {
   }
 
   /// Update customer flag
+  /// Matches KMP's updateCustomerFlag function (lines 196-223)
   Future<bool> updateCustomerFlag({
     required int customerId,
     required int salesmanId,
@@ -282,6 +349,15 @@ class CustomersProvider extends ChangeNotifier {
   }) async {
     _setLoading(true);
     _clearError();
+
+    // Build notification user list BEFORE API call (matches KMP lines 197-206)
+    final userId = await StorageHelper.getUserId();
+    final userType = await StorageHelper.getUserType();
+    final notificationUserIds = await _pushNotificationBuilder.buildCustomerNotificationList(
+      currentUserId: userId,
+      userType: userType,
+      salesmanId: salesmanId,
+    );
 
     final result = await _customersRepository.updateCustomerFlag(
       customerId: customerId,
@@ -293,6 +369,19 @@ class CustomersProvider extends ChangeNotifier {
       (failure) => _setError(failure.message),
       (_) {
         success = true;
+        
+        // Send push notification (matches KMP lines 216-218)
+        final dataIds = [
+          PushData(table: NotificationId.customer, id: customerId),
+        ];
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Customer updates',
+          customUserIds: notificationUserIds,
+        ).catchError((e) {
+          developer.log('CustomersProvider: Error sending push notification: $e');
+        });
+        
         loadCustomers(); // Reload list
       },
     );

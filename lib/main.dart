@@ -28,7 +28,8 @@ void main() async {
   // Initialize OneSignal for push notifications (must be before setupDependencies)
   try {
     await PushNotificationHelper.initialize();
-  } catch (e) {
+  }
+   catch (e) {
     // Log error but don't block app startup
     debugPrint('OneSignal initialization failed: $e');
   }

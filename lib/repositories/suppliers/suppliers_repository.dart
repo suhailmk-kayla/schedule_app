@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 import 'package:either_dart/either.dart';
 import 'package:sqflite/sqflite.dart';
@@ -103,6 +105,7 @@ class SuppliersRepository {
       }
 
       final supplier = Supplier.fromMap(maps.first);
+
       return Right(supplier);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -114,13 +117,34 @@ class SuppliersRepository {
   // ============================================================================
 
   /// Add single supplier to local DB
+  /// Uses raw SQL INSERT OR REPLACE to match KMP behavior:
+  /// INSERT OR REPLACE INTO Suppliers(id, supplierId, ...) VALUES (NULL, ?, ...)
+  /// Replacement must pivot on supplierId (business ID), not the auto-increment id
   Future<Either<Failure, void>> addSupplier(Supplier supplier) async {
     try {
       final db = await _database;
-      await db.insert(
-        'Suppliers',
-        supplier.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      final map = supplier.toMap();
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO Suppliers(
+          id, supplierId, userId, code, name, phone, address,
+          deviceToken, createdDateTime, updatedDateTime, flag
+        ) VALUES (
+          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''',
+        [
+          map['supplierId'],
+          map['userId'],
+          map['code'],
+          map['name'],
+          map['phone'],
+          map['address'],
+          map['deviceToken'],
+          map['createdDateTime'],
+          map['updatedDateTime'],
+          map['flag'],
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -129,20 +153,38 @@ class SuppliersRepository {
   }
 
   /// Add multiple suppliers to local DB (transaction)
+  /// Uses raw SQL INSERT OR REPLACE with NULL id to ensure replacement on supplierId
   Future<Either<Failure, void>> addSuppliers(List<Supplier> suppliers) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
         for (final supplier in suppliers) {
-          batch.insert(
-            'Suppliers',
-            supplier.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          final map = supplier.toMap();
+          await txn.rawInsert(
+            '''
+            INSERT OR REPLACE INTO Suppliers(
+              id, supplierId, userId, code, name, phone, address,
+              deviceToken, createdDateTime, updatedDateTime, flag
+            ) VALUES (
+              NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ''',
+            [
+              map['supplierId'],
+              map['userId'],
+              map['code'],
+              map['name'],
+              map['phone'],
+              map['address'],
+              map['deviceToken'],
+              map['createdDateTime'],
+              map['updatedDateTime'],
+              map['flag'],
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
+      developer.log('SuppliersRepository: ${suppliers.length} suppliers added successfully');
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));

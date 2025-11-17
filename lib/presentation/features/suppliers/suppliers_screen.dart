@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../../provider/suppliers_provider.dart';
 import '../../../models/supplier_model.dart';
 import '../../../utils/asset_images.dart';
+import '../../../utils/storage_helper.dart';
+import 'create_supplier_screen.dart';
 
 /// Suppliers Screen
 /// Displays list of suppliers with search functionality
@@ -143,18 +145,32 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // TODO: Navigate to create supplier screen
-          // Navigator.push(
-          //   context,
-          //   MaterialPageRoute(
-          //     builder: (_) => const CreateSupplierScreen(),
-          //   ),
-          // );
+      floatingActionButton: FutureBuilder<int>(
+        future: StorageHelper.getUserType(),
+        builder: (context, snapshot) {
+          final isAdmin = snapshot.data == 1;
+          if (!isAdmin) {
+            return const SizedBox.shrink();
+          }
+          final suppliersProvider = Provider.of<SuppliersProvider>(context, listen: false);
+          return FloatingActionButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CreateSupplierScreen(),
+                ),
+              ).then((result) {
+                if (!mounted) return;
+                if (result == true) {
+                  suppliersProvider.getSuppliers();
+                }
+              });
+            },
+            backgroundColor: Colors.black,
+            child: const Icon(Icons.add, color: Colors.white),
+          );
         },
-        backgroundColor: Colors.black,
-        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }

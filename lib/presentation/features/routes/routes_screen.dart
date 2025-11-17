@@ -278,9 +278,8 @@ class _RoutesScreenState extends State<RoutesScreen> {
               ),
               // Routes list
               Expanded(
-                child: ListView.separated(
+                child: ListView.builder(
                   itemCount: provider.routesList.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final route = provider.routesList[index];
                     return _RouteListItem(
@@ -321,7 +320,7 @@ class _RouteListItem extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
-      elevation: 4,
+      elevation: 2,
       child: SizedBox(
         height: 50,
         child: Row(
