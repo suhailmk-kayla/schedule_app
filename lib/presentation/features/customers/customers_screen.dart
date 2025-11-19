@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/asset_images.dart';
 import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/customers_provider.dart';
+import '../../provider/orders_provider.dart';
 import '../../../models/master_data_api.dart';
 import '../../../utils/storage_helper.dart';
 import 'create_customer_screen.dart';
@@ -64,14 +65,19 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
-  void _handleItemClick(CustomerWithNames customer) {
+  Future<void> _handleItemClick(CustomerWithNames customer) async {
     if (widget.orderId == null || widget.orderId!.isEmpty) {
       // Navigate to customer details
       // TODO: Navigate to CustomerDetailsScreen
       // Navigator.push(context, MaterialPageRoute(builder: (_) => CustomerDetailsScreen(customerId: customer.customerId)));
     } else {
-      // Selection mode - return customer
-      // TODO: Handle selection callback
+      // Selection mode - update order customer and navigate back
+      // Converted from KMP's select callback (BaseScreen.kt line 913-919)
+      final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+      await ordersProvider.updateCustomer(customer.customerId, customer.name);
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     }
   }
 

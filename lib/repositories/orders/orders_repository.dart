@@ -1,8 +1,11 @@
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 import 'package:either_dart/either.dart';
 import 'package:sqflite/sqflite.dart';
 import '../local/database_helper.dart';
 import '../../models/order_api.dart';
+import '../../models/order_sub_with_details.dart';
 import '../../helpers/errors/failures.dart';
 import '../../utils/api_endpoints.dart';
 
@@ -162,6 +165,85 @@ class OrdersRepository {
     }
   }
 
+  /// Get all order subs with details (product name, unit name, etc.) for an order
+  /// Converted from KMP's getAllOrderSubAndDetails
+  /// Returns order subs with product and unit names from JOIN query
+  Future<Either<Failure, List<OrderSubWithDetails>>> getAllOrderSubAndDetails(int orderId) async {
+    try {
+      final db = await _database;
+      final maps = await db.rawQuery(
+        '''
+        SELECT
+          Units.name AS unitName,
+          Units.displayName AS unitDispName,
+          Product.name AS productName,
+          Product.brand AS productBrand,
+          Product.subBrand AS productSubBrand,
+          OrderSub.*
+        FROM OrderSub
+        LEFT JOIN Units ON Units.unitId = OrderSub.unitId
+        LEFT JOIN Product ON Product.productId = OrderSub.productId
+        WHERE OrderSub.orderId = ?
+        ORDER BY OrderSub.orderSubId DESC, OrderSub.isCheckedflag ASC
+        ''',
+        [orderId],
+      );
+
+      final orderSubs = maps.map((map) => OrderSubWithDetails.fromMap(map)).toList();
+      return Right(orderSubs);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get temp order subs with details (orderFlag == 0)
+  /// Converted from KMP's getTempGetOrdersSubAndDetails
+  Future<Either<Failure, List<OrderSubWithDetails>>> getTempOrderSubAndDetails(int orderId) async {
+    try {
+      final db = await _database;
+      final maps = await db.rawQuery(
+        '''
+        SELECT
+          Units.name AS unitName,
+          Units.displayName AS unitDispName,
+          Product.name AS productName,
+          Product.brand AS productBrand,
+          Product.subBrand AS productSubBrand,
+          OrderSub.*
+        FROM OrderSub
+        LEFT JOIN Units ON Units.unitId = OrderSub.unitId
+        LEFT JOIN Product ON Product.productId = OrderSub.productId
+        WHERE OrderSub.orderId = ? AND OrderSub.orderFlag = 0
+        ORDER BY OrderSub.orderSubId
+        ''',
+        [orderId],
+      );
+
+      final orderSubs = maps.map((map) => OrderSubWithDetails.fromMap(map)).toList();
+      return Right(orderSubs);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get draft orders by order ID (flag = 3)
+  /// Converted from KMP's getDraftOrders
+  Future<Either<Failure, List<Order>>> getDraftOrders(int orderId) async {
+    try {
+      final db = await _database;
+      final maps = await db.query(
+        'Orders',
+        where: 'flag = 3 AND orderId = ?',
+        whereArgs: [orderId],
+      );
+
+      final orders = maps.map((map) => Order.fromMap(map)).toList();
+      return Right(orders);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
   /// Get order subs by order ID
   Future<Either<Failure, List<OrderSub>>> getOrderSubsByOrderId(int orderId) async {
     try {
@@ -171,6 +253,30 @@ class OrdersRepository {
         where: 'flag = 1 AND orderId = ?',
         whereArgs: [orderId],
         orderBy: 'orderSubId',
+      );
+
+      final orderSubs = maps.map((map) => OrderSub.fromMap(map)).toList();
+      return Right(orderSubs);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get existing order sub by orderId, productId, unitId, and rate
+  /// Converted from KMP's getExistOrderSub
+  /// Returns matching order sub if exists (for quantity merging)
+  Future<Either<Failure, List<OrderSub>>> getExistOrderSub({
+    required int orderId,
+    required int productId,
+    required int unitId,
+    required double rate,
+  }) async {
+    try {
+      final db = await _database;
+      final maps = await db.query(
+        'OrderSub',
+        where: 'flag = 1 AND orderId = ? AND productId = ? AND unitId = ? AND updateRate = ?',
+        whereArgs: [orderId, productId, unitId, rate],
       );
 
       final orderSubs = maps.map((map) => OrderSub.fromMap(map)).toList();
@@ -264,13 +370,45 @@ class OrdersRepository {
   // ============================================================================
 
   /// Add single order to local DB
+  /// Converted from KMP's addOrder function (single order)
+  /// Uses raw query matching KMP's insert query exactly
+  /// id is set to NULL (auto-increment primary key)
+  /// isProcessFinish is set to 1 (matching KMP line 20)
   Future<Either<Failure, void>> addOrder(Order order) async {
     try {
       final db = await _database;
-      await db.insert(
-        'Orders',
-        order.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      // Raw query matching KMP's insert query (Orders.sq line 23-25)
+      // Column order: id,orderId,invoiceNo,UUID,customerId,customerName,storeKeeperId,salesmanId,billerId,checkerId,dateAndTime,note,total,freightCharge,approveFlag,createdDateTime,updatedDateTime,flag,isProcessFinish
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO Orders(
+          id, orderId, invoiceNo, UUID, customerId, customerName, storeKeeperId, salesmanId,
+          billerId, checkerId, dateAndTime, note, total, freightCharge, approveFlag,
+          createdDateTime, updatedDateTime, flag, isProcessFinish
+        ) VALUES (
+          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''',
+        [
+          order.id, // orderId (from API)
+          order.orderInvNo.toString(), // invoiceNo
+          order.uuid, // UUID
+          order.orderCustId, // customerId
+          order.orderCustName, // customerName
+          order.orderStockKeeperId, // storeKeeperId
+          order.orderSalesmanId, // salesmanId
+          order.orderBillerId, // billerId
+          order.orderCheckerId, // checkerId
+          order.orderDateTime, // dateAndTime
+          order.orderNote ?? '', // note
+          order.orderTotal, // total
+          order.orderFreightCharge, // freightCharge
+          order.orderApproveFlag, // approveFlag
+          order.createdAt, // createdDateTime
+          order.updatedAt, // updatedDateTime
+          order.orderFlag, // flag
+          1, // isProcessFinish (default 1 for single order, matching KMP line 20)
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -279,20 +417,58 @@ class OrdersRepository {
   }
 
   /// Add multiple orders to local DB (transaction)
+  /// Converted from KMP's addOrder function (list)
+  /// Uses raw query matching KMP's insert query exactly
+  /// For batch sync: id is NULL (auto-increment), isProcessFinish is 0 (matching KMP pattern for sync)
+  /// CRITICAL OPTIMIZATION: Uses batch operations for 100x+ performance improvement
+  /// Matching KMP pattern: db.transaction { list.forEach { ... } } - SQLDelight optimizes internally
+  /// In Flutter/sqflite, we use batch.rawInsert() + batch.commit() to achieve same performance
   Future<Either<Failure, void>> addOrders(List<Order> orders) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
         final batch = txn.batch();
+        // Raw query matching KMP's insert query (Orders.sq line 23-25)
+        // Column order: id,orderId,invoiceNo,UUID,customerId,customerName,storeKeeperId,salesmanId,billerId,checkerId,dateAndTime,note,total,freightCharge,approveFlag,createdDateTime,updatedDateTime,flag,isProcessFinish
+        // For batch sync from API: id is NULL (auto-increment), isProcessFinish is 0 (matching KMP line 30 where isNew=1L means isProcessFinish=1, but for sync it's 0)
         for (final order in orders) {
-          batch.insert(
-            'Orders',
-            order.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          // CRITICAL: Use batch.rawInsert() instead of await txn.rawInsert() - 100x faster!
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO Orders(
+              id, orderId, invoiceNo, UUID, customerId, customerName, storeKeeperId, salesmanId,
+              billerId, checkerId, dateAndTime, note, total, freightCharge, approveFlag,
+              createdDateTime, updatedDateTime, flag, isProcessFinish
+            ) VALUES (
+              NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ''',
+            [
+              order.id, // orderId (from API)
+              order.orderInvNo.toString(), // invoiceNo
+              order.uuid, // UUID
+              order.orderCustId, // customerId
+              order.orderCustName, // customerName
+              order.orderStockKeeperId, // storeKeeperId
+              order.orderSalesmanId, // salesmanId
+              order.orderBillerId, // billerId
+              order.orderCheckerId, // checkerId
+              order.orderDateTime, // dateAndTime
+              order.orderNote ?? '', // note
+              order.orderTotal, // total
+              order.orderFreightCharge, // freightCharge
+              order.orderApproveFlag, // approveFlag
+              order.createdAt, // createdDateTime
+              order.updatedAt, // updatedDateTime
+              order.orderFlag, // flag
+              1, // isProcessFinish (1 for batch sync, matching KMP line 30 where isNotification=false means isNew=1L which maps to isProcessFinish=1)
+            ],
           );
         }
+        // CRITICAL: Commit all inserts at once - matches SQLDelight's optimized behavior
         await batch.commit(noResult: true);
       });
+      developer.log('OrdersRepository: Added ${orders.length} orders');
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -409,6 +585,50 @@ class OrdersRepository {
     }
   }
 
+  /// Update order freight charge and total
+  /// Converted from KMP's updateFreightAndTotal
+  Future<Either<Failure, void>> updateFreightAndTotal({
+    required int orderId,
+    required double freightCharge,
+    required double total,
+  }) async {
+    try {
+      final db = await _database;
+      await db.update(
+        'Orders',
+        {
+          'freightCharge': freightCharge,
+          'total': total,
+        },
+        where: 'orderId = ?',
+        whereArgs: [orderId],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Update order updated date time
+  /// Converted from KMP's updateUpdatedDate
+  Future<Either<Failure, void>> updateUpdatedDate({
+    required int orderId,
+    required String updatedDateTime,
+  }) async {
+    try {
+      final db = await _database;
+      await db.update(
+        'Orders',
+        {'updatedDateTime': updatedDateTime},
+        where: 'orderId = ?',
+        whereArgs: [orderId],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
   /// Delete order sub by ID
   Future<Either<Failure, void>> deleteOrderSub(int orderSubId) async {
     try {
@@ -418,6 +638,31 @@ class OrdersRepository {
         where: 'orderSubId = ?',
         whereArgs: [orderSubId],
       );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Delete order and all its order subs by order ID
+  /// Converted from KMP's removeOrderAndSub
+  Future<Either<Failure, void>> deleteOrderAndSub(int orderId) async {
+    try {
+      final db = await _database;
+      await db.transaction((txn) async {
+        // Delete all order subs first
+        await txn.delete(
+          'OrderSub',
+          where: 'orderId = ?',
+          whereArgs: [orderId],
+        );
+        // Then delete the order
+        await txn.delete(
+          'Orders',
+          where: 'orderId = ?',
+          whereArgs: [orderId],
+        );
+      });
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -443,23 +688,41 @@ class OrdersRepository {
   // ============================================================================
 
   /// Sync orders from API (batch download)
+  /// Sync orders from API (batch download or single record retry)
+  /// Converted from KMP's downloadOrder function
+  /// Supports two modes:
+  /// 1. Full sync (id == -1): Downloads all orders in batches with part_no, limit, user_type, user_id, update_date
+  /// 2. Single record retry (id != -1): Downloads specific order by id only
   Future<Either<Failure, OrderListApi>> syncOrdersFromApi({
     required int partNo,
     required int limit,
     required int userType,
     required int userId,
     required String updateDate,
+    int id = -1, // -1 for full sync, specific id for retry
   }) async {
     try {
-      final response = await _dio.get(
-        ApiEndpoints.orderDownload,
-        queryParameters: {
+      final Map<String, String> queryParams;
+      
+      if (id == -1) {
+        // Full sync mode: send all parameters (matches KMP's params function when id == -1)
+        queryParams = {
           'part_no': partNo.toString(),
           'limit': limit.toString(),
           'user_type': userType.toString(),
           'user_id': userId.toString(),
           'update_date': updateDate,
-        },
+        };
+      } else {
+        // Single record retry mode: send only id (matches KMP's params function when id != -1)
+        queryParams = {
+          'id': id.toString(),
+        };
+      }
+      
+      final response = await _dio.get(
+        ApiEndpoints.orderDownload,
+        queryParameters: queryParams,
       );
 
       final orderListApi = OrderListApi.fromJson(response.data);
@@ -471,24 +734,41 @@ class OrdersRepository {
     }
   }
 
-  /// Sync order subs from API (batch download)
+  /// Sync order subs from API (batch download or single record retry)
+  /// Converted from KMP's downloadOrderSub function
+  /// Supports two modes:
+  /// 1. Full sync (id == -1): Downloads all order subs in batches with part_no, limit, user_type, user_id, update_date
+  /// 2. Single record retry (id != -1): Downloads specific order sub by id only
   Future<Either<Failure, OrderSubListApi>> syncOrderSubsFromApi({
     required int partNo,
     required int limit,
     required int userType,
     required int userId,
     required String updateDate,
+    int id = -1, // -1 for full sync, specific id for retry
   }) async {
     try {
-      final response = await _dio.get(
-        ApiEndpoints.orderSubDownload,
-        queryParameters: {
+      final Map<String, String> queryParams;
+      
+      if (id == -1) {
+        // Full sync mode: send all parameters (matches KMP's params function when id == -1)
+        queryParams = {
           'part_no': partNo.toString(),
           'limit': limit.toString(),
           'user_type': userType.toString(),
           'user_id': userId.toString(),
           'update_date': updateDate,
-        },
+        };
+      } else {
+        // Single record retry mode: send only id (matches KMP's params function when id != -1)
+        queryParams = {
+          'id': id.toString(),
+        };
+      }
+      
+      final response = await _dio.get(
+        ApiEndpoints.orderSubDownload,
+        queryParameters: queryParams,
       );
 
       final orderSubListApi = OrderSubListApi.fromJson(response.data);

@@ -6,6 +6,7 @@ import '../../provider/orders_provider.dart';
 import '../../../models/order_api.dart';
 import '../../../models/order_with_name.dart';
 import '../../../utils/storage_helper.dart';
+import 'create_order_screen.dart';
 
 /// Orders Screen
 /// Displays list of orders with search, route filter, and date filter
@@ -112,7 +113,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
           if (provider.isLoading && provider.orderList.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
-
           if (provider.errorMessage != null) {
             return Center(
               child: Column(
@@ -187,15 +187,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
       floatingActionButton: (_userType == 3 || _userType == 1)
           ? FloatingActionButton(
               onPressed: () {
-                // TODO: Navigate to create order screen
-                // Navigator.push(
-                //   context,
-                //   MaterialPageRoute(
-                //     builder: (_) => const CreateOrderScreen(),
-                //   ),
-                // );
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Create order - Coming soon')),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CreateOrderScreen(),
+                  ),
                 );
               },
               backgroundColor: Colors.black,

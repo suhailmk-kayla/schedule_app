@@ -63,7 +63,7 @@ class _SyncScreenState extends State<SyncScreen>
     }
   }
 
-  void _onSyncStateChanged() {
+  void _onSyncStateChanged()async{
     developer.log('SyncScreen: _onSyncStateChanged() called');
     if (!mounted) {
       developer.log('SyncScreen: Widget not mounted, ignoring state change');
@@ -90,20 +90,20 @@ class _SyncScreenState extends State<SyncScreen>
           return;
         }
         
-        developer.log('SyncScreen: Sync successful, navigating to HomeScreen');
+        developer.log('SyncScreen: Sync successful, waiting for DB operations to complete...');
+        // CRITICAL FIX: Wait a bit to ensure all database transactions are fully committed
+        await Future.delayed(const Duration(milliseconds: 500));
+        
         // Mark user as logged in
-        StorageHelper.setIsUserLogin('1').then((_) {
-          developer.log('SyncScreen: isUserLogin set to 1');
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (context) => const HomeScreen(),
-              ),
-            );
-          }
-        }).catchError((e) {
-          developer.log('SyncScreen: Error setting isUserLogin: $e');
-        });
+        await StorageHelper.setIsUserLogin('1');
+        developer.log('SyncScreen: isUserLogin set to 1');
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => const HomeScreen(),
+            ),
+          );
+        }
       }
     }
   }
@@ -268,21 +268,21 @@ class _SyncScreenState extends State<SyncScreen>
                         ),
 
                       // Stop Button
-                      if (syncProvider.isSyncing)
-                        ElevatedButton(
-                          onPressed: () {
-                            final syncProvider = Provider.of<SyncProvider>(
-                              context,
-                              listen: false,
-                            );
-                            syncProvider.stopSync();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('Stop Sync'),
-                        ),
+                      // if (syncProvider.isSyncing)
+                        // ElevatedButton(
+                        //   onPressed: () {
+                        //     final syncProvider = Provider.of<SyncProvider>(
+                        //       context,
+                        //       listen: false,
+                        //     );
+                        //     syncProvider.stopSync();
+                        //   },
+                        //   style: ElevatedButton.styleFrom(
+                        //     backgroundColor: Colors.red,
+                        //     foregroundColor: Colors.white,
+                        //   ),
+                        //   child: const Text('Stop Sync'),
+                        // ),
                     ],
                   ),
                 ),

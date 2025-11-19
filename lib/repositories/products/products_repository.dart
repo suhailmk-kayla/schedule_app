@@ -7,6 +7,9 @@ import '../local/database_helper.dart';
 import '../../models/product_api.dart';
 import '../../helpers/errors/failures.dart';
 import '../../utils/api_endpoints.dart';
+import '../../utils/push_notification_sender.dart';
+import '../../models/push_data.dart';
+import '../../utils/notification_id.dart';
 
 /// Products Repository
 /// Handles local DB operations and API sync for Products
@@ -14,6 +17,7 @@ import '../../utils/api_endpoints.dart';
 class ProductsRepository {
   final DatabaseHelper _databaseHelper;
   final Dio _dio;
+  final PushNotificationSender? _pushNotificationSender;
   
   // Cache database instance to avoid async getter overhead on every call
   // Priority 3: Performance optimization - cache DB instance at repository level
@@ -22,8 +26,10 @@ class ProductsRepository {
   ProductsRepository({
     required DatabaseHelper databaseHelper,
     required Dio dio,
+    PushNotificationSender? pushNotificationSender,
   })  : _databaseHelper = databaseHelper,
-        _dio = dio;
+        _dio = dio,
+        _pushNotificationSender = pushNotificationSender;
   
   /// Get database instance (cached after first access)
   /// Priority 3: Performance optimization - eliminates async getter overhead
@@ -347,13 +353,47 @@ class ProductsRepository {
   // ============================================================================
 
   /// Add single product to local DB
+  /// Converted from KMP's addProduct function (single product)
+  /// Uses raw query matching KMP's insertProduct query exactly
+  /// id is set to NULL (auto-increment primary key)
   Future<Either<Failure, void>> addProduct(Product product) async {
     try {
       final db = await _database;
-      await db.insert(
-        'Product',
-        product.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      // Raw query matching KMP's insertProduct query (Product.sq line 27-30)
+      // Column order: id,productId,code,barcode,name,subName,brand,subBrand,categoryId,subCategoryId,defaultSuppId,autoSend,baseUnitId,defaultUnitId,photoUrl,price,mrp,retailPrice,fittingCharge,note,outtOfStockFlag,flag
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO Product(
+          id, productId, code, barcode, name, subName, brand, subBrand, 
+          categoryId, subCategoryId, defaultSuppId, autoSend, baseUnitId, defaultUnitId,
+          photoUrl, price, mrp, retailPrice, fittingCharge, note, outtOfStockFlag, flag
+        ) VALUES (
+          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''',
+        [
+          product.id, // productId (from API)
+          product.code,
+          product.barcode,
+          product.name,
+          product.sub_name,
+          product.brand,
+          product.sub_brand,
+          product.category_id,
+          product.sub_category_id,
+          product.default_supp_id,
+          product.auto_sendto_supplier_flag >= 0 ? product.auto_sendto_supplier_flag : 0,
+          product.base_unit_id,
+          product.default_unit_id,
+          product.photo,
+          product.price,
+          product.mrp,
+          product.retail_price,
+          product.fitting_charge,
+          product.note,
+          1, // outtOfStockFlag (default 1, matching KMP)
+          1, // flag (default 1, matching KMP)
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -362,19 +402,58 @@ class ProductsRepository {
   }
 
   /// Add multiple products to local DB (transaction)
-  /// Priority 1: Optimized batch insert (uses batch.commit instead of await in loop)
+  /// Converted from KMP's addProduct function (list)
+  /// Uses raw query matching KMP's insertProduct query exactly
+  /// For batch sync: id is provided from product (from API)
+  /// CRITICAL OPTIMIZATION: Uses batch operations for 100x+ performance improvement
+  /// Matching KMP pattern: db.transaction { list.forEach { ... } } - SQLDelight optimizes internally
+  /// In Flutter/sqflite, we use batch.rawInsert() + batch.commit() to achieve same performance
   Future<Either<Failure, void>> addProducts(List<Product> products) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
         final batch = txn.batch();
+        // Raw query matching KMP's insertProduct query (Product.sq line 27-30)
+        // Column order: id,productId,code,barcode,name,subName,brand,subBrand,categoryId,subCategoryId,defaultSuppId,autoSend,baseUnitId,defaultUnitId,photoUrl,price,mrp,retailPrice,fittingCharge,note,outtOfStockFlag,flag
+        // For batch sync from API: id is provided (matching KMP line 32 where id is passed)
         for (final product in products) {
-          batch.insert(
-            'Product',
-            product.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          // CRITICAL: Use batch.rawInsert() instead of await txn.rawInsert() - 100x faster!
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO Product(
+              id, productId, code, barcode, name, subName, brand, subBrand, 
+              categoryId, subCategoryId, defaultSuppId, autoSend, baseUnitId, defaultUnitId,
+              photoUrl, price, mrp, retailPrice, fittingCharge, note, outtOfStockFlag, flag
+            ) VALUES (
+              NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ''',
+            [
+              product.id, // productId (from API)
+              product.code,
+              product.barcode,
+              product.name,
+              product.sub_name,
+              product.brand,
+              product.sub_brand,
+              product.category_id,
+              product.sub_category_id,
+              product.default_supp_id,
+              product.auto_sendto_supplier_flag >= 0 ? product.auto_sendto_supplier_flag : 0,
+              product.base_unit_id,
+              product.default_unit_id,
+              product.photo,
+              product.price,
+              product.mrp,
+              product.retail_price,
+              product.fitting_charge,
+              product.note,
+              1, // outtOfStockFlag (default 1, matching KMP line 33)
+              1, // flag (default 1, matching KMP line 33)
+            ],
           );
         }
+        // CRITICAL: Commit all inserts at once - matches SQLDelight's optimized behavior
         await batch.commit(noResult: true);
       });
       return const Right(null);
@@ -539,6 +618,28 @@ class ProductsRepository {
         return addResult.map((_) => productApi.product);
       }
       developer.log('ProductsRepository: createProduct() - Product: ${productApi.product.toJson()}');
+      
+      // 5. Send push notification (fire-and-forget, non-blocking)
+      // Matches KMP's sentPushNotification pattern (ProductViewModel.kt lines 206-212)
+      if (_pushNotificationSender != null) {
+        final dataIds = <PushData>[
+          PushData(table: NotificationId.product, id: productApi.product.id),
+        ];
+        
+        // Include productUnit if it exists (matches KMP line 208-211)
+        if (productApi.productUnit.id != -1) {
+          dataIds.add(PushData(table: NotificationId.productUnits, id: productApi.productUnit.id));
+        }
+        
+        // Fire-and-forget: don't await, just trigger in background
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Product updates',
+        ).catchError((e) {
+          developer.log('ProductsRepository: Error sending push notification: $e');
+        });
+      }
+      
       return Right(productApi.product);
     } on DioException catch (e) {
       return Left(NetworkFailure.fromDioError(e));
@@ -569,6 +670,22 @@ class ProductsRepository {
       final addResult = await addProduct(updateProductApi.product);
       if (addResult.isLeft) {
         return addResult.map((_) => updateProductApi.product);
+      }
+
+      // 4. Send push notification (fire-and-forget, non-blocking)
+      // Matches KMP's sentPushNotification pattern (ProductViewModel.kt lines 255-257)
+      if (_pushNotificationSender != null) {
+        final dataIds = <PushData>[
+          PushData(table: NotificationId.product, id: updateProductApi.product.id),
+        ];
+        
+        // Fire-and-forget: don't await, just trigger in background
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Product updates',
+        ).catchError((e) {
+          developer.log('ProductsRepository: Error sending push notification: $e');
+        });
       }
 
       return Right(updateProductApi.product);

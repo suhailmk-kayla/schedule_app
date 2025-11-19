@@ -3,11 +3,23 @@ import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/storage_helper.dart';
 import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/products_provider.dart';
+import '../../provider/orders_provider.dart';
+import '../../../models/product_api.dart';
 import 'product_details_screen.dart';
 import 'create_product_screen.dart';
+import '../orders/add_product_to_order_dialog.dart';
 
 class ProductsScreen extends StatefulWidget {
-  const ProductsScreen({super.key});
+  final String? orderId; // If provided, this is selection mode for order
+  final String? orderSubId; // If provided, this is for replacing order sub
+  final bool isOutOfStock; // If true, shows out of stock products
+
+  const ProductsScreen({
+    super.key,
+    this.orderId,
+    this.orderSubId,
+    this.isOutOfStock = false,
+  });
 
   @override
   State<ProductsScreen> createState() => _ProductsScreenState();
@@ -22,7 +34,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<ProductsProvider>(context, listen: false);
-      provider.loadProducts();
+      // If orderId is provided, only load products if search key is long enough (matches KMP)
+      if (widget.orderId == null || widget.orderId!.isEmpty) {
+        provider.loadProducts();
+      }
       provider.loadCategories();
     });
   }
@@ -49,6 +64,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
         return Scaffold(
           appBar: AppBar(
             title: const Text('Products'),
+            leading: (widget.orderId != null && widget.orderId!.isNotEmpty)
+                ? IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => Navigator.of(context).pop(),
+                  )
+                : null,
           ),
           body: Consumer<ProductsProvider>(
             builder: (context, provider, _) {
@@ -68,11 +89,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           isDense: true,
                         ),
                         onSubmitted: (value) {
-                          provider.loadProducts(searchKey: value.trim());
+                          _handleSearch(provider, value.trim());
                         },
                         onChanged: (value) {
-                          // simple immediate search for now
-                          provider.loadProducts(searchKey: value.trim());
+                          _handleSearch(provider, value.trim());
                         },
                       ),
                     ),
@@ -183,12 +203,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       final p = provider.productList[index];
                       return InkWell(
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ProductDetailsScreen(productId: p.id),
-                            ),
-                          );
+                          if (widget.orderId != null && widget.orderId!.isNotEmpty) {
+                            // Selection mode - show bottom sheet to add product to order
+                            _showAddProductDialog(context, p);
+                          } else {
+                            // Normal mode - navigate to product details
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ProductDetailsScreen(productId: p.id),
+                              ),
+                            );
+                          }
                         },
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -288,11 +314,63 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
+  void _handleSearch(ProductsProvider provider, String searchKey) {
+    // If orderId is provided, only search if search key is long enough (matches KMP)
+    if (widget.orderId != null && widget.orderId!.isNotEmpty) {
+      if (searchKey.length > 2) {
+        provider.loadProducts(searchKey: searchKey);
+      } else {
+        // Clear product list if search key is too short (matches KMP's setEmptyList)
+        // Load with empty search key which will return empty results
+        provider.loadProducts(searchKey: '');
+      }
+    } else {
+      // Normal mode - search immediately
+      provider.loadProducts(searchKey: searchKey);
+    }
+  }
+
   void _handleAddNew() {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => const CreateProductScreen(),
+      ),
+    );
+  }
+
+  void _showAddProductDialog(BuildContext context, Product product) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AddProductToOrderDialog(
+        product: product,
+        orderId: widget.orderId!,
+        onSave: (rate, quantity, narration, unitId) async {
+          final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+          final success = await ordersProvider.addProductToOrder(
+            productId: product.id,
+            productPrice: product.price, // Product's base price
+            rate: rate, // User-entered rate
+            quantity: quantity,
+            narration: narration,
+            unitId: unitId,
+          );
+          if (success && mounted) {
+            Navigator.pop(context); // Close bottom sheet
+            // Don't pop ProductsScreen - let user add more products
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Product added to order')),
+            );
+          } else if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(ordersProvider.errorMessage ?? 'Failed to add product'),
+              ),
+            );
+          }
+        },
       ),
     );
   }

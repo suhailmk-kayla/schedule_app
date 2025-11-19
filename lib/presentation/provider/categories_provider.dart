@@ -1,16 +1,23 @@
 import 'package:flutter/foundation.dart' hide Category;
+import 'dart:developer' as developer;
 import '../../repositories/categories/categories_repository.dart';
 import '../../models/master_data_api.dart';
+import '../../models/push_data.dart';
+import '../../utils/push_notification_sender.dart';
+import '../../utils/notification_id.dart';
 
 /// Categories Provider
 /// Manages categories-related state and operations
 /// Converted from KMP's CategoryViewModel.kt
 class CategoriesProvider extends ChangeNotifier {
   final CategoriesRepository _categoriesRepository;
+  final PushNotificationSender _pushNotificationSender;
 
   CategoriesProvider({
     required CategoriesRepository categoriesRepository,
-  }) : _categoriesRepository = categoriesRepository;
+    required PushNotificationSender pushNotificationSender,
+  })  : _categoriesRepository = categoriesRepository,
+        _pushNotificationSender = pushNotificationSender;
 
   // ============================================================================
   // State Variables
@@ -89,7 +96,18 @@ class CategoriesProvider extends ChangeNotifier {
         notifyListeners();
         return false;
       },
-      (_) {
+      (createdCategory) {
+        // Send push notification (matches KMP lines 60-62)
+        final dataIds = [
+          PushData(table: NotificationId.category, id: createdCategory.id),
+        ];
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Category updates',
+        ).catchError((e) {
+          developer.log('CategoriesProvider: Error sending push notification: $e');
+        });
+
         _isLoading = false;
         notifyListeners();
         return true;
@@ -138,7 +156,18 @@ class CategoriesProvider extends ChangeNotifier {
         notifyListeners();
         return false;
       },
-      (_) {
+      (updatedCategory) {
+        // Send push notification (matches KMP lines 92-94)
+        final dataIds = [
+          PushData(table: NotificationId.category, id: updatedCategory.id),
+        ];
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Category updates',
+        ).catchError((e) {
+          developer.log('CategoriesProvider: Error sending push notification: $e');
+        });
+
         _isLoading = false;
         notifyListeners();
         return true;

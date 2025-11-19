@@ -4,6 +4,7 @@ import 'package:schedule_frontend_flutter/utils/asset_images.dart';
 import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/salesman_provider.dart';
 import '../../../models/salesman_model.dart';
+import 'create_salesman_screen.dart';
 
 /// Salesman Screen
 /// Displays list of salesmen with search and navigation
@@ -59,13 +60,17 @@ class _SalesmanScreenState extends State<SalesmanScreen> {
   }
 
   void _handleAddNew() {
-    // Navigate to CreateSalesman screen (TODO: implement CreateSalesmanScreen)
-    // Navigator.push(
-    //   context,
-    //   MaterialPageRoute(
-    //     builder: (_) => const CreateSalesmanScreen(),
-    //   ),
-    // );
+    Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const CreateSalesmanScreen(),
+      ),
+    ).then((created) {
+      if (created == true && mounted) {
+        Provider.of<SalesmanProvider>(context, listen: false)
+            .loadSalesmen(searchKey: _searchController.text.trim());
+      }
+    });
   }
 
   @override

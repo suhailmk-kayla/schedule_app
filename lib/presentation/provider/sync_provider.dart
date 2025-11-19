@@ -299,8 +299,7 @@ class SyncProvider extends ChangeNotifier {
       await _downloadOrderSubSuggestions();
     } else if (!_isOutOfStockDownloaded && (userType == 1 || userType == 4)) {
       await _downloadOutOfStock();
-    } else if (!_isOutOfStockSubDownloaded &&
-        (userType == 1 || userType == 2 || userType == 4)) {
+    } else if (!_isOutOfStockSubDownloaded && (userType == 1 || userType == 2 || userType == 4)) {
       await _downloadOutOfStockSub();
     } else if (!_isCustomerDownloaded && userType != 4) {
       await _downloadCustomers();
@@ -368,17 +367,16 @@ class SyncProvider extends ChangeNotifier {
         id: id, // Pass id parameter
       );
 
-      result.fold(
-        (failure) {
+      await result.fold(
+        (failure) async {
           // Error handling matching KMP
           if (id != -1 && failedId == -1) {
             // Retry mode failed: create FailedSync entry (matches KMP line 200-203)
-            _failedSyncRepository.addFailedSync(
+            await _failedSyncRepository.addFailedSync(
               tableId: 1, // NotificationId.PRODUCT = 1
               dataId: id,
-            ).then((_) {
-              if (finished != null) finished();
-            });
+            );
+            if (finished != null) finished();
           } else {
             // Full sync mode error: update error message (matches KMP line 209)
             developer.log('SyncProvider: _downloadProducts() - Error: ${failure.message}');
@@ -413,35 +411,33 @@ class SyncProvider extends ChangeNotifier {
               _startSyncDatabase();
             } else {
               developer.log('SyncProvider: _downloadProducts() - Adding ${products.length} products to DB');
-              // Fire-and-forget DB write (matching KMP pattern)
-              _productsRepository.addProducts(products).then((result) {
-                result.fold(
-                  (failure) {
-                    developer.log('SyncProvider: Failed to add products to DB: ${failure.message}');
-                    _updateError('Failed to save products: ${failure.message}', true);
-                    _isSyncing = false;
-                    notifyListeners();
-                  },
-                  (_) {
-                    developer.log('SyncProvider: Products added to DB successfully');
-                  },
-                );
-              });
+              // CRITICAL FIX: Await database operation to prevent locks
+              final addResult = await _productsRepository.addProducts(products);
+              addResult.fold(
+                (failure) {
+                  developer.log('SyncProvider: Failed to add products to DB: ${failure.message}');
+                  _updateError('Failed to save products: ${failure.message}', true);
+                  _isSyncing = false;
+                  notifyListeners();
+                },
+                (_) {
+                  developer.log('SyncProvider: Products added to DB successfully');
+                },
+              );
               _productPart++;
               _updateProgress();
-              // Proceed immediately to next batch (fire-and-forget pattern)
+              // Now safe to proceed after transaction completes
               _startSyncDatabase();
             }
           } else {
             // Single record retry mode (matches KMP lines 226-230)
             if (products.isNotEmpty) {
-              // Fire-and-forget DB write (matching KMP pattern)
-              _productsRepository.addProducts(products).then((result) {
-                result.fold(
-                  (failure) => developer.log('SyncProvider: Failed to add products: ${failure.message}'),
-                  (_) {},
-                );
-              });
+              // CRITICAL FIX: Await database operation to prevent locks
+              final addResult = await _productsRepository.addProducts(products);
+              addResult.fold(
+                (failure) => developer.log('SyncProvider: Failed to add products: ${failure.message}'),
+                (_) {},
+              );
             }
             if (failedId != -1) {
               await _failedSyncRepository.deleteFailedSync(failedId);
@@ -458,9 +454,21 @@ class SyncProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _downloadCarBrand() async {
-    developer.log('SyncProvider: _downloadCarBrand() - Part: $_carBrandPart');
-    _updateTask('Car details downloading...');
+  /// Download car brands (full sync or single record retry)
+  /// Converted from KMP's downloadCarBrand function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all car brands in batches
+  /// 2. Single record retry (id != -1): Downloads specific car brand and handles FailedSync
+  Future<void> _downloadCarBrand({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      developer.log('SyncProvider: _downloadCarBrand() - Part: $_carBrandPart');
+      _updateTask('Car details downloading...');
+    }
     
     try {
       final updateDate = _getSyncTimeForTable(_syncingTable);
@@ -474,41 +482,56 @@ class SyncProvider extends ChangeNotifier {
         userType: userType,
         userId: userId,
         updateDate: updateDate,
+        id: id, // Pass id parameter
       );
 
       result.fold(
         (failure) {
-          developer.log('SyncProvider: _downloadCarBrand() - Error: ${failure.message}');
-          _updateError(failure.message, true);
-          _isSyncing = false;
-          notifyListeners();
+          // Error handling matching KMP
+          if (id != -1 && failedId == -1) {
+            // Retry mode failed: create FailedSync entry (matches KMP line 243-245)
+            _failedSyncRepository.addFailedSync(
+              tableId: 2, // NotificationId.CAR_BRAND = 2
+              dataId: id,
+            ).then((_) {
+              if (finished != null) finished();
+            });
+          } else {
+            // Full sync mode error: update error message (matches KMP line 248)
+            developer.log('SyncProvider: _downloadCarBrand() - Error: ${failure.message}');
+            _updateError(failure.message, true);
+            _isSyncing = false;
+            notifyListeners();
+          }
         },
         (carBrandListApi) async {
           final brands = carBrandListApi.data ?? [];
           developer.log('SyncProvider: _downloadCarBrand() - Received ${brands.length} brands');
           
-          if (brands.isEmpty) {
-            developer.log('SyncProvider: _downloadCarBrand() - No more brands, marking as downloaded');
-            _isCarBrandDownloaded = true;
-            _completedTablesCount++; // Priority 4: Track completed tables
-            // Fire-and-forget sync time write (matching KMP pattern)
-            _syncTimeRepository.addSyncTime(
-              tableName: 'CarBrand',
-              updateDate: carBrandListApi.updatedDate,
-            ).then((result) {
-              result.fold(
-                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-                (_) => developer.log('SyncProvider: Sync time added for CarBrand'),
-              );
-            });
-            _carBrandPart = 0;
-            _updateProgress();
-            // Proceed immediately to next table (fire-and-forget pattern)
-            _startSyncDatabase();
-          } else {
-            // Fire-and-forget DB write (matching KMP pattern)
-            _carBrandRepository.addCarBrands(brands).then((result) {
-              result.fold(
+          if (id == -1) {
+            // Full sync mode (matches KMP lines 255-264)
+            if (brands.isEmpty) {
+              developer.log('SyncProvider: _downloadCarBrand() - No more brands, marking as downloaded');
+              _isCarBrandDownloaded = true;
+              _completedTablesCount++; // Priority 4: Track completed tables
+              // Fire-and-forget sync time write (matching KMP pattern)
+              _syncTimeRepository.addSyncTime(
+                tableName: 'CarBrand',
+                updateDate: carBrandListApi.updatedDate,
+              ).then((result) {
+                result.fold(
+                  (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                  (_) => developer.log('SyncProvider: Sync time added for CarBrand'),
+                );
+              });
+              _carBrandPart = 0;
+              _updateProgress();
+              // Proceed immediately to next table (fire-and-forget pattern)
+              _startSyncDatabase();
+            } else {
+              // CRITICAL FIX: Await database operation to prevent locks
+              final addResult = await _carBrandRepository.addCarBrands(brands);
+              addResult.fold(
                 (failure) {
                   developer.log('SyncProvider: Failed to add brands to DB: ${failure.message}');
                   _updateError('Failed to save brands: ${failure.message}', true);
@@ -519,11 +542,25 @@ class SyncProvider extends ChangeNotifier {
                   developer.log('SyncProvider: Brands added to DB successfully');
                 },
               );
-            });
-            _carBrandPart++;
-            _updateProgress();
-            // Proceed immediately to next batch (fire-and-forget pattern)
-            _startSyncDatabase();
+              _carBrandPart++;
+              _updateProgress();
+              // Now safe to proceed after transaction completes
+              _startSyncDatabase();
+            }
+          } else {
+            // Single record retry mode (matches KMP lines 265-268)
+            if (brands.isNotEmpty) {
+              // CRITICAL FIX: Await database operation to prevent locks
+              final addResult = await _carBrandRepository.addCarBrands(brands);
+              addResult.fold(
+                (failure) => developer.log('SyncProvider: Failed to add brands: ${failure.message}'),
+                (_) {},
+              );
+            }
+            if (failedId != -1) {
+              await _failedSyncRepository.deleteFailedSync(failedId);
+            }
+            if (finished != null) finished();
           }
         },
       );
@@ -535,8 +572,20 @@ class SyncProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _downloadCarName() async {
-    _updateTask('Car details downloading...');
+  /// Download car names (full sync or single record retry)
+  /// Converted from KMP's downloadCarName function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all car names in batches
+  /// 2. Single record retry (id != -1): Downloads specific car name and handles FailedSync
+  Future<void> _downloadCarName({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Car details downloading...');
+    }
     final updateDate = _getSyncTimeForTable('CarName');
     // Use cached values (matching KMP pattern - no async storage reads)
     final userType = _cachedUserType ?? 0;
@@ -547,44 +596,87 @@ class SyncProvider extends ChangeNotifier {
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
 
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry (matches KMP line 281-283)
+          _failedSyncRepository.addFailedSync(
+            tableId: 3, // NotificationId.CAR_NAME = 3
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message (matches KMP line 286)
+          _updateError(failure.message, true);
+        }
+      },
       (carNameListApi) async {
         final names = carNameListApi.data ?? [];
-        if (names.isEmpty) {
-          _isCarNameDownloaded = true;
-          _completedTablesCount++; // Priority 4: Track completed tables
-          // Fire-and-forget sync time write (matching KMP pattern)
-          _syncTimeRepository.addSyncTime(
-            tableName: 'CarName',
-            updateDate: carNameListApi.updatedDate,
-          ).then((result) {
-            result.fold(
-              (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-              (_) {},
-            );
-          });
-          _carNamePart = 0;
-          _startSyncDatabase();
-        } else {
-          // Fire-and-forget DB write (matching KMP pattern)
-          _carNameRepository.addCarNames(names).then((result) {
-            result.fold(
+        if (id == -1) {
+          // Full sync mode (matches KMP lines 293-301)
+          if (names.isEmpty) {
+            _isCarNameDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'CarName',
+              updateDate: carNameListApi.updatedDate,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _carNamePart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _carNameRepository.addCarNames(names);
+            addResult.fold(
               (failure) => developer.log('SyncProvider: Failed to add car names: ${failure.message}'),
               (_) {},
             );
-          });
-          _carNamePart++;
-          _startSyncDatabase();
+            _carNamePart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matches KMP lines 303-306)
+          if (names.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _carNameRepository.addCarNames(names);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add car names: ${failure.message}'),
+              (_) {},
+            );
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
   }
 
-  Future<void> _downloadCarModel() async {
-    _updateTask('Car details downloading...');
+  /// Download car models (full sync or single record retry)
+  /// Converted from KMP's downloadCarModel function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all car models in batches
+  /// 2. Single record retry (id != -1): Downloads specific car model and handles FailedSync
+  Future<void> _downloadCarModel({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Car details downloading...');
+    }
     final updateDate = _getSyncTimeForTable('CarModel');
     // Use cached values (matching KMP pattern - no async storage reads)
     final userType = _cachedUserType ?? 0;
@@ -595,44 +687,87 @@ class SyncProvider extends ChangeNotifier {
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
 
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry (matches KMP line 319-321)
+          _failedSyncRepository.addFailedSync(
+            tableId: 4, // NotificationId.CAR_MODEL = 4
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message (matches KMP line 324)
+          _updateError(failure.message, true);
+        }
+      },
       (carModelListApi) async {
         final models = carModelListApi.data ?? [];
-        if (models.isEmpty) {
-          _isCarModelDownloaded = true;
-          _completedTablesCount++; // Priority 4: Track completed tables
-          // Fire-and-forget sync time write (matching KMP pattern)
-          _syncTimeRepository.addSyncTime(
-            tableName: 'CarModel',
-            updateDate: carModelListApi.updatedDate,
-          ).then((result) {
-            result.fold(
-              (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-              (_) {},
-            );
-          });
-          _carModelPart = 0;
-          _startSyncDatabase();
-        } else {
-          // Fire-and-forget DB write (matching KMP pattern)
-          _carModelRepository.addCarModels(models).then((result) {
-            result.fold(
+        if (id == -1) {
+          // Full sync mode (matches KMP lines 331-339)
+          if (models.isEmpty) {
+            _isCarModelDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'CarModel',
+              updateDate: carModelListApi.updatedDate,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _carModelPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _carModelRepository.addCarModels(models);
+            addResult.fold(
               (failure) => developer.log('SyncProvider: Failed to add car models: ${failure.message}'),
               (_) {},
             );
-          });
-          _carModelPart++;
-          _startSyncDatabase();
+            _carModelPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matches KMP lines 341-344)
+          if (models.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _carModelRepository.addCarModels(models);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add car models: ${failure.message}'),
+              (_) {},
+            );
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
   }
 
-  Future<void> _downloadCarVersion() async {
-    _updateTask('Car details downloading...');
+  /// Download car versions (full sync or single record retry)
+  /// Converted from KMP's downloadCarVersion function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all car versions in batches
+  /// 2. Single record retry (id != -1): Downloads specific car version and handles FailedSync
+  Future<void> _downloadCarVersion({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Car details downloading...');
+    }
     final updateDate = _getSyncTimeForTable('CarVersion');
     // Use cached values (matching KMP pattern - no async storage reads)
     final userType = _cachedUserType ?? 0;
@@ -643,37 +778,68 @@ class SyncProvider extends ChangeNotifier {
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
 
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry (matches KMP line 357-359)
+          _failedSyncRepository.addFailedSync(
+            tableId: 5, // NotificationId.CAR_VERSION = 5
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message (matches KMP line 362)
+          _updateError(failure.message, true);
+        }
+      },
       (carVersionListApi) async {
         final versions = carVersionListApi.data ?? [];
-        if (versions.isEmpty) {
-          _isCarVersionDownloaded = true;
-          _completedTablesCount++; // Priority 4: Track completed tables
-          // Fire-and-forget sync time write (matching KMP pattern)
-          _syncTimeRepository.addSyncTime(
-            tableName: 'CarVersion',
-            updateDate: carVersionListApi.updatedDate,
-          ).then((result) {
-            result.fold(
-              (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-              (_) {},
-            );
-          });
-          _carVersionPart = 0;
-          _startSyncDatabase();
-        } else {
-          // Fire-and-forget DB write (matching KMP pattern)
-          _carVersionRepository.addCarVersions(versions).then((result) {
-            result.fold(
+        if (id == -1) {
+          // Full sync mode (matches KMP lines 369-377)
+          if (versions.isEmpty) {
+            _isCarVersionDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'CarVersion',
+              updateDate: carVersionListApi.updatedDate,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _carVersionPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _carVersionRepository.addCarVersions(versions);
+            addResult.fold(
               (failure) => developer.log('SyncProvider: Failed to add car versions: ${failure.message}'),
               (_) {},
             );
-          });
-          _carVersionPart++;
-          _startSyncDatabase();
+            _carVersionPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matches KMP lines 379-382)
+          if (versions.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _carVersionRepository.addCarVersions(versions);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add car versions: ${failure.message}'),
+              (_) {},
+            );
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
@@ -744,26 +910,24 @@ class SyncProvider extends ChangeNotifier {
             _categoryPart = 0;
             _startSyncDatabase();
           } else {
-            // Fire-and-forget DB write (matching KMP pattern)
-            _categoriesRepository.addCategories(categories).then((result) {
-              result.fold(
-                (failure) => developer.log('SyncProvider: Failed to add categories: ${failure.message}'),
-                (_) {},
-              );
-            });
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _categoriesRepository.addCategories(categories);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add categories: ${failure.message}'),
+              (_) {},
+            );
             _categoryPart++;
             _startSyncDatabase();
           }
         } else {
           // Single record retry mode
           if (categories.isNotEmpty) {
-            // Fire-and-forget DB write (matching KMP pattern)
-            _categoriesRepository.addCategories(categories).then((result) {
-              result.fold(
-                (failure) => developer.log('SyncProvider: Failed to add categories: ${failure.message}'),
-                (_) {},
-              );
-            });
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _categoriesRepository.addCategories(categories);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add categories: ${failure.message}'),
+              (_) {},
+            );
           }
           if (failedId != -1) {
             await _failedSyncRepository.deleteFailedSync(failedId);
@@ -774,8 +938,20 @@ class SyncProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> _downloadSubCategory() async {
-    _updateTask('Sub-Category downloading...');
+  /// Download sub categories (full sync or single record retry)
+  /// Converted from KMP's downloadSubCategory function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all sub categories in batches
+  /// 2. Single record retry (id != -1): Downloads specific sub category and handles FailedSync
+  Future<void> _downloadSubCategory({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Sub-Category downloading...');
+    }
     final updateDate = _getSyncTimeForTable('SubCategory');
     // Use cached values (matching KMP pattern - no async storage reads)
     final userType = _cachedUserType ?? 0;
@@ -786,47 +962,97 @@ class SyncProvider extends ChangeNotifier {
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
 
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry (matches KMP line 434-436)
+          _failedSyncRepository.addFailedSync(
+            tableId: 7, // NotificationId.SUB_CATEGORY = 7
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message (matches KMP line 439)
+          _updateError(failure.message, true);
+        }
+      },
       (subCategoryListApi) async {
         final subCategories = subCategoryListApi.data ?? [];
-        if (subCategories.isEmpty) {
-          _isSubCategoryDownloaded = true;
-          _completedTablesCount++; // Priority 4: Track completed tables
-          // Fire-and-forget sync time write (matching KMP pattern)
-          _syncTimeRepository.addSyncTime(
-            tableName: 'SubCategory',
-            updateDate: subCategoryListApi.updatedDate,
-          ).then((result) {
-            result.fold(
-              (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-              (_) {},
-            );
-          });
-          _subCategoryPart = 0;
-          _startSyncDatabase();
-        } else {
-          // Fire-and-forget DB write (matching KMP pattern)
-          _subCategoriesRepository.addSubCategories(subCategories).then((result) {
-            result.fold(
+        if (id == -1) {
+          // Full sync mode (matches KMP lines 446-454)
+          if (subCategories.isEmpty) {
+            _isSubCategoryDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'SubCategory',
+              updateDate: subCategoryListApi.updatedDate,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _subCategoryPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _subCategoriesRepository.addSubCategories(subCategories);
+            addResult.fold(
               (failure) => developer.log('SyncProvider: Failed to add sub categories: ${failure.message}'),
               (_) {},
             );
-          });
-          _subCategoryPart++;
-          _startSyncDatabase();
+            _subCategoryPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matches KMP lines 456-459)
+          if (subCategories.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _subCategoriesRepository.addSubCategories(subCategories);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add sub categories: ${failure.message}'),
+              (_) {},
+            );
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
   }
 
-  Future<void> _downloadOrders() async {
-    _updateTask('Order details downloading...');
+  /// Download orders (full sync or single record retry)
+  /// Converted from KMP's downloadOrder function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all orders in batches
+  /// 2. Single record retry (id != -1): Downloads specific order, processes nested items/suggestions, and handles FailedSync
+  Future<void> _downloadOrders({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    // Skip if supplier (matching KMP pattern)
+    final userType = _cachedUserType ?? 0;
+    if (userType == 5) { // UserType.SUPPLIER = 5
+      if (finished != null) finished();
+      return;
+    }
+    
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Order details downloading...');
+    }
+    
     final updateDate = _getSyncTimeForTable('Orders');
     // Use cached values (matching KMP pattern - no async storage reads)
-    final userType = _cachedUserType ?? 0;
     final userId = _cachedUserId ?? 0;
     final result = await _ordersRepository.syncOrdersFromApi(
       partNo: _orderPart,
@@ -834,47 +1060,122 @@ class SyncProvider extends ChangeNotifier {
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
-
+    
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry
+          _failedSyncRepository.addFailedSync(
+            tableId: 8, // NotificationId.ORDER = 8
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message
+          _updateError(failure.message, true);
+        }
+      },
       (orderListApi) async {
         final orders = orderListApi.data ?? [];
-        if (orders.isEmpty) {
-          _isOrderDownloaded = true;
-          _completedTablesCount++; // Priority 4: Track completed tables
-          // Fire-and-forget sync time write (matching KMP pattern)
-          _syncTimeRepository.addSyncTime(
-            tableName: 'Orders',
-            updateDate: orderListApi.updatedDate,
-          ).then((result) {
-            result.fold(
-              (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-              (_) {},
-            );
-          });
-          _orderPart = 0;
-          _startSyncDatabase();
-        } else {
-          // Fire-and-forget DB write (matching KMP pattern)
-          _ordersRepository.addOrders(orders).then((result) {
-            result.fold(
+        
+        if (id == -1) {
+          // Full sync mode
+          if (orders.isEmpty) {
+            _isOrderDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'Orders',
+              updateDate: orderListApi.updatedDate,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _orderPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _ordersRepository.addOrders(orders);
+            addResult.fold(
               (failure) => developer.log('SyncProvider: Failed to add orders: ${failure.message}'),
               (_) {},
             );
-          });
-          _orderPart++;
-          _startSyncDatabase();
+            _orderPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matching KMP lines 498-519)
+          if (orders.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _ordersRepository.addOrders(orders);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add orders: ${failure.message}'),
+              (_) {},
+            );
+            
+            // Process nested items and suggestions (matching KMP lines 501-515)
+            for (final order in orders) {
+              if (order.items != null && order.items!.isNotEmpty) {
+                // CRITICAL FIX: Await database operation to prevent locks
+                final addSubsResult = await _ordersRepository.addOrderSubs(order.items!);
+                addSubsResult.fold(
+                  (failure) => developer.log('SyncProvider: Failed to add order subs: ${failure.message}'),
+                  (_) {},
+                );
+                
+                // Add suggestions for each order sub
+                for (final orderSub in order.items!) {
+                  if (orderSub.suggestions != null && orderSub.suggestions!.isNotEmpty) {
+                    // CRITICAL FIX: Await database operation to prevent locks
+                    final addSuggestionsResult = await _orderSubSuggestionsRepository.addSuggestions(orderSub.suggestions!);
+                    addSuggestionsResult.fold(
+                      (failure) => developer.log('SyncProvider: Failed to add order sub suggestions: ${failure.message}'),
+                      (_) {},
+                    );
+                  }
+                }
+              }
+            }
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
   }
 
-  Future<void> _downloadOrderSubs() async {
-    _updateTask('Order details downloading...');
+  /// Download order subs (full sync or single record retry)
+  /// Converted from KMP's downloadOrderSub function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all order subs in batches
+  /// 2. Single record retry (id != -1): Downloads specific order sub, processes nested suggestions, and handles FailedSync
+  Future<void> _downloadOrderSubs({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    // Skip if supplier (matching KMP pattern)
+    final userType = _cachedUserType ?? 0;
+    if (userType == 5) { // UserType.SUPPLIER = 5
+      if (finished != null) finished();
+      return;
+    }
+    
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Order details downloading...');
+    }
+    
     final updateDate = _getSyncTimeForTable('OrderSub');
     // Use cached values (matching KMP pattern - no async storage reads)
-    final userType = _cachedUserType ?? 0;
     final userId = _cachedUserId ?? 0;
     final result = await _ordersRepository.syncOrderSubsFromApi(
       partNo: _orderSubPart,
@@ -882,44 +1183,101 @@ class SyncProvider extends ChangeNotifier {
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
 
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry
+          _failedSyncRepository.addFailedSync(
+            tableId: 9, // NotificationId.ORDER_SUB = 9
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message
+          _updateError(failure.message, true);
+        }
+      },
       (orderSubListApi) async {
         final orderSubs = orderSubListApi.data ?? [];
-        if (orderSubs.isEmpty) {
-          _isOrderSubDownloaded = true;
-          _completedTablesCount++; // Priority 4: Track completed tables
-          // Fire-and-forget sync time write (matching KMP pattern)
-          _syncTimeRepository.addSyncTime(
-            tableName: 'OrderSub',
-            updateDate: orderSubListApi.updatedDate,
-          ).then((result) {
-            result.fold(
-              (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-              (_) {},
-            );
-          });
-          _orderSubPart = 0;
-          _startSyncDatabase();
-        } else {
-          // Fire-and-forget DB write (matching KMP pattern)
-          _ordersRepository.addOrderSubs(orderSubs).then((result) {
-            result.fold(
+        
+        if (id == -1) {
+          // Full sync mode
+          if (orderSubs.isEmpty) {
+            _isOrderSubDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'OrderSub',
+              updateDate: orderSubListApi.updatedDate,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _orderSubPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _ordersRepository.addOrderSubs(orderSubs);
+            addResult.fold(
               (failure) => developer.log('SyncProvider: Failed to add order subs: ${failure.message}'),
               (_) {},
             );
-          });
-          _orderSubPart++;
-          _startSyncDatabase();
+            _orderSubPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matching KMP lines 558-575)
+          if (orderSubs.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _ordersRepository.addOrderSubs(orderSubs);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add order subs: ${failure.message}'),
+              (_) {},
+            );
+            
+            // Process nested suggestions (matching KMP lines 565-571)
+            for (final orderSub in orderSubs) {
+              if (orderSub.suggestions != null && orderSub.suggestions!.isNotEmpty) {
+                // CRITICAL FIX: Await database operation to prevent locks
+                final addSuggestionsResult = await _orderSubSuggestionsRepository.addSuggestions(orderSub.suggestions!);
+                addSuggestionsResult.fold(
+                  (failure) => developer.log('SyncProvider: Failed to add order sub suggestions: ${failure.message}'),
+                  (_) {},
+                );
+              }
+            }
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
   }
 
-  Future<void> _downloadOrderSubSuggestions() async {
-    _updateTask('Order details downloading...');
+  /// Download order sub suggestions (full sync or single record retry)
+  /// Converted from KMP's downloadOrderSubSuggestion function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all suggestions in batches
+  /// 2. Single record retry (id != -1): Downloads specific suggestion and handles FailedSync
+  Future<void> _downloadOrderSubSuggestions({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Order details downloading...');
+    }
+    
     final updateDate = _getSyncTimeForTable('OrderSubSuggestion');
     // Use cached values (matching KMP pattern - no async storage reads)
     final userType = _cachedUserType ?? 0;
@@ -930,44 +1288,89 @@ class SyncProvider extends ChangeNotifier {
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
 
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry
+          _failedSyncRepository.addFailedSync(
+            tableId: 10, // NotificationId.ORDER_SUB_SUGGESTION = 10
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message
+          _updateError(failure.message, true);
+        }
+      },
       (suggestionsListApi) async {
         final suggestions = suggestionsListApi.data ?? [];
-        if (suggestions.isEmpty) {
-          _isOrderSubSuggestionDownloaded = true;
-          _completedTablesCount++; // Priority 4: Track completed tables
-          // Fire-and-forget sync time write (matching KMP pattern)
-          _syncTimeRepository.addSyncTime(
-            tableName: 'OrderSubSuggestions',
-            updateDate: suggestionsListApi.updatedDate,
-          ).then((result) {
-            result.fold(
-              (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-              (_) {},
-            );
-          });
-          _orderSubSuggestionPart = 0;
-          _startSyncDatabase();
-        } else {
-          // Fire-and-forget DB write (matching KMP pattern)
-          _orderSubSuggestionsRepository.addSuggestions(suggestions).then((result) {
-            result.fold(
+        
+        if (id == -1) {
+          // Full sync mode
+          if (suggestions.isEmpty) {
+            _isOrderSubSuggestionDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'OrderSubSuggestions',
+              updateDate: suggestionsListApi.updatedDate,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _orderSubSuggestionPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _orderSubSuggestionsRepository.addSuggestions(suggestions);
+            addResult.fold(
               (failure) => developer.log('SyncProvider: Failed to add order sub suggestions: ${failure.message}'),
               (_) {},
             );
-          });
-          _orderSubSuggestionPart++;
-          _startSyncDatabase();
+            _orderSubSuggestionPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matching KMP lines 613-619)
+          if (suggestions.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _orderSubSuggestionsRepository.addSuggestions(suggestions);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add order sub suggestions: ${failure.message}'),
+              (_) {},
+            );
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
   }
 
-  Future<void> _downloadOutOfStock() async {
-    _updateTask('Out of Stock details downloading...');
+  /// Download out of stock masters (full sync or single record retry)
+  /// Converted from KMP's downloadOutOfStock function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all out of stock masters in batches
+  /// 2. Single record retry (id != -1): Downloads specific out of stock master, processes nested items, and handles FailedSync
+  Future<void> _downloadOutOfStock({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Out of Stock details downloading...');
+    }
+    
     final updateDate = _getSyncTimeForTable('OutOfStockMaster');
     // Use cached values (matching KMP pattern - no async storage reads)
     final userType = _cachedUserType ?? 0;
@@ -978,44 +1381,101 @@ class SyncProvider extends ChangeNotifier {
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
 
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry
+          _failedSyncRepository.addFailedSync(
+            tableId: 11, // NotificationId.OUT_OF_STOCK = 11
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message
+          _updateError(failure.message, true);
+        }
+      },
       (outOfStockListApi) async {
         final outOfStocks = outOfStockListApi.data ?? [];
-        if (outOfStocks.isEmpty) {
-          _isOutOfStockDownloaded = true;
-          _completedTablesCount++; // Priority 4: Track completed tables
-          // Fire-and-forget sync time write (matching KMP pattern)
-          _syncTimeRepository.addSyncTime(
-            tableName: 'OutOfStockMaster',
-            updateDate: outOfStockListApi.updatedDate,
-          ).then((result) {
-            result.fold(
-              (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-              (_) {},
-            );
-          });
-          _outOfStockPart = 0;
-          _startSyncDatabase();
-        } else {
-          // Fire-and-forget DB write (matching KMP pattern)
-          _outOfStockRepository.addOutOfStockMasters(outOfStocks).then((result) {
-            result.fold(
+        
+        if (id == -1) {
+          // Full sync mode
+          if (outOfStocks.isEmpty) {
+            _isOutOfStockDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'OutOfStockMaster',
+              updateDate: outOfStockListApi.updatedDate,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _outOfStockPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _outOfStockRepository.addOutOfStockMasters(outOfStocks);
+            addResult.fold(
               (failure) => developer.log('SyncProvider: Failed to add out of stock masters: ${failure.message}'),
               (_) {},
             );
-          });
-          _outOfStockPart++;
-          _startSyncDatabase();
+            _outOfStockPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matching KMP pattern)
+          if (outOfStocks.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _outOfStockRepository.addOutOfStockMasters(outOfStocks);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add out of stock masters: ${failure.message}'),
+              (_) {},
+            );
+            
+            // Process nested items if present (matching KMP pattern for nested data)
+            for (final outOfStock in outOfStocks) {
+              if (outOfStock.items != null && outOfStock.items!.isNotEmpty) {
+                // CRITICAL FIX: Await database operation to prevent locks
+                final addProductsResult = await _outOfStockRepository.addOutOfStockProducts(outOfStock.items!);
+                addProductsResult.fold(
+                  (failure) => developer.log('SyncProvider: Failed to add out of stock products: ${failure.message}'),
+                  (_) {},
+                );
+              }
+            }
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
   }
 
-  Future<void> _downloadOutOfStockSub() async {
-    _updateTask('Out of Stock details downloading...');
+  /// Download out of stock products (full sync or single record retry)
+  /// Converted from KMP's downloadOutOfStockSub function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all out of stock products in batches
+  /// 2. Single record retry (id != -1): Downloads specific out of stock product and handles FailedSync
+  Future<void> _downloadOutOfStockSub({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Out of Stock details downloading...');
+    }
+    
     final updateDate = _getSyncTimeForTable('OutOfStockProducts');
     // Use cached values (matching KMP pattern - no async storage reads)
     final userType = _cachedUserType ?? 0;
@@ -1026,44 +1486,89 @@ class SyncProvider extends ChangeNotifier {
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
 
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry
+          _failedSyncRepository.addFailedSync(
+            tableId: 12, // NotificationId.OUT_OF_STOCK_SUB = 12
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message
+          _updateError(failure.message, true);
+        }
+      },
       (outOfStockSubListApi) async {
         final outOfStockSubs = outOfStockSubListApi.data ?? [];
-        if (outOfStockSubs.isEmpty) {
-          _isOutOfStockSubDownloaded = true;
-          _completedTablesCount++; // Priority 4: Track completed tables
-          // Fire-and-forget sync time write (matching KMP pattern)
-          _syncTimeRepository.addSyncTime(
-            tableName: 'OutOfStockProducts',
-            updateDate: outOfStockSubListApi.updatedDate,
-          ).then((result) {
-            result.fold(
-              (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-              (_) {},
-            );
-          });
-          _outOfStockSubPart = 0;
-          _startSyncDatabase();
-        } else {
-          // Fire-and-forget DB write (matching KMP pattern)
-          _outOfStockRepository.addOutOfStockProducts(outOfStockSubs).then((result) {
-            result.fold(
+        
+        if (id == -1) {
+          // Full sync mode
+          if (outOfStockSubs.isEmpty) {
+            _isOutOfStockSubDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'OutOfStockProducts',
+              updateDate: outOfStockSubListApi.updatedDate,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _outOfStockSubPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _outOfStockRepository.addOutOfStockProducts(outOfStockSubs);
+            addResult.fold(
               (failure) => developer.log('SyncProvider: Failed to add out of stock products: ${failure.message}'),
               (_) {},
             );
-          });
-          _outOfStockSubPart++;
-          _startSyncDatabase();
+            _outOfStockSubPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matching KMP pattern)
+          if (outOfStockSubs.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _outOfStockRepository.addOutOfStockProducts(outOfStockSubs);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add out of stock products: ${failure.message}'),
+              (_) {},
+            );
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
   }
 
-  Future<void> _downloadCustomers() async {
-    _updateTask('Customer details downloading...');
+  /// Download customers (full sync or single record retry)
+  /// Converted from KMP's downloadCustomer function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all customers in batches
+  /// 2. Single record retry (id != -1): Downloads specific customer and handles FailedSync
+  Future<void> _downloadCustomers({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Customer details downloading...');
+    }
+    
     final updateDate = _getSyncTimeForTable('Customer');
     // Use cached values (matching KMP pattern - no async storage reads)
     final userType = _cachedUserType ?? 0;
@@ -1074,37 +1579,69 @@ class SyncProvider extends ChangeNotifier {
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
 
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry
+          _failedSyncRepository.addFailedSync(
+            tableId: 13, // NotificationId.CUSTOMER = 13
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message
+          _updateError(failure.message, true);
+        }
+      },
       (customerListApi) async {
         final customers = customerListApi.data ?? [];
-        if (customers.isEmpty) {
-          _isCustomerDownloaded = true;
-          _completedTablesCount++; // Priority 4: Track completed tables
-          // Fire-and-forget sync time write (matching KMP pattern)
-          _syncTimeRepository.addSyncTime(
-            tableName: 'Customers',
-            updateDate: customerListApi.updatedDate,
-          ).then((result) {
-            result.fold(
-              (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-              (_) {},
-            );
-          });
-          _customerPart = 0;
-          _startSyncDatabase();
-        } else {
-          // Fire-and-forget DB write (matching KMP pattern)
-          _customersRepository.addCustomers(customers).then((result) {
-            result.fold(
+        
+        if (id == -1) {
+          // Full sync mode
+          if (customers.isEmpty) {
+            _isCustomerDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'Customers',
+              updateDate: customerListApi.updatedDate,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _customerPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _customersRepository.addCustomers(customers);
+            addResult.fold(
               (failure) => developer.log('SyncProvider: Failed to add customers: ${failure.message}'),
               (_) {},
             );
-          });
-          _customerPart++;
-          _startSyncDatabase();
+            _customerPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matching KMP lines 768-774)
+          if (customers.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _customersRepository.addCustomers(customers);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add customers: ${failure.message}'),
+              (_) {},
+            );
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
@@ -1175,26 +1712,24 @@ class SyncProvider extends ChangeNotifier {
             _userPart = 0;
             _startSyncDatabase();
           } else {
-            // Fire-and-forget DB write (matching KMP pattern)
-            _usersRepository.addUsers(users).then((result) {
-              result.fold(
-                (failure) => developer.log('SyncProvider: Failed to add users: ${failure.message}'),
-                (_) {},
-              );
-            });
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _usersRepository.addUsers(users);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add users: ${failure.message}'),
+              (_) {},
+            );
             _userPart++;
             _startSyncDatabase();
           }
         } else {
           // Single record retry mode
           if (users.isNotEmpty) {
-            // Fire-and-forget DB write (matching KMP pattern)
-            _usersRepository.addUsers(users).then((result) {
-              result.fold(
-                (failure) => developer.log('SyncProvider: Failed to add users: ${failure.message}'),
-                (_) {},
-              );
-            });
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _usersRepository.addUsers(users);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add users: ${failure.message}'),
+              (_) {},
+            );
           }
           if (failedId != -1) {
             await _failedSyncRepository.deleteFailedSync(failedId);
@@ -1274,26 +1809,24 @@ class SyncProvider extends ChangeNotifier {
             _salesmanPart = 0;
             _startSyncDatabase();
           } else {
-            // Fire-and-forget DB write (matching KMP pattern)
-            _salesManRepository.addSalesMen(salesmen).then((result) {
-              result.fold(
-                (failure) => developer.log('SyncProvider: Failed to add salesmen: ${failure.message}'),
-                (_) {},
-              );
-            });
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _salesManRepository.addSalesMen(salesmen);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add salesmen: ${failure.message}'),
+              (_) {},
+            );
             _salesmanPart++;
             _startSyncDatabase();
           }
         } else {
           // Single record retry mode (matches KMP lines 846-849)
           if (salesmen.isNotEmpty) {
-            // Fire-and-forget DB write (matching KMP pattern)
-            _salesManRepository.addSalesMen(salesmen).then((result) {
-              result.fold(
-                (failure) => developer.log('SyncProvider: Failed to add salesmen: ${failure.message}'),
-                (_) {},
-              );
-            });
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _salesManRepository.addSalesMen(salesmen);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add salesmen: ${failure.message}'),
+              (_) {},
+            );
           }
           if (failedId != -1) {
             await _failedSyncRepository.deleteFailedSync(failedId);
@@ -1304,8 +1837,21 @@ class SyncProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> _downloadSuppliers() async {
-    _updateTask('Supplier details downloading...');
+  /// Download suppliers (full sync or single record retry)
+  /// Converted from KMP's downloadSupplier function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all suppliers in batches
+  /// 2. Single record retry (id != -1): Downloads specific supplier and handles FailedSync
+  Future<void> _downloadSuppliers({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Supplier details downloading...');
+    }
+    
     final updateDate = _getSyncTimeForTable('Supplier');
     // Use cached values (matching KMP pattern - no async storage reads)
     final userType = _cachedUserType ?? 0;
@@ -1316,10 +1862,25 @@ class SyncProvider extends ChangeNotifier {
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
 
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry
+          _failedSyncRepository.addFailedSync(
+            tableId: 16, // NotificationId.SUPPLIER = 16
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message
+          _updateError(failure.message, true);
+        }
+      },
       (response) async {
         final data = response['data'] as List<dynamic>?;
         final updatedDate = response['updated_date'] as String? ?? '';
@@ -1328,38 +1889,66 @@ class SyncProvider extends ChangeNotifier {
                 .toList() ??
             [];
         
-        if (suppliers.isEmpty) {
-          _isSupplierDownloaded = true;
-          _completedTablesCount++; // Priority 4: Track completed tables
-          // Fire-and-forget sync time write (matching KMP pattern)
-          _syncTimeRepository.addSyncTime(
-            tableName: 'Suppliers',
-            updateDate: updatedDate,
-          ).then((result) {
-            result.fold(
-              (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-              (_) {},
-            );
-          });
-          _supplierPart = 0;
-          _startSyncDatabase();
-        } else {
-          // Fire-and-forget DB write (matching KMP pattern)
-          _suppliersRepository.addSuppliers(suppliers).then((result) {
-            result.fold(
+        if (id == -1) {
+          // Full sync mode
+          if (suppliers.isEmpty) {
+            _isSupplierDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'Suppliers',
+              updateDate: updatedDate,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _supplierPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _suppliersRepository.addSuppliers(suppliers);
+            addResult.fold(
               (failure) => developer.log('SyncProvider: Failed to add suppliers: ${failure.message}'),
               (_) {},
             );
-          });
-          _supplierPart++;
-          _startSyncDatabase();
+            _supplierPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matching KMP pattern)
+          if (suppliers.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _suppliersRepository.addSuppliers(suppliers);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add suppliers: ${failure.message}'),
+              (_) {},
+            );
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
   }
 
-  Future<void> _downloadRoutes() async {
-    _updateTask('Route details downloading...');
+  /// Download routes (full sync or single record retry)
+  /// Converted from KMP's downloadRoutes function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all routes in batches
+  /// 2. Single record retry (id != -1): Downloads specific route and handles FailedSync
+  Future<void> _downloadRoutes({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Route details downloading...');
+    }
     final updateDate = _getSyncTimeForTable('Routes');
     // Use cached values (matching KMP pattern - no async storage reads)
     final userType = _cachedUserType ?? 0;
@@ -1370,44 +1959,87 @@ class SyncProvider extends ChangeNotifier {
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
 
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry (matches KMP line 900-902)
+          _failedSyncRepository.addFailedSync(
+            tableId: 17, // NotificationId.ROUTES = 17
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message (matches KMP line 905)
+          _updateError(failure.message, true);
+        }
+      },
       (routeListApi) async {
         final routes = routeListApi.data ?? [];
-        if (routes.isEmpty) {
-          _isRoutesDownloaded = true;
-          _completedTablesCount++; // Priority 4: Track completed tables
-          // Fire-and-forget sync time write (matching KMP pattern)
-          _syncTimeRepository.addSyncTime(
-            tableName: 'Routes',
-            updateDate: routeListApi.updatedDate,
-          ).then((result) {
-            result.fold(
-              (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-              (_) {},
-            );
-          });
-          _routesPart = 0;
-          _startSyncDatabase();
-        } else {
-          // Fire-and-forget DB write (matching KMP pattern)
-          _routesRepository.addRoutes(routes).then((result) {
-            result.fold(
+        if (id == -1) {
+          // Full sync mode (matches KMP lines 912-920)
+          if (routes.isEmpty) {
+            _isRoutesDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'Routes',
+              updateDate: routeListApi.updatedDate,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _routesPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _routesRepository.addRoutes(routes);
+            addResult.fold(
               (failure) => developer.log('SyncProvider: Failed to add routes: ${failure.message}'),
               (_) {},
             );
-          });
-          _routesPart++;
-          _startSyncDatabase();
+            _routesPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matches KMP lines 922-925)
+          if (routes.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _routesRepository.addRoutes(routes);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add routes: ${failure.message}'),
+              (_) {},
+            );
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
   }
 
-  Future<void> _downloadUnits() async {
-    _updateTask('Units details downloading...');
+  /// Download units (full sync or single record retry)
+  /// Converted from KMP's downloadUnits function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all units in batches
+  /// 2. Single record retry (id != -1): Downloads specific unit and handles FailedSync
+  Future<void> _downloadUnits({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Units details downloading...');
+    }
     final updateDate = _getSyncTimeForTable('Units');
     // Use cached values (matching KMP pattern - no async storage reads)
     final userType = _cachedUserType ?? 0;
@@ -1418,44 +2050,88 @@ class SyncProvider extends ChangeNotifier {
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
 
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry (matches KMP line 940-942)
+          _failedSyncRepository.addFailedSync(
+            tableId: 18, // NotificationId.UNITS = 18
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message (matches KMP line 945)
+          _updateError(failure.message, true);
+        }
+      },
       (unitListApi) async {
         final units = unitListApi.data ?? [];
-        if (units.isEmpty) {
-          _isUnitsDownloaded = true;
-          _completedTablesCount++; // Priority 4: Track completed tables
-          // Fire-and-forget sync time write (matching KMP pattern)
-          _syncTimeRepository.addSyncTime(
-            tableName: 'Units',
-            updateDate: unitListApi.updatedDate,
-          ).then((result) {
-            result.fold(
-              (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-              (_) {},
-            );
-          });
-          _unitsPart = 0;
-          _startSyncDatabase();
-        } else {
-          // Fire-and-forget DB write (matching KMP pattern)
-          _unitsRepository.addUnits(units).then((result) {
-            result.fold(
+        if (id == -1) {
+          // Full sync mode (matches KMP lines 952-960)
+          if (units.isEmpty) {
+            _isUnitsDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'Units',
+              updateDate: unitListApi.updatedDate,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _unitsPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _unitsRepository.addUnits(units);
+            addResult.fold(
               (failure) => developer.log('SyncProvider: Failed to add units: ${failure.message}'),
               (_) {},
             );
-          });
-          _unitsPart++;
-          _startSyncDatabase();
+            _unitsPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matches KMP lines 962-965)
+          if (units.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _unitsRepository.addUnits(units);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add units: ${failure.message}'),
+              (_) {},
+            );
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
   }
 
-  Future<void> _downloadUserCategories() async {
-    _updateTask('User Category details downloading...');
+  /// Download user categories (full sync or single record retry)
+  /// Converted from KMP's downloadUserCategory function
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all user categories in batches
+  /// 2. Single record retry (id != -1): Downloads specific user category and handles FailedSync
+  Future<void> _downloadUserCategories({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('User Category details downloading...');
+    }
+    
     final updateDate = _getSyncTimeForTable('UsersCategory');
     // Use cached values (matching KMP pattern - no async storage reads)
     final userType = _cachedUserType ?? 0;
@@ -1466,40 +2142,73 @@ class SyncProvider extends ChangeNotifier {
       userType: userType,
       userId: userId,
       updateDate: updateDate,
+      id: id, // Pass id parameter
     );
 
     result.fold(
-      (failure) => _updateError(failure.message, true),
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry
+          // Note: UserCategory doesn't have a specific NotificationId in KMP, using a placeholder
+          // Check KMP's _syncFailedItem to see what tableId is used
+          _failedSyncRepository.addFailedSync(
+            tableId: 23, // Note: UserCategory doesn't appear in KMP's failed sync retry mechanism, using placeholder
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message
+          _updateError(failure.message, true);
+        }
+      },
       (response) async {
         final data = response['data'] as List<dynamic>?;
         final updatedDate = response['updated_date'] as String? ?? '';
         final userCategories = data?.map((e) => UserCategory.fromMapServerData(e as Map<String, dynamic>)).toList() ?? [];
         
-        if (userCategories.isEmpty) {
-          _isUserCategoryDownloaded = true;
-          _completedTablesCount++; // Priority 4: Track completed tables
-          // Fire-and-forget sync time write (matching KMP pattern)
-          _syncTimeRepository.addSyncTime(
-            tableName: 'UsersCategory',
-            updateDate: updatedDate,
-          ).then((result) {
-            result.fold(
-              (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
-              (_) {},
-            );
-          });
-          _userCategoryPart = 0;
-          _startSyncDatabase();
-        } else {
-          // Fire-and-forget DB write (matching KMP pattern)
-          _userCategoryRepository.addUserCategories(userCategories).then((result) {
-            result.fold(
+        if (id == -1) {
+          // Full sync mode
+          if (userCategories.isEmpty) {
+            _isUserCategoryDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'UsersCategory',
+              updateDate: updatedDate,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _userCategoryPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _userCategoryRepository.addUserCategories(userCategories);
+            addResult.fold(
               (failure) => developer.log('SyncProvider: Failed to add user categories: ${failure.message}'),
               (_) {},
             );
-          });
-          _userCategoryPart++;
-          _startSyncDatabase();
+            _userCategoryPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matching KMP pattern)
+          if (userCategories.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _userCategoryRepository.addUserCategories(userCategories);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add user categories: ${failure.message}'),
+              (_) {},
+            );
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
         }
       },
     );
@@ -1514,14 +2223,132 @@ class SyncProvider extends ChangeNotifier {
 
     // Route to appropriate download method based on tableId (matches KMP's when expression)
     switch (tableId) {
-      case 15: // NotificationId.SALESMAN = 15 (matches KMP line 1282)
-        await _downloadSalesmen(
+      case 1: // NotificationId.PRODUCT = 1 (matches KMP line 1268)
+        await _downloadProducts(
           id: dataId,
           failedId: failedId,
           finished: () {}, // Retry mode doesn't continue sync chain
         );
         break;
-      // TODO: Add other table types as needed (Product, Order, etc.)
+      case 2: // NotificationId.CAR_BRAND = 2 (matches KMP line 1269)
+        await _downloadCarBrand(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 3: // NotificationId.CAR_NAME = 3 (matches KMP line 1270)
+        await _downloadCarName(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 4: // NotificationId.CAR_MODEL = 4 (matches KMP line 1271)
+        await _downloadCarModel(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 5: // NotificationId.CAR_VERSION = 5 (matches KMP line 1272)
+        await _downloadCarVersion(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 6: // NotificationId.CATEGORY = 6 (matches KMP line 1273)
+        await _downloadCategory(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 7: // NotificationId.SUB_CATEGORY = 7 (matches KMP line 1274)
+        await _downloadSubCategory(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 14: // NotificationId.USER = 14 (matches KMP line 1281)
+        await _downloadUsers(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 15: // NotificationId.SALESMAN = 15 (matches KMP line 1282)
+        await _downloadSalesmen(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 17: // NotificationId.ROUTES = 17 (matches KMP line 1284)
+        await _downloadRoutes(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 8: // NotificationId.ORDER = 8 (matches KMP line 1275)
+        await _downloadOrders(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 9: // NotificationId.ORDER_SUB = 9 (matches KMP line 1276)
+        await _downloadOrderSubs(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 10: // NotificationId.ORDER_SUB_SUGGESTION = 10 (matches KMP line 1277)
+        await _downloadOrderSubSuggestions(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 11: // NotificationId.OUT_OF_STOCK = 11 (matches KMP line 1278)
+        await _downloadOutOfStock(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 12: // NotificationId.OUT_OF_STOCK_SUB = 12 (matches KMP line 1279)
+        await _downloadOutOfStockSub(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 13: // NotificationId.CUSTOMER = 13 (matches KMP line 1280)
+        await _downloadCustomers(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 16: // NotificationId.SUPPLIER = 16 (matches KMP line 1283)
+        await _downloadSuppliers(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
+      case 18: // NotificationId.UNITS = 18 (matches KMP line 1285)
+        await _downloadUnits(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
       default:
         // Unknown table type, just delete the failed sync
         await _failedSyncRepository.deleteFailedSync(failedId);
@@ -1545,31 +2372,27 @@ class SyncProvider extends ChangeNotifier {
   }
 
   /// Download single car brand by ID
-  /// TODO: Update _downloadCarBrand to support id parameter
+  /// ✅ Already implemented - _downloadCarBrand supports id parameter
   Future<void> downloadCarBrand({required int id}) async {
-    developer.log('SyncProvider: downloadCarBrand called with id: $id (TODO: implement)');
-    // await _downloadCarBrand(id: id);
+    await _downloadCarBrand(id: id);
   }
 
   /// Download single car name by ID
-  /// TODO: Update _downloadCarName to support id parameter
+  /// ✅ Already implemented - _downloadCarName supports id parameter
   Future<void> downloadCarName({required int id}) async {
-    developer.log('SyncProvider: downloadCarName called with id: $id (TODO: implement)');
-    // await _downloadCarName(id: id);
+    await _downloadCarName(id: id);
   }
 
   /// Download single car model by ID
-  /// TODO: Update _downloadCarModel to support id parameter
+  /// ✅ Already implemented - _downloadCarModel supports id parameter
   Future<void> downloadCarModel({required int id}) async {
-    developer.log('SyncProvider: downloadCarModel called with id: $id (TODO: implement)');
-    // await _downloadCarModel(id: id);
+    await _downloadCarModel(id: id);
   }
 
   /// Download single car version by ID
-  /// TODO: Update _downloadCarVersion to support id parameter
+  /// ✅ Already implemented - _downloadCarVersion supports id parameter
   Future<void> downloadCarVersion({required int id}) async {
-    developer.log('SyncProvider: downloadCarVersion called with id: $id (TODO: implement)');
-    // await _downloadCarVersion(id: id);
+    await _downloadCarVersion(id: id);
   }
 
   /// Download single category by ID
@@ -1579,52 +2402,45 @@ class SyncProvider extends ChangeNotifier {
   }
 
   /// Download single sub-category by ID
-  /// TODO: Update _downloadSubCategory to support id parameter
+  /// ✅ Already implemented - _downloadSubCategory supports id parameter
   Future<void> downloadSubCategory({required int id}) async {
-    developer.log('SyncProvider: downloadSubCategory called with id: $id (TODO: implement)');
-    // await _downloadSubCategory(id: id);
+    await _downloadSubCategory(id: id);
   }
 
   /// Download single order by ID
-  /// TODO: Update _downloadOrders to support id parameter
+  /// ✅ Already implemented - _downloadOrders supports id parameter
   Future<void> downloadOrder({required int id}) async {
-    developer.log('SyncProvider: downloadOrder called with id: $id (TODO: implement)');
-    // await _downloadOrders(id: id);
+    await _downloadOrders(id: id);
   }
 
   /// Download single order sub by ID
-  /// TODO: Update _downloadOrderSubs to support id parameter
+  /// ✅ Already implemented - _downloadOrderSubs supports id parameter
   Future<void> downloadOrderSub({required int id}) async {
-    developer.log('SyncProvider: downloadOrderSub called with id: $id (TODO: implement)');
-    // await _downloadOrderSubs(id: id);
+    await _downloadOrderSubs(id: id);
   }
 
   /// Download single order sub suggestion by ID
-  /// TODO: Update _downloadOrderSubSuggestions to support id parameter
+  /// ✅ Already implemented - _downloadOrderSubSuggestions supports id parameter
   Future<void> downloadOrderSubSuggestion({required int id}) async {
-    developer.log('SyncProvider: downloadOrderSubSuggestion called with id: $id (TODO: implement)');
-    // await _downloadOrderSubSuggestions(id: id);
+    await _downloadOrderSubSuggestions(id: id);
   }
 
   /// Download single out of stock master by ID
-  /// TODO: Update _downloadOutOfStock to support id parameter
+  /// ✅ Already implemented - _downloadOutOfStock supports id parameter
   Future<void> downloadOutOfStock({required int id}) async {
-    developer.log('SyncProvider: downloadOutOfStock called with id: $id (TODO: implement)');
-    // await _downloadOutOfStock(id: id);
+    await _downloadOutOfStock(id: id);
   }
 
   /// Download single out of stock sub by ID
-  /// TODO: Update _downloadOutOfStockSub to support id parameter
+  /// ✅ Already implemented - _downloadOutOfStockSub supports id parameter
   Future<void> downloadOutOfStockSub({required int id}) async {
-    developer.log('SyncProvider: downloadOutOfStockSub called with id: $id (TODO: implement)');
-    // await _downloadOutOfStockSub(id: id);
+    await _downloadOutOfStockSub(id: id);
   }
 
   /// Download single customer by ID
-  /// TODO: Update _downloadCustomers to support id parameter
+  /// ✅ Already implemented - _downloadCustomers supports id parameter
   Future<void> downloadCustomer({required int id}) async {
-    developer.log('SyncProvider: downloadCustomer called with id: $id (TODO: implement)');
-    // await _downloadCustomers(id: id);
+    await _downloadCustomers(id: id);
   }
 
   /// Download single user by ID
@@ -1640,24 +2456,21 @@ class SyncProvider extends ChangeNotifier {
   }
 
   /// Download single supplier by ID
-  /// TODO: Update _downloadSuppliers to support id parameter
+  /// ✅ Already implemented - _downloadSuppliers supports id parameter
   Future<void> downloadSupplier({required int id}) async {
-    developer.log('SyncProvider: downloadSupplier called with id: $id (TODO: implement)');
-    // await _downloadSuppliers(id: id);
+    await _downloadSuppliers(id: id);
   }
 
   /// Download single route by ID
-  /// TODO: Update _downloadRoutes to support id parameter
+  /// ✅ Already implemented - _downloadRoutes supports id parameter
   Future<void> downloadRoutes({required int id}) async {
-    developer.log('SyncProvider: downloadRoutes called with id: $id (TODO: implement)');
-    // await _downloadRoutes(id: id);
+    await _downloadRoutes(id: id);
   }
 
   /// Download single unit by ID
-  /// TODO: Update _downloadUnits to support id parameter
+  /// ✅ Already implemented - _downloadUnits supports id parameter
   Future<void> downloadUnits({required int id}) async {
-    developer.log('SyncProvider: downloadUnits called with id: $id (TODO: implement)');
-    // await _downloadUnits(id: id);
+    await _downloadUnits(id: id);
   }
 
   /// Download single product unit by ID

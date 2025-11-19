@@ -355,7 +355,6 @@ class _AddSubCategoryDialog extends StatefulWidget {
 class _AddSubCategoryDialogState extends State<_AddSubCategoryDialog> {
   late TextEditingController _nameController;
   int _categoryId = -1;
-  String _categoryNameSt = 'Select Category';
 
   @override
   void initState() {
@@ -373,9 +372,6 @@ class _AddSubCategoryDialogState extends State<_AddSubCategoryDialog> {
     } else {
       // Edit mode - set category from sub-category
       _categoryId = widget.subCategory?.catId ?? -1;
-      _categoryNameSt = widget.categoryName.isNotEmpty
-          ? widget.categoryName
-          : 'Select Category';
     }
   }
 
@@ -385,53 +381,6 @@ class _AddSubCategoryDialogState extends State<_AddSubCategoryDialog> {
     super.dispose();
   }
 
-  void _showCategorySelectionDialog() {
-    final provider = Provider.of<SubCategoriesProvider>(context, listen: false);
-    if (provider.categoriesList.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Category not found')),
-      );
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Select Category'),
-        content: Consumer<SubCategoriesProvider>(
-          builder: (context, provider, _) {
-            return ListView.builder(
-              shrinkWrap: true,
-              itemCount: provider.categoriesList.length,
-              itemBuilder: (context, index) {
-                final category = provider.categoriesList[index];
-                return RadioListTile<int>(
-                  title: Text(category.name),
-                  value: category.id,
-                  groupValue: _categoryId,
-                  onChanged: (value) {
-                    setState(() {
-                      _categoryId = value!;
-                      _categoryNameSt = category.name;
-                    });
-                    Navigator.pop(context);
-                  },
-                );
-              },
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -440,23 +389,48 @@ class _AddSubCategoryDialogState extends State<_AddSubCategoryDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Category selection
-          InkWell(
-            onTap: widget.isAddNew ? _showCategorySelectionDialog : null,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                _categoryNameSt,
-                style: const TextStyle(color: Colors.black),
-              ),
-            ),
+          // Category selection dropdown
+          Consumer<SubCategoriesProvider>(
+            builder: (context, provider, _) {
+              return DropdownButtonFormField<int>(
+                value: _categoryId == -1 ? null : _categoryId,
+                decoration: const InputDecoration(
+                  suffixIcon: Icon(Icons.arrow_drop_down),
+                  labelText: 'Category',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                hint: const Text('Select Category'),
+                items: provider.categoriesList.map((category) {
+                  return DropdownMenuItem<int>(
+
+                    value: category.id,
+                    child: Text(category.name,
+                    style: const TextStyle(
+                        fontSize: 16,
+                      ),
+                    ),
+                  );
+                }).toList(),
+                onChanged: widget.isAddNew
+                    ? (value) {
+                        if (value != null) {
+                          setState(() {
+                            _categoryId = value;
+                          });
+                        }
+                      }
+                    : null, // Disabled in edit mode
+                validator: (value) {
+                  if (value == null || value == -1) {
+                    return 'Please select a category';
+                  }
+                  return null;
+                },
+              );
+            },
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
           // Sub-category name
           TextField(
             controller: _nameController,

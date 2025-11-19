@@ -1,10 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:either_dart/either.dart';
+import 'dart:developer' as developer;
 import '../../repositories/routes/routes_repository.dart';
 import '../../repositories/salesman/salesman_repository.dart';
 import '../../models/master_data_api.dart';
 import '../../models/salesman_model.dart';
 import '../../helpers/errors/failures.dart';
+import '../../models/push_data.dart';
+import '../../utils/push_notification_sender.dart';
+import '../../utils/notification_id.dart';
 
 /// Routes Provider
 /// Manages routes screen state and operations
@@ -12,12 +16,15 @@ import '../../helpers/errors/failures.dart';
 class RoutesProvider extends ChangeNotifier {
   final RoutesRepository _routesRepository;
   final SalesManRepository _salesManRepository;
+  final PushNotificationSender _pushNotificationSender;
 
   RoutesProvider({
     required RoutesRepository routesRepository,
     required SalesManRepository salesManRepository,
+    required PushNotificationSender pushNotificationSender,
   })  : _routesRepository = routesRepository,
-        _salesManRepository = salesManRepository;
+        _salesManRepository = salesManRepository,
+        _pushNotificationSender = pushNotificationSender;
 
   List<RouteWithSalesman> _routesList = [];
   List<RouteWithSalesman> get routesList => _routesList;
@@ -104,6 +111,17 @@ class RoutesProvider extends ChangeNotifier {
         return Left(failure);
       },
       (route) {
+        // Send push notification (matches KMP lines 138-140)
+        final dataIds = [
+          PushData(table: NotificationId.routes, id: route.id),
+        ];
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Route updates',
+        ).catchError((e) {
+          developer.log('RoutesProvider: Error sending push notification: $e');
+        });
+
         _setLoading(false);
         // Reload routes list
         loadRoutes();
@@ -150,6 +168,17 @@ class RoutesProvider extends ChangeNotifier {
         return Left(failure);
       },
       (route) {
+        // Send push notification (matches KMP lines 165-167)
+        final dataIds = [
+          PushData(table: NotificationId.routes, id: route.id),
+        ];
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Route updates',
+        ).catchError((e) {
+          developer.log('RoutesProvider: Error sending push notification: $e');
+        });
+
         _setLoading(false);
         // Reload routes list
         loadRoutes();

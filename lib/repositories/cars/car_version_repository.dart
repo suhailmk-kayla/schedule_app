@@ -175,23 +175,41 @@ class CarVersionRepository {
   // ============================================================================
 
   /// Sync car versions from API (batch download)
+  /// Sync car versions from API (batch download or single record retry)
+  /// Converted from KMP's downloadCarVersion function
+  /// Supports two modes:
+  /// 1. Full sync (id == -1): Downloads all car versions in batches with part_no, limit, user_type, user_id, update_date
+  /// 2. Single record retry (id != -1): Downloads specific car version by id only
   Future<Either<Failure, CarVersionListApi>> syncCarVersionsFromApi({
     required int partNo,
     required int limit,
     required int userType,
     required int userId,
     required String updateDate,
+    int id = -1, // -1 for full sync, specific id for retry
   }) async {
     try {
-      final response = await _dio.get(
-        ApiEndpoints.carVersionDownload,
-        queryParameters: {
+      final Map<String, String> queryParams;
+      
+      if (id == -1) {
+        // Full sync mode: send all parameters (matches KMP's params function when id == -1)
+        queryParams = {
           'part_no': partNo.toString(),
           'limit': limit.toString(),
           'user_type': userType.toString(),
           'user_id': userId.toString(),
           'update_date': updateDate,
-        },
+        };
+      } else {
+        // Single record retry mode: send only id (matches KMP's params function when id != -1)
+        queryParams = {
+          'id': id.toString(),
+        };
+      }
+      
+      final response = await _dio.get(
+        ApiEndpoints.carVersionDownload,
+        queryParameters: queryParams,
       );
 
       final carVersionListApi = CarVersionListApi.fromJson(response.data);

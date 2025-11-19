@@ -1,7 +1,11 @@
 import 'package:flutter/foundation.dart' hide Category;
+import 'dart:developer' as developer;
 import '../../repositories/sub_categories/sub_categories_repository.dart';
 import '../../repositories/categories/categories_repository.dart';
 import '../../models/master_data_api.dart';
+import '../../models/push_data.dart';
+import '../../utils/push_notification_sender.dart';
+import '../../utils/notification_id.dart';
 
 /// SubCategories Provider
 /// Manages sub-categories-related state and operations
@@ -9,12 +13,15 @@ import '../../models/master_data_api.dart';
 class SubCategoriesProvider extends ChangeNotifier {
   final SubCategoriesRepository _subCategoriesRepository;
   final CategoriesRepository _categoriesRepository;
+  final PushNotificationSender _pushNotificationSender;
 
   SubCategoriesProvider({
     required SubCategoriesRepository subCategoriesRepository,
     required CategoriesRepository categoriesRepository,
+    required PushNotificationSender pushNotificationSender,
   })  : _subCategoriesRepository = subCategoriesRepository,
-        _categoriesRepository = categoriesRepository;
+        _categoriesRepository = categoriesRepository,
+        _pushNotificationSender = pushNotificationSender;
 
   // ============================================================================
   // State Variables
@@ -127,7 +134,18 @@ class SubCategoriesProvider extends ChangeNotifier {
         notifyListeners();
         return false;
       },
-      (_) {
+      (createdSubCategory) {
+        // Send push notification (matches KMP lines 71-73)
+        final dataIds = [
+          PushData(table: NotificationId.subCategory, id: createdSubCategory.id),
+        ];
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Sub-Category updates',
+        ).catchError((e) {
+          developer.log('SubCategoriesProvider: Error sending push notification: $e');
+        });
+
         _isLoading = false;
         notifyListeners();
         return true;
@@ -179,7 +197,18 @@ class SubCategoriesProvider extends ChangeNotifier {
         notifyListeners();
         return false;
       },
-      (_) {
+      (updatedSubCategory) {
+        // Send push notification (matches KMP lines 104-106)
+        final dataIds = [
+          PushData(table: NotificationId.subCategory, id: updatedSubCategory.id),
+        ];
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Sub-Category updates',
+        ).catchError((e) {
+          developer.log('SubCategoriesProvider: Error sending push notification: $e');
+        });
+
         _isLoading = false;
         notifyListeners();
         return true;

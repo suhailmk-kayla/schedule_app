@@ -56,11 +56,19 @@ Future<void> setupDependencies() async {
   // Register Dio instance from DioHelper (singleton with all interceptors configured)
   getIt.registerSingleton<Dio>(DioHelper.instance);
 
+  // Register PushNotificationSender (before repositories that need it)
+  getIt.registerLazySingleton<PushNotificationSender>(
+    () => PushNotificationSender(
+      dio: getIt<Dio>(),
+    ),
+  );
+
   // Register repositories
   getIt.registerLazySingleton<ProductsRepository>(
     () => ProductsRepository(
       databaseHelper: getIt<DatabaseHelper>(),
       dio: getIt<Dio>(),
+      pushNotificationSender: getIt<PushNotificationSender>(),
     ),
   );
 
@@ -165,13 +173,6 @@ Future<void> setupDependencies() async {
     ),
   );
 
-  // Register PushNotificationSender (after SalesMan and Suppliers, before UsersRepository)
-  getIt.registerLazySingleton<PushNotificationSender>(
-    () => PushNotificationSender(
-      dio: getIt<Dio>(),
-    ),
-  );
-
   // Register PushNotificationBuilder (after UsersRepository)
   getIt.registerLazySingleton<PushNotificationBuilder>(
     () => PushNotificationBuilder(
@@ -244,6 +245,7 @@ Future<void> setupDependencies() async {
       ordersRepository: getIt<OrdersRepository>(),
       routesRepository: getIt<RoutesRepository>(),
       packedSubsRepository: getIt<PackedSubsRepository>(),
+      unitsRepository: getIt<UnitsRepository>(),
     ),
   );
 
@@ -290,6 +292,7 @@ Future<void> setupDependencies() async {
     () => RoutesProvider(
       routesRepository: getIt<RoutesRepository>(),
       salesManRepository: getIt<SalesManRepository>(),
+      pushNotificationSender: getIt<PushNotificationSender>(),
     ),
   );
 
@@ -315,12 +318,14 @@ Future<void> setupDependencies() async {
   getIt.registerLazySingleton<UnitsProvider>(
     () => UnitsProvider(
       unitsRepository: getIt<UnitsRepository>(),
+      pushNotificationSender: getIt<PushNotificationSender>(),
     ),
   );
 
   getIt.registerLazySingleton<CategoriesProvider>(
     () => CategoriesProvider(
       categoriesRepository: getIt<CategoriesRepository>(),
+      pushNotificationSender: getIt<PushNotificationSender>(),
     ),
   );
 
@@ -328,6 +333,7 @@ Future<void> setupDependencies() async {
     () => SubCategoriesProvider(
       subCategoriesRepository: getIt<SubCategoriesRepository>(),
       categoriesRepository: getIt<CategoriesRepository>(),
+      pushNotificationSender: getIt<PushNotificationSender>(),
     ),
   );
 
@@ -337,6 +343,7 @@ Future<void> setupDependencies() async {
       carNameRepository: getIt<CarNameRepository>(),
       carModelRepository: getIt<CarModelRepository>(),
       carVersionRepository: getIt<CarVersionRepository>(),
+      dio: getIt<Dio>(),
     ),
   );
 }

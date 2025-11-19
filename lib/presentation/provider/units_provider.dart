@@ -1,16 +1,23 @@
 import 'package:flutter/foundation.dart';
+import 'dart:developer' as developer;
 import '../../repositories/units/units_repository.dart';
 import '../../models/master_data_api.dart';
+import '../../models/push_data.dart';
+import '../../utils/push_notification_sender.dart';
+import '../../utils/notification_id.dart';
 
 /// Units Provider
 /// Manages units-related state and operations
 /// Converted from KMP's UnitsViewModel.kt
 class UnitsProvider extends ChangeNotifier {
   final UnitsRepository _unitsRepository;
+  final PushNotificationSender _pushNotificationSender;
 
   UnitsProvider({
     required UnitsRepository unitsRepository,
-  }) : _unitsRepository = unitsRepository;
+    required PushNotificationSender pushNotificationSender,
+  })  : _unitsRepository = unitsRepository,
+        _pushNotificationSender = pushNotificationSender;
 
   // ============================================================================
   // State Variables
@@ -150,7 +157,18 @@ class UnitsProvider extends ChangeNotifier {
         notifyListeners();
         return false;
       },
-      (_) {
+      (createdUnit) {
+        // Send push notification (matches KMP lines 74-76)
+        final dataIds = [
+          PushData(table: NotificationId.units, id: createdUnit.id),
+        ];
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Unit updates',
+        ).catchError((e) {
+          developer.log('UnitsProvider: Error sending push notification: $e');
+        });
+
         _isLoading = false;
         notifyListeners();
         return true;
@@ -204,7 +222,18 @@ class UnitsProvider extends ChangeNotifier {
         notifyListeners();
         return false;
       },
-      (_) {
+      (updatedUnitResult) {
+        // Send push notification (matches KMP lines 158-160)
+        final dataIds = [
+          PushData(table: NotificationId.units, id: updatedUnitResult.id),
+        ];
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Unit updates',
+        ).catchError((e) {
+          developer.log('UnitsProvider: Error sending push notification: $e');
+        });
+
         _isLoading = false;
         notifyListeners();
         return true;

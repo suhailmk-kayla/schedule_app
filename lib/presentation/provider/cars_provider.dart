@@ -1,10 +1,14 @@
 import 'package:flutter/foundation.dart';
+import 'package:dio/dio.dart';
+import 'package:either_dart/either.dart';
 import '../../repositories/cars/car_brand_repository.dart';
 import '../../repositories/cars/car_name_repository.dart';
 import '../../repositories/cars/car_model_repository.dart';
 import '../../repositories/cars/car_version_repository.dart';
 import '../../models/car_api.dart';
 import '../../models/cars.dart';
+import '../../helpers/errors/failures.dart';
+import '../../utils/api_endpoints.dart';
 
 /// Cars Provider
 /// Manages cars-related state and operations
@@ -15,15 +19,19 @@ class CarsProvider extends ChangeNotifier {
   final CarModelRepository _carModelRepository;
   final CarVersionRepository _carVersionRepository;
 
+  final Dio _dio;
+
   CarsProvider({
     required CarBrandRepository carBrandRepository,
     required CarNameRepository carNameRepository,
     required CarModelRepository carModelRepository,
     required CarVersionRepository carVersionRepository,
+    required Dio dio,
   })  : _carBrandRepository = carBrandRepository,
         _carNameRepository = carNameRepository,
         _carModelRepository = carModelRepository,
-        _carVersionRepository = carVersionRepository;
+        _carVersionRepository = carVersionRepository,
+        _dio = dio;
 
   // ============================================================================
   // State Variables
@@ -263,6 +271,118 @@ class CarsProvider extends ChangeNotifier {
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+
+  // ============================================================================
+  // Create Car Methods
+  // ============================================================================
+
+  /// Create car brand via API
+  /// Converted from KMP's createCarBrand function
+  Future<Either<Failure, Brand>> createCarBrand(String brandName) async {
+    final result = await _carBrandRepository.createCarBrand(brandName: brandName);
+    result.fold(
+      (failure) {
+        _errorMessage = failure.message;
+        notifyListeners();
+      },
+      (brand) {
+        // Refresh brand list
+        getAllCarBrands();
+      },
+    );
+    return result;
+  }
+
+  /// Create car via API
+  /// Converted from KMP's createCar function
+  Future<Either<Failure, CarApi>> createCar({
+    required int carBrandId,
+    required String brandName,
+    required int carNameId,
+    required String carName,
+    required List<CarModelAndVersion> carModels,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      // Build request body matching KMP's createParams function
+      final requestData = <String, dynamic>{
+        'car_brand_id': carBrandId,
+        'brand_name': brandName,
+        'car_name_id': carNameId,
+        'car_name': carName,
+      };
+
+      if (carModels.isNotEmpty) {
+        final carModelsArray = carModels.map((carModelItem) {
+          final modelData = <String, dynamic>{
+            'car_model_id': carModelItem.carModel.id,
+            'model_name': carModelItem.carModel.modelName,
+          };
+
+          if (carModelItem.carVersionList.isNotEmpty) {
+            final versionsArray = carModelItem.carVersionList.map((version) {
+              return <String, dynamic>{
+                'version_name': version.versionName,
+              };
+            }).toList();
+            modelData['versions'] = versionsArray;
+          }
+
+          return modelData;
+        }).toList();
+
+        requestData['carModels'] = carModelsArray;
+      }
+
+      // Call API
+      final response = await _dio.post(
+        ApiEndpoints.addCar,
+        data: requestData,
+      );
+
+      // Parse response
+      final carApi = CarApi.fromJson(response.data);
+      if (carApi.status != 1) {
+        final errorMsg = response.data['data']?.toString() ?? carApi.message;
+        _errorMessage = errorMsg;
+        _isLoading = false;
+        notifyListeners();
+        return Left(ServerFailure.fromError(errorMsg));
+      }
+
+      // Store in local DB
+      await _carBrandRepository.addCarBrand(carApi.carBrand);
+      await _carNameRepository.addCarName(carApi.carName);
+      
+      if (carApi.models.isNotEmpty) {
+        for (final model in carApi.models) {
+          await _carModelRepository.addCarModel(model);
+          if (model.versions != null && model.versions!.isNotEmpty) {
+            await _carVersionRepository.addCarVersions(model.versions!);
+          }
+        }
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return Right(carApi);
+    } on DioException catch (e) {
+      final failure = NetworkFailure.fromDioError(e);
+      _errorMessage = failure.message;
+      _isLoading = false;
+      notifyListeners();
+      return Left(failure);
+    } catch (e) {
+      final failure = UnknownFailure.fromError(e);
+      _errorMessage = failure.message;
+      _isLoading = false;
+      notifyListeners();
+      return Left(failure);
+    }
   }
 }
 
