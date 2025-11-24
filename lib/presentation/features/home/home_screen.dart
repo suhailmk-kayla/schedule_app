@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/push_notification_helper.dart';
+import 'package:schedule_frontend_flutter/utils/storage_helper.dart';
 import '../../provider/home_provider.dart';
 import '../../../utils/notification_manager.dart';
 import '../products/products_screen.dart';
@@ -34,6 +36,26 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _debugNotifications() async {
+  print('=== PUSH NOTIFICATION DEBUG ===');
+  
+  // Check pending notifications
+  final pending = await StorageHelper.getPendingNotifications();
+  print('Pending notifications: ${pending.length}');
+  for (final notif in pending) {
+    print('  - Timestamp: ${notif['timestamp']}');
+    print('  - Data: ${notif['data']}');
+  }
+  
+  // Manually trigger processing (for testing)
+  await PushNotificationHelper.processStoredNotifications();
+  
+  // Check again
+  final after = await StorageHelper.getPendingNotifications();
+  print('After processing: ${after.length}');
+  print('==============================');
+}
+
   @override
   Widget build(BuildContext context) {
     return Consumer<NotificationManager>(
@@ -49,6 +71,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
         return Scaffold(
           appBar: AppBar(
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.bug_report),
+                onPressed: _debugNotifications,
+              ),
+            ],
             title: const Text('Home'),
             leading: Builder(
               builder: (context) => IconButton(

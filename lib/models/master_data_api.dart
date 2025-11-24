@@ -450,6 +450,34 @@ class Customer {
       'flag': flag ?? 1,
     };
   }
+
+  Customer copyWith({
+    int? id,
+    String? name,
+    String? code,
+    String? phoneNo,
+    int? routId,
+    int? salesManId,
+    int? rating,
+    String? address,
+    int? flag,
+    String? createdAt,
+    String? updatedAt,
+  }) {
+    return Customer(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      code: code ?? this.code,
+      phoneNo: phoneNo ?? this.phoneNo,
+      routId: routId ?? this.routId,
+      salesManId: salesManId ?? this.salesManId,
+      rating: rating ?? this.rating,
+      address: address ?? this.address,
+      flag: flag ?? this.flag,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
 }
 
 /// Customer With Names Model

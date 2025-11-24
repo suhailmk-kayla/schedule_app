@@ -107,10 +107,19 @@ class CarVersionRepository {
   Future<Either<Failure, void>> addCarVersion(Version carVersion) async {
     try {
       final db = await _database;
-      await db.insert(
-        'CarVersion',
-        carVersion.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO CarVersion (id, carVersionId, carBrandId, carNameId, carModelId, name, flag)
+        VALUES (NULL, ?, ?, ?, ?, ?, ?)
+        ''',
+        [
+          carVersion.id,
+          carVersion.carBrandId,
+          carVersion.carNameId,
+          carVersion.carModelId,
+          carVersion.versionName,
+          carVersion.flag ?? 1,
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -124,15 +133,23 @@ class CarVersionRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
+        const sql = '''
+        INSERT OR REPLACE INTO CarVersion (id, carVersionId, carBrandId, carNameId, carModelId, name, flag)
+        VALUES (NULL, ?, ?, ?, ?, ?, ?)
+        ''';
         for (final carVersion in carVersions) {
-          batch.insert(
-            'CarVersion',
-            carVersion.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          await txn.rawInsert(
+            sql,
+            [
+              carVersion.id,
+              carVersion.carBrandId,
+              carVersion.carNameId,
+              carVersion.carModelId,
+              carVersion.versionName,
+              carVersion.flag ?? 1,
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {

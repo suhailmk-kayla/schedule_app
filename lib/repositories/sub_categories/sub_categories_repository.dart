@@ -208,10 +208,18 @@ class SubCategoriesRepository {
   Future<Either<Failure, void>> addSubCategory(SubCategory subCategory) async {
     try {
       final db = await _database;
-      await db.insert(
-        'SubCategory',
-        subCategory.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO SubCategory (id, subCategoryId, parentId, name, remark, flag)
+        VALUES (NULL, ?, ?, ?, ?, ?)
+        ''',
+        [
+          subCategory.id,
+          subCategory.catId,
+          subCategory.name,
+          subCategory.remark,
+          1,
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -226,15 +234,22 @@ class SubCategoriesRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
+        const sql = '''
+        INSERT OR REPLACE INTO SubCategory (id, subCategoryId, parentId, name, remark, flag)
+        VALUES (NULL, ?, ?, ?, ?, ?)
+        ''';
         for (final subCategory in subCategories) {
-          batch.insert(
-            'SubCategory',
-            subCategory.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          await txn.rawInsert(
+            sql,
+            [
+              subCategory.id,
+              subCategory.catId,
+              subCategory.name,
+              subCategory.remark,
+              1,
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {

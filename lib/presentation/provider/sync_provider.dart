@@ -93,6 +93,7 @@ class SyncProvider extends ChangeNotifier {
   bool _isSupplierDownloaded = false;
   bool _isRoutesDownloaded = false;
   bool _isUnitsDownloaded = false;
+  bool _isProductUnitsDownloaded = false;
   bool _isUserCategoryDownloaded = false;
 
   // Batch counters
@@ -114,6 +115,7 @@ class SyncProvider extends ChangeNotifier {
   int _supplierPart = 0;
   int _routesPart = 0;
   int _unitsPart = 0;
+  int _productUnitsPart = 0;
   int _userCategoryPart = 0;
 
   // Cached user data (matching KMP pattern - lines 76-77)
@@ -314,6 +316,8 @@ class SyncProvider extends ChangeNotifier {
       await _downloadRoutes();
     } else if (!_isUnitsDownloaded) {
       await _downloadUnits();
+    } else if (!_isProductUnitsDownloaded) {
+      await _downloadProductUnits();
     } else if (!_isUserCategoryDownloaded) {
       await _downloadUserCategories();
     } else {
@@ -1599,7 +1603,16 @@ class SyncProvider extends ChangeNotifier {
         }
       },
       (customerListApi) async {
-        final customers = customerListApi.data ?? [];
+        final customers = (customerListApi.data ?? [])
+            .map((customer) {
+              if (userType == 3) {
+                final isAssigned = customer.salesManId == userId;
+                final updatedFlag = isAssigned ? (customer.flag ?? 1) : 0;
+                return customer.copyWith(flag: updatedFlag);
+            }
+              return customer;
+            })
+            .toList();
         
         if (id == -1) {
           // Full sync mode
@@ -2117,6 +2130,100 @@ class SyncProvider extends ChangeNotifier {
     );
   }
 
+  /// Download product units from API
+  /// Matches KMP's downloadProductUnits (SyncViewModel.kt lines 971-1008)
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all product units in batches
+  /// 2. Single record retry (id != -1): Downloads specific product unit and handles FailedSync
+  Future<void> _downloadProductUnits({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Product unit details downloading...');
+    }
+    
+    final updateDate = _getSyncTimeForTable('ProductUnits');
+    // Use cached values (matching KMP pattern - no async storage reads)
+    final userType = _cachedUserType ?? 0;
+    final userId = _cachedUserId ?? 0;
+    
+    final result = await _productsRepository.syncProductUnitsFromApi(
+      partNo: _productUnitsPart,
+      limit: _limit,
+      userType: userType,
+      userId: userId,
+      updateDate: updateDate,
+      id: id, // Pass id parameter
+    );
+
+    result.fold(
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry (matches KMP line 978-980)
+          _failedSyncRepository.addFailedSync(
+            tableId: 19, // NotificationId.PRODUCT_UNITS = 19
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message (matches KMP line 982)
+          _updateError(failure.message, true);
+        }
+      },
+      (productUnitListApi) async {
+        final productUnits = productUnitListApi.data ?? [];
+
+        if (id == -1) {
+          // Full sync mode (matches KMP lines 989-998)
+          if (productUnits.isEmpty) {
+            _isProductUnitsDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'ProductUnits',
+              updateDate: productUnitListApi.updated_date,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _productUnitsPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _productsRepository.addProductUnits(productUnits);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add product units: ${failure.message}'),
+              (_) {},
+            );
+            _productUnitsPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matches KMP lines 999-1005)
+          if (productUnits.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _productsRepository.addProductUnits(productUnits);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add product units: ${failure.message}'),
+              (_) {},
+            );
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
+        }
+      },
+    );
+  }
+
   /// Download user categories (full sync or single record retry)
   /// Converted from KMP's downloadUserCategory function
   /// Supports two modes matching KMP exactly:
@@ -2349,6 +2456,13 @@ class SyncProvider extends ChangeNotifier {
           finished: () {},
         );
         break;
+      case 19: // NotificationId.PRODUCT_UNITS = 19 (matches KMP line 1286)
+        await _downloadProductUnits(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
       default:
         // Unknown table type, just delete the failed sync
         await _failedSyncRepository.deleteFailedSync(failedId);
@@ -2410,6 +2524,9 @@ class SyncProvider extends ChangeNotifier {
   /// Download single order by ID
   /// ✅ Already implemented - _downloadOrders supports id parameter
   Future<void> downloadOrder({required int id}) async {
+    if(id != -1){
+      developer.log('Handling order download for id: $id');
+    }
     await _downloadOrders(id: id);
   }
 
@@ -2474,9 +2591,9 @@ class SyncProvider extends ChangeNotifier {
   }
 
   /// Download single product unit by ID
-  /// TODO: Implement _downloadProductUnits method
+  /// ✅ Already implemented - _downloadProductUnits supports id parameter
   Future<void> downloadProductUnits({required int id}) async {
-    developer.log('SyncProvider: downloadProductUnits called with id: $id (TODO: implement)');
+    await _downloadProductUnits(id: id);
   }
 
   /// Download single product car by ID
@@ -2529,6 +2646,7 @@ class SyncProvider extends ChangeNotifier {
       'Supplier',
       'Routes',
       'Units',
+      'ProductUnits',
       'UsersCategory',
     ];
 
@@ -2662,6 +2780,8 @@ class SyncProvider extends ChangeNotifier {
       currentTableProgress = (_routesPart * 0.1).clamp(0.0, 0.95);
     } else if (!_isUnitsDownloaded && _unitsPart > 0) {
       currentTableProgress = (_unitsPart * 0.1).clamp(0.0, 0.95);
+    } else if (!_isProductUnitsDownloaded && _productUnitsPart > 0) {
+      currentTableProgress = (_productUnitsPart * 0.1).clamp(0.0, 0.95);
     } else if (!_isUserCategoryDownloaded && _userCategoryPart > 0) {
       currentTableProgress = (_userCategoryPart * 0.1).clamp(0.0, 0.95);
     }
@@ -2691,6 +2811,7 @@ class SyncProvider extends ChangeNotifier {
     _isSupplierDownloaded = false;
     _isRoutesDownloaded = false;
     _isUnitsDownloaded = false;
+    _isProductUnitsDownloaded = false;
     _isUserCategoryDownloaded = false;
   }
 
@@ -2713,6 +2834,7 @@ class SyncProvider extends ChangeNotifier {
     _supplierPart = 0;
     _routesPart = 0;
     _unitsPart = 0;
+    _productUnitsPart = 0;
     _userCategoryPart = 0;
   }
 

@@ -20,12 +20,12 @@ class FailedSyncRepository {
   }) async {
     try {
       final db = await _databaseHelper.database;
-      await db.insert(
-        'FailedSync',
-        {
-          'table_id': tableId,
-          'data_id': dataId,
-        },
+      await db.rawInsert(
+        '''
+        INSERT INTO FailedSync (id, table_id, data_id)
+        VALUES (NULL, ?, ?)
+        ''',
+        [tableId, dataId],
       );
       return const Right(null);
     } catch (e) {

@@ -77,19 +77,39 @@ Map<String, dynamic> _$OrderSubApiToJson(OrderSubApi instance) =>
 Order _$OrderFromJson(Map<String, dynamic> json) => Order(
   id: (json['id'] as num?)?.toInt() ?? -1,
   uuid: json['uuid'] as String? ?? '',
-  orderInvNo: (json['order_inv_no'] as num?)?.toInt() ?? 0,
-  orderCustId: (json['order_cust_id'] as num?)?.toInt() ?? -1,
+  orderInvNo: json['order_inv_no'] == null
+      ? 0
+      : _intFromJsonZero(json['order_inv_no']),
+  orderCustId: json['order_cust_id'] == null
+      ? -1
+      : _intFromJsonNegOne(json['order_cust_id']),
   orderCustName: json['order_cust_name'] as String? ?? '',
-  orderSalesmanId: (json['order_salesman_id'] as num?)?.toInt() ?? -1,
-  orderStockKeeperId: (json['order_stock_keeper_id'] as num?)?.toInt() ?? -1,
-  orderBillerId: (json['order_biller_id'] as num?)?.toInt() ?? -1,
-  orderCheckerId: (json['order_checker_id'] as num?)?.toInt() ?? -1,
+  orderSalesmanId: json['order_salesman_id'] == null
+      ? -1
+      : _intFromJsonNegOne(json['order_salesman_id']),
+  orderStockKeeperId: json['order_stock_keeper_id'] == null
+      ? -1
+      : _intFromJsonNegOne(json['order_stock_keeper_id']),
+  orderBillerId: json['order_biller_id'] == null
+      ? -1
+      : _intFromJsonNegOne(json['order_biller_id']),
+  orderCheckerId: json['order_checker_id'] == null
+      ? -1
+      : _intFromJsonNegOne(json['order_checker_id']),
   orderDateTime: json['order_date_time'] as String? ?? '',
-  orderTotal: (json['order_total'] as num?)?.toDouble() ?? 0.0,
-  orderFreightCharge: (json['order_freight_charge'] as num?)?.toDouble() ?? 0.0,
+  orderTotal: json['order_total'] == null
+      ? 0.0
+      : _doubleFromJsonZero(json['order_total']),
+  orderFreightCharge: json['order_freight_charge'] == null
+      ? 0.0
+      : _doubleFromJsonZero(json['order_freight_charge']),
   orderNote: json['order_note'] as String?,
-  orderApproveFlag: (json['order_approve_flag'] as num?)?.toInt() ?? -1,
-  orderFlag: (json['order_flag'] as num?)?.toInt() ?? 1,
+  orderApproveFlag: json['order_approve_flag'] == null
+      ? -1
+      : _intFromJsonNegOne(json['order_approve_flag']),
+  orderFlag: json['order_flag'] == null
+      ? 1
+      : _intFromJsonOne(json['order_flag']),
   createdAt: json['created_at'] as String? ?? '',
   updatedAt: json['updated_at'] as String? ?? '',
   items: (json['items'] as List<dynamic>?)
@@ -120,30 +140,57 @@ Map<String, dynamic> _$OrderToJson(Order instance) => <String, dynamic>{
 
 OrderSub _$OrderSubFromJson(Map<String, dynamic> json) => OrderSub(
   id: (json['id'] as num?)?.toInt() ?? -1,
-  orderSubOrdrInvId: (json['order_sub_ordr_inv_id'] as num?)?.toInt() ?? 0,
-  orderSubOrdrId: (json['order_sub_ordr_id'] as num?)?.toInt() ?? -1,
-  orderSubCustId: (json['order_sub_cust_id'] as num?)?.toInt() ?? -1,
-  orderSubSalesmanId: (json['order_sub_salesman_id'] as num?)?.toInt() ?? -1,
-  orderSubStockKeeperId:
-      (json['order_sub_stock_keeper_id'] as num?)?.toInt() ?? -1,
+  orderSubOrdrInvId: json['order_sub_ordr_inv_id'] == null
+      ? 0
+      : _intFromJsonZero(json['order_sub_ordr_inv_id']),
+  orderSubOrdrId: json['order_sub_ordr_id'] == null
+      ? -1
+      : _intFromJsonNegOne(json['order_sub_ordr_id']),
+  orderSubCustId: json['order_sub_cust_id'] == null
+      ? -1
+      : _intFromJsonNegOne(json['order_sub_cust_id']),
+  orderSubSalesmanId: json['order_sub_salesman_id'] == null
+      ? -1
+      : _intFromJsonNegOne(json['order_sub_salesman_id']),
+  orderSubStockKeeperId: json['order_sub_stock_keeper_id'] == null
+      ? -1
+      : _intFromJsonNegOne(json['order_sub_stock_keeper_id']),
   orderSubDateTime: json['order_sub_date_time'] as String? ?? '',
-  orderSubPrdId: (json['order_sub_prd_id'] as num?)?.toInt() ?? -1,
-  orderSubUnitId: (json['order_sub_unit_id'] as num?)?.toInt() ?? -1,
-  orderSubCarId: (json['order_sub_car_id'] as num?)?.toInt() ?? -1,
-  orderSubRate: (json['order_sub_rate'] as num?)?.toDouble() ?? 0.0,
-  orderSubUpdateRate:
-      (json['order_sub_update_rate'] as num?)?.toDouble() ?? 0.0,
-  orderSubQty: (json['order_sub_qty'] as num?)?.toDouble() ?? 0.0,
-  orderSubAvailableQty:
-      (json['order_sub_available_qty'] as num?)?.toDouble() ?? 0.0,
-  orderSubUnitBaseQty:
-      (json['order_sub_unit_base_qty'] as num?)?.toDouble() ?? 0.0,
-  orderSubIsCheckedFlag:
-      (json['order_sub_is_checked_flag'] as num?)?.toInt() ?? 0,
-  orderSubOrdrFlag: (json['order_sub_ordr_flag'] as num?)?.toInt() ?? 0,
+  orderSubPrdId: json['order_sub_prd_id'] == null
+      ? -1
+      : _intFromJsonNegOne(json['order_sub_prd_id']),
+  orderSubUnitId: json['order_sub_unit_id'] == null
+      ? -1
+      : _intFromJsonNegOne(json['order_sub_unit_id']),
+  orderSubCarId: json['order_sub_car_id'] == null
+      ? -1
+      : _intFromJsonNegOne(json['order_sub_car_id']),
+  orderSubRate: json['order_sub_rate'] == null
+      ? 0.0
+      : _doubleFromJsonZero(json['order_sub_rate']),
+  orderSubUpdateRate: json['order_sub_update_rate'] == null
+      ? 0.0
+      : _doubleFromJsonZero(json['order_sub_update_rate']),
+  orderSubQty: json['order_sub_qty'] == null
+      ? 0.0
+      : _doubleFromJsonZero(json['order_sub_qty']),
+  orderSubAvailableQty: json['order_sub_available_qty'] == null
+      ? 0.0
+      : _doubleFromJsonZero(json['order_sub_available_qty']),
+  orderSubUnitBaseQty: json['order_sub_unit_base_qty'] == null
+      ? 0.0
+      : _doubleFromJsonZero(json['order_sub_unit_base_qty']),
+  orderSubIsCheckedFlag: json['order_sub_is_checked_flag'] == null
+      ? 0
+      : _intFromJsonZero(json['order_sub_is_checked_flag']),
+  orderSubOrdrFlag: json['order_sub_ordr_flag'] == null
+      ? 0
+      : _intFromJsonZero(json['order_sub_ordr_flag']),
   orderSubNote: json['order_sub_note'] as String?,
   orderSubNarration: json['order_sub_narration'] as String?,
-  orderSubFlag: (json['order_sub_flag'] as num?)?.toInt() ?? 1,
+  orderSubFlag: json['order_sub_flag'] == null
+      ? 1
+      : _intFromJsonOne(json['order_sub_flag']),
   createdAt: json['created_at'] as String? ?? '',
   updatedAt: json['updated_at'] as String? ?? '',
   suggestions: (json['suggestions'] as List<dynamic>?)

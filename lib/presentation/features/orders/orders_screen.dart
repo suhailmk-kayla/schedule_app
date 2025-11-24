@@ -7,6 +7,7 @@ import '../../../models/order_api.dart';
 import '../../../models/order_with_name.dart';
 import '../../../utils/storage_helper.dart';
 import 'create_order_screen.dart';
+import 'order_details_screen.dart';
 
 /// Orders Screen
 /// Displays list of orders with search, route filter, and date filter
@@ -163,18 +164,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
                             userType: _userType,
                             userId: _userId,
                             onTap: () {
-                              // TODO: Navigate to order details screen
-                              // Navigator.push(
-                              //   context,
-                              //   MaterialPageRoute(
-                              //     builder: (_) => OrderDetailsScreen(orderId: order.id),
-                              //   ),
-                              // );
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Order details - Coming soon (Order ID: ${order.id})'),
-                                ),
-                              );
+                              if (_userType == 1) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => OrderDetailsScreen(orderId: order.id),
+                                  ),
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Order details for this role will be available soon.'),
+                                  ),
+                                );
+                              }
                             },
                           );
                         },

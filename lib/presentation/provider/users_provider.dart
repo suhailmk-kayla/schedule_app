@@ -29,6 +29,9 @@ class UsersProvider extends ChangeNotifier {
   List<User> _users = [];
   List<User> get users => _users;
 
+  List<User> _storekeepers = [];
+  List<User> get storekeepers => _storekeepers;
+
   UserWithCategory? _currentUser;
   UserWithCategory? get currentUser => _currentUser;
 
@@ -252,6 +255,29 @@ class UsersProvider extends ChangeNotifier {
         _isLoading = false;
         notifyListeners();
         return true;
+      },
+    );
+  }
+
+  /// Load storekeepers (category 2)
+  /// Converted from KMP's getStorekeepers
+  Future<void> loadStorekeepers() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final result = await _usersRepository.getUsersByCategory(2);
+    result.fold(
+      (failure) {
+        _errorMessage = failure.message;
+        _storekeepers = [];
+        _isLoading = false;
+        notifyListeners();
+      },
+      (list) {
+        _storekeepers = list;
+        _isLoading = false;
+        notifyListeners();
       },
     );
   }

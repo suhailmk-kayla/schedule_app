@@ -6,6 +6,7 @@ import 'package:sqflite/sqflite.dart';
 import '../local/database_helper.dart';
 import '../../models/order_api.dart';
 import '../../models/order_sub_with_details.dart';
+import '../../models/order_with_name.dart';
 import '../../helpers/errors/failures.dart';
 import '../../utils/api_endpoints.dart';
 
@@ -48,8 +49,13 @@ class OrdersRepository {
       final List<Map<String, dynamic>> maps;
 
       // Build query based on filters
-      String whereClause = 'flag > 0 AND flag != 2';
+      String whereClause = 'Orders.flag > 0 AND Orders.flag != 2';
       List<dynamic> whereArgs = [];
+
+      if (salesmanId != null) {
+        whereClause += ' AND Orders.salesmanId = ?';
+        whereArgs.add(salesmanId);
+      }
 
       if (salesmanId != null) {
         whereClause += ' AND salesmanId = ?';
@@ -60,7 +66,8 @@ class OrdersRepository {
         // Need to join with Customers and Routes
         maps = await db.rawQuery(
           '''
-          SELECT Orders.* FROM Orders
+          SELECT Orders.*
+          FROM Orders
           LEFT JOIN Customers ON Customers.customerId = Orders.customerId
           LEFT JOIN Routes ON Routes.routeId = Customers.routId
           WHERE $whereClause AND Routes.routeId = ?
@@ -120,6 +127,67 @@ class OrdersRepository {
 
       final order = Order.fromMap(maps.first);
       return Right(order);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get order with related names (salesman/storekeeper/biller/checker/route)
+  Future<Either<Failure, OrderWithName?>> getOrderWithNamesById(int orderId) async {
+    try {
+      final db = await _database;
+      final maps = await db.rawQuery(
+        '''
+        SELECT
+          COALESCE(sl.name, SalesMan.name) AS salesManName,
+          CASE
+            WHEN Orders.storeKeeperId = -1 THEN ''
+            ELSE COALESCE(storeKeeper.name, '')
+          END AS storeKeeperName,
+          CASE
+            WHEN Customers.routId = -1 THEN ''
+            ELSE COALESCE(Routes.name, '')
+          END AS routeName,
+          CASE
+            WHEN Orders.billerId = -1 THEN ''
+            ELSE COALESCE(biller.name, '')
+          END AS billerName,
+          CASE
+            WHEN Orders.checkerId = -1 THEN ''
+            ELSE COALESCE(checker.name, '')
+          END AS checkerName,
+          Customers.name AS customerDisplayName,
+          Orders.*
+        FROM Orders
+        LEFT JOIN SalesMan ON SalesMan.userId = Orders.salesmanId
+        LEFT JOIN Users sl ON sl.userId = Orders.salesmanId
+        LEFT JOIN Users storeKeeper ON storeKeeper.userId = Orders.storeKeeperId
+        LEFT JOIN Users biller ON biller.userId = Orders.billerId
+        LEFT JOIN Users checker ON checker.userId = Orders.checkerId
+        LEFT JOIN Customers ON Customers.customerId = Orders.customerId
+        LEFT JOIN Routes ON Routes.routeId = Customers.routId
+        WHERE Orders.orderId = ?
+        LIMIT 1
+        ''',
+        [orderId],
+      );
+
+      if (maps.isEmpty) {
+        return const Right(null);
+      }
+
+      final map = maps.first;
+      final order = Order.fromMap(map);
+      final orderWithName = OrderWithName(
+        order: order,
+        salesManName: (map['salesManName'] as String?) ?? '',
+        storeKeeperName: (map['storeKeeperName'] as String?) ?? '',
+        customerName: (map['customerDisplayName'] as String?) ?? order.orderCustName,
+        billerName: (map['billerName'] as String?) ?? '',
+        checkerName: (map['checkerName'] as String?) ?? '',
+        route: (map['routeName'] as String?) ?? '',
+      );
+      return Right(orderWithName);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
     }
@@ -479,10 +547,61 @@ class OrdersRepository {
   Future<Either<Failure, void>> addOrderSub(OrderSub orderSub) async {
     try {
       final db = await _database;
-      await db.insert(
-        'OrderSub',
-        orderSub.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO OrderSub (
+          orderSubId,
+          orderId,
+          invoiceNo,
+          UUID,
+          customerId,
+          salesmanId,
+          storeKeeperId,
+          dateAndTime,
+          productId,
+          unitId,
+          carId,
+          rate,
+          updateRate,
+          quantity,
+          availQty,
+          unitBaseQty,
+          note,
+          narration,
+          orderFlag,
+          createdDateTime,
+          updatedDateTime,
+          isCheckedflag,
+          flag
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''',
+        [
+          orderSub.id,
+          orderSub.orderSubOrdrId,
+          orderSub.orderSubOrdrInvId.toString(),
+          '',
+          orderSub.orderSubCustId,
+          orderSub.orderSubSalesmanId,
+          orderSub.orderSubStockKeeperId,
+          orderSub.orderSubDateTime,
+          orderSub.orderSubPrdId,
+          orderSub.orderSubUnitId,
+          orderSub.orderSubCarId,
+          orderSub.orderSubRate,
+          orderSub.orderSubUpdateRate,
+          orderSub.orderSubQty,
+          orderSub.orderSubAvailableQty,
+          orderSub.orderSubUnitBaseQty,
+          orderSub.orderSubNote ?? '',
+          orderSub.orderSubNarration ?? '',
+          orderSub.orderSubOrdrFlag,
+          orderSub.createdAt,
+          orderSub.updatedAt,
+          orderSub.orderSubIsCheckedFlag,
+          orderSub.orderSubFlag,
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -495,15 +614,65 @@ class OrdersRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
+        const sql = '''
+        INSERT OR REPLACE INTO OrderSub (
+          orderSubId,
+          orderId,
+          invoiceNo,
+          UUID,
+          customerId,
+          salesmanId,
+          storeKeeperId,
+          dateAndTime,
+          productId,
+          unitId,
+          carId,
+          rate,
+          updateRate,
+          quantity,
+          availQty,
+          unitBaseQty,
+          note,
+          narration,
+          orderFlag,
+          createdDateTime,
+          updatedDateTime,
+          isCheckedflag,
+          flag
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''';
         for (final orderSub in orderSubs) {
-          batch.insert(
-            'OrderSub',
-            orderSub.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          await txn.rawInsert(
+            sql,
+            [
+              orderSub.id,
+              orderSub.orderSubOrdrId,
+              orderSub.orderSubOrdrInvId.toString(),
+              '',
+              orderSub.orderSubCustId,
+              orderSub.orderSubSalesmanId,
+              orderSub.orderSubStockKeeperId,
+              orderSub.orderSubDateTime,
+              orderSub.orderSubPrdId,
+              orderSub.orderSubUnitId,
+              orderSub.orderSubCarId,
+              orderSub.orderSubRate,
+              orderSub.orderSubUpdateRate,
+              orderSub.orderSubQty,
+              orderSub.orderSubAvailableQty,
+              orderSub.orderSubUnitBaseQty,
+              orderSub.orderSubNote ?? '',
+              orderSub.orderSubNarration ?? '',
+              orderSub.orderSubOrdrFlag,
+              orderSub.createdAt,
+              orderSub.updatedAt,
+              orderSub.orderSubIsCheckedFlag,
+              orderSub.orderSubFlag,
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -903,6 +1072,33 @@ class OrdersRepository {
       }
 
       return Right(orderSubApi.data);
+    } on DioException catch (e) {
+      return Left(NetworkFailure.fromDioError(e));
+    } catch (e) {
+      return Left(UnknownFailure.fromError(e));
+    }
+  }
+
+  /// Send order (check stock) - calls API
+  /// Converted from KMP's OrderViewModel.sendOrder
+  /// Builds order payload with all order subs and sends to API
+  Future<Either<Failure, OrderApi>> sendOrder(Map<String, dynamic> params) async {
+    try {
+      // Call API
+      final response = await _dio.post(
+        ApiEndpoints.addOrder,
+        data: params,
+      );
+
+      // Parse response
+      final orderApi = OrderApi.fromJson(response.data);
+      if (orderApi.status != 1) {
+        return Left(ServerFailure.fromError(
+          'Failed to send order: ${orderApi.message}',
+        ));
+      }
+
+      return Right(orderApi);
     } on DioException catch (e) {
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {

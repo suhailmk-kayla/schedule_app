@@ -215,10 +215,40 @@ class CustomersRepository {
   Future<Either<Failure, void>> addCustomer(Customer customer) async {
     try {
       final db = await _database;
-      await db.insert(
-        'Customers',
-        customer.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO Customers (
+          id,
+          customerId,
+          code,
+          name,
+          phone,
+          address,
+          routId,
+          salesmanId,
+          rating,
+          deviceToken,
+          createdDateTime,
+          updatedDateTime,
+          flag
+        ) VALUES (
+          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''',
+        [
+          customer.id,
+          customer.code,
+          customer.name,
+          customer.phoneNo,
+          customer.address,
+          customer.routId,
+          customer.salesManId,
+          customer.rating,
+          '',
+          customer.createdAt ?? '',
+          customer.updatedAt ?? '',
+          customer.flag ?? 1,
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -231,15 +261,44 @@ class CustomersRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
+        const sql = '''
+        INSERT OR REPLACE INTO Customers (
+          id,
+          customerId,
+          code,
+          name,
+          phone,
+          address,
+          routId,
+          salesmanId,
+          rating,
+          deviceToken,
+          createdDateTime,
+          updatedDateTime,
+          flag
+        ) VALUES (
+          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''';
         for (final customer in customers) {
-          batch.insert(
-            'Customers',
-            customer.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          await txn.rawInsert(
+            sql,
+            [
+              customer.id,
+              customer.code,
+              customer.name,
+              customer.phoneNo,
+              customer.address,
+              customer.routId,
+              customer.salesManId,
+              customer.rating,
+              '',
+              customer.createdAt ?? '',
+              customer.updatedAt ?? '',
+              customer.flag ?? 1,
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {

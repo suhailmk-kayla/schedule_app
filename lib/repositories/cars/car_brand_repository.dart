@@ -99,10 +99,16 @@ class CarBrandRepository {
   Future<Either<Failure, void>> addCarBrand(Brand brand) async {
     try {
       final db = await _database;
-      await db.insert(
-        'CarBrand',
-        brand.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO CarBrand (id,carBrandId, name, flag)
+        VALUES (NULL, ?, ?, ?)
+        ''',
+        [
+          brand.id,
+          brand.brandName,
+          brand.flag ?? 1,
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -116,15 +122,20 @@ class CarBrandRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
+        const sql = '''
+        INSERT OR REPLACE INTO CarBrand (id, carBrandId, name, flag)
+        VALUES (NULL, ?, ?, ?)
+        ''';
         for (final brand in brands) {
-          batch.insert(
-            'CarBrand',
-            brand.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          await txn.rawInsert(
+            sql,
+            [
+              brand.id,
+              brand.brandName,
+              brand.flag ?? 1,
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {

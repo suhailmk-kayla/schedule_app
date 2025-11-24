@@ -236,10 +236,40 @@ class UsersRepository {
   Future<Either<Failure, void>> addUser(User user) async {
     try {
       final db = await _database;
-      await db.insert(
-        'Users',
-        user.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO Users (
+          id,
+          userId,
+          code,
+          name,
+          phone,
+          address,
+          categoryId,
+          password,
+          createdDateTime,
+          updatedDateTime,
+          deviceToken,
+          multiDeviceLogin,
+          flag
+        ) VALUES (
+          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''',
+        [
+          user.id,
+          user.code,
+          user.name,
+          user.phoneNo,
+          user.address,
+          user.catId,
+          '',
+          '',
+          '',
+          '',
+          0,
+          1,
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -252,27 +282,46 @@ class UsersRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
+        const sql = '''
+        INSERT OR REPLACE INTO Users (
+          id,
+          userId,
+          code,
+          name,
+          phone,
+          address,
+          categoryId,
+          password,
+          createdDateTime,
+          updatedDateTime,
+          deviceToken,
+          multiDeviceLogin,
+          flag
+        ) VALUES (
+          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''';
         for (final userDown in users) {
-          // Skip google users
           if (userDown.code == 'google') continue;
 
-          final user = User(
-            id: userDown.id,
-            name: userDown.name,
-            code: userDown.code,
-            phoneNo: userDown.phoneNo,
-            catId: userDown.userCatId,
-            address: userDown.address,
-          );
-
-          batch.insert(
-            'Users',
-            user.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          await txn.rawInsert(
+            sql,
+            [
+              userDown.id,
+              userDown.code,
+              userDown.name,
+              userDown.phoneNo,
+              userDown.address,
+              userDown.userCatId,
+              '',
+              userDown.createdAt ?? '',
+              userDown.updatedAt ?? '',
+              '',
+              0,
+              userDown.flag ?? 1,
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {

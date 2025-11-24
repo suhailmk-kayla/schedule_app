@@ -120,43 +120,83 @@ class Order {
   @JsonKey(defaultValue: '')
   final String uuid;
 
-  @JsonKey(name: 'order_inv_no', defaultValue: 0)
+  @JsonKey(
+    name: 'order_inv_no',
+    defaultValue: 0,
+    fromJson: _intFromJsonZero,
+  )
   final int orderInvNo;
 
-  @JsonKey(name: 'order_cust_id', defaultValue: -1)
+  @JsonKey(
+    name: 'order_cust_id',
+    defaultValue: -1,
+    fromJson: _intFromJsonNegOne,
+  )
   final int orderCustId;
 
   @JsonKey(name: 'order_cust_name', defaultValue: '')
   final String orderCustName;
 
-  @JsonKey(name: 'order_salesman_id', defaultValue: -1)
+  @JsonKey(
+    name: 'order_salesman_id',
+    defaultValue: -1,
+    fromJson: _intFromJsonNegOne,
+  )
   final int orderSalesmanId;
 
-  @JsonKey(name: 'order_stock_keeper_id', defaultValue: -1)
+  @JsonKey(
+    name: 'order_stock_keeper_id',
+    defaultValue: -1,
+    fromJson: _intFromJsonNegOne,
+  )
   final int orderStockKeeperId;
 
-  @JsonKey(name: 'order_biller_id', defaultValue: -1)
+  @JsonKey(
+    name: 'order_biller_id',
+    defaultValue: -1,
+    fromJson: _intFromJsonNegOne,
+  )
   final int orderBillerId;
 
-  @JsonKey(name: 'order_checker_id', defaultValue: -1)
+  @JsonKey(
+    name: 'order_checker_id',
+    defaultValue: -1,
+    fromJson: _intFromJsonNegOne,
+  )
   final int orderCheckerId;
 
   @JsonKey(name: 'order_date_time', defaultValue: '')
   final String orderDateTime;
 
-  @JsonKey(name: 'order_total', defaultValue: 0.0)
+  @JsonKey(
+    name: 'order_total',
+    defaultValue: 0.0,
+    fromJson: _doubleFromJsonZero,
+  )
   final double orderTotal;
 
-  @JsonKey(name: 'order_freight_charge', defaultValue: 0.0)
+  @JsonKey(
+    name: 'order_freight_charge',
+    defaultValue: 0.0,
+    fromJson: _doubleFromJsonZero,
+  )
   final double orderFreightCharge;
 
   @JsonKey(name: 'order_note')
   final String? orderNote;
 
-  @JsonKey(name: 'order_approve_flag', defaultValue: -1)
+  @JsonKey(
+    name: 'order_approve_flag',
+    defaultValue: -1,
+    fromJson: _intFromJsonNegOne,
+  )
   final int orderApproveFlag;
 
-  @JsonKey(name: 'order_flag', defaultValue: 1)
+  @JsonKey(
+    name: 'order_flag',
+    defaultValue: 1,
+    fromJson: _intFromJsonOne,
+  )
   final int orderFlag;
 
   @JsonKey(name: 'created_at', defaultValue: '')
@@ -247,52 +287,112 @@ class OrderSub {
   @JsonKey(defaultValue: -1)
   final int id;
 
-  @JsonKey(name: 'order_sub_ordr_inv_id', defaultValue: 0)
+  @JsonKey(
+    name: 'order_sub_ordr_inv_id',
+    defaultValue: 0,
+    fromJson: _intFromJsonZero,
+  )
   final int orderSubOrdrInvId;
 
-  @JsonKey(name: 'order_sub_ordr_id', defaultValue: -1)
+  @JsonKey(
+    name: 'order_sub_ordr_id',
+    defaultValue: -1,
+    fromJson: _intFromJsonNegOne,
+  )
   final int orderSubOrdrId;
 
-  @JsonKey(name: 'order_sub_cust_id', defaultValue: -1)
+  @JsonKey(
+    name: 'order_sub_cust_id',
+    defaultValue: -1,
+    fromJson: _intFromJsonNegOne,
+  )
   final int orderSubCustId;
 
-  @JsonKey(name: 'order_sub_salesman_id', defaultValue: -1)
+  @JsonKey(
+    name: 'order_sub_salesman_id',
+    defaultValue: -1,
+    fromJson: _intFromJsonNegOne,
+  )
   final int orderSubSalesmanId;
 
-  @JsonKey(name: 'order_sub_stock_keeper_id', defaultValue: -1)
+  @JsonKey(
+    name: 'order_sub_stock_keeper_id',
+    defaultValue: -1,
+    fromJson: _intFromJsonNegOne,
+  )
   final int orderSubStockKeeperId;
 
   @JsonKey(name: 'order_sub_date_time', defaultValue: '')
   final String orderSubDateTime;
 
-  @JsonKey(name: 'order_sub_prd_id', defaultValue: -1)
+  @JsonKey(
+    name: 'order_sub_prd_id',
+    defaultValue: -1,
+    fromJson: _intFromJsonNegOne,
+  )
   final int orderSubPrdId;
 
-  @JsonKey(name: 'order_sub_unit_id', defaultValue: -1)
+  @JsonKey(
+    name: 'order_sub_unit_id',
+    defaultValue: -1,
+    fromJson: _intFromJsonNegOne,
+  )
   final int orderSubUnitId;
 
-  @JsonKey(name: 'order_sub_car_id', defaultValue: -1)
+  @JsonKey(
+    name: 'order_sub_car_id',
+    defaultValue: -1,
+    fromJson: _intFromJsonNegOne,
+  )
   final int orderSubCarId;
 
-  @JsonKey(name: 'order_sub_rate', defaultValue: 0.0)
+  @JsonKey(
+    name: 'order_sub_rate',
+    defaultValue: 0.0,
+    fromJson: _doubleFromJsonZero,
+  )
   final double orderSubRate;
 
-  @JsonKey(name: 'order_sub_update_rate', defaultValue: 0.0)
+  @JsonKey(
+    name: 'order_sub_update_rate',
+    defaultValue: 0.0,
+    fromJson: _doubleFromJsonZero,
+  )
   final double orderSubUpdateRate;
 
-  @JsonKey(name: 'order_sub_qty', defaultValue: 0.0)
+  @JsonKey(
+    name: 'order_sub_qty',
+    defaultValue: 0.0,
+    fromJson: _doubleFromJsonZero,
+  )
   final double orderSubQty;
 
-  @JsonKey(name: 'order_sub_available_qty', defaultValue: 0.0)
+  @JsonKey(
+    name: 'order_sub_available_qty',
+    defaultValue: 0.0,
+    fromJson: _doubleFromJsonZero,
+  )
   final double orderSubAvailableQty;
 
-  @JsonKey(name: 'order_sub_unit_base_qty', defaultValue: 0.0)
+  @JsonKey(
+    name: 'order_sub_unit_base_qty',
+    defaultValue: 0.0,
+    fromJson: _doubleFromJsonZero,
+  )
   final double orderSubUnitBaseQty;
 
-  @JsonKey(name: 'order_sub_is_checked_flag', defaultValue: 0)
+  @JsonKey(
+    name: 'order_sub_is_checked_flag',
+    defaultValue: 0,
+    fromJson: _intFromJsonZero,
+  )
   final int orderSubIsCheckedFlag;
 
-  @JsonKey(name: 'order_sub_ordr_flag', defaultValue: 0)
+  @JsonKey(
+    name: 'order_sub_ordr_flag',
+    defaultValue: 0,
+    fromJson: _intFromJsonZero,
+  )
   final int orderSubOrdrFlag;
 
   @JsonKey(name: 'order_sub_note')
@@ -301,7 +401,11 @@ class OrderSub {
   @JsonKey(name: 'order_sub_narration')
   final String? orderSubNarration;
 
-  @JsonKey(name: 'order_sub_flag', defaultValue: 1)
+  @JsonKey(
+    name: 'order_sub_flag',
+    defaultValue: 1,
+    fromJson: _intFromJsonOne,
+  )
   final int orderSubFlag;
 
   @JsonKey(name: 'created_at', defaultValue: '')
@@ -459,4 +563,33 @@ class OrderSubSuggestion {
     };
   }
 }
+
+// ============================================================================
+// JSON Helper Functions
+// ============================================================================
+
+int _parseInt(dynamic value, int defaultValue) {
+  if (value == null) return defaultValue;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String && value.trim().isNotEmpty) {
+    return int.tryParse(value) ?? defaultValue;
+  }
+  return defaultValue;
+}
+
+double _parseDouble(dynamic value, double defaultValue) {
+  if (value == null) return defaultValue;
+  if (value is double) return value;
+  if (value is num) return value.toDouble();
+  if (value is String && value.trim().isNotEmpty) {
+    return double.tryParse(value) ?? defaultValue;
+  }
+  return defaultValue;
+}
+
+int _intFromJsonNegOne(dynamic value) => _parseInt(value, -1);
+int _intFromJsonZero(dynamic value) => _parseInt(value, 0);
+int _intFromJsonOne(dynamic value) => _parseInt(value, 1);
+double _doubleFromJsonZero(dynamic value) => _parseDouble(value, 0.0);
 

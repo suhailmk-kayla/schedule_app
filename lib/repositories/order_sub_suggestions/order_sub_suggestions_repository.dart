@@ -108,10 +108,27 @@ class OrderSubSuggestionsRepository {
   ) async {
     try {
       final db = await _database;
-      await db.insert(
-        'OrderSubSuggestions',
-        suggestion.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO OrderSubSuggestions (
+          sugId,
+          orderSubId,
+          productId,
+          price,
+          note,
+          flag
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?
+        )
+        ''',
+        [
+          suggestion.id,
+          suggestion.orderSubId,
+          suggestion.prodId,
+          suggestion.price,
+          suggestion.note ?? '',
+          suggestion.flag ?? 1,
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -126,15 +143,31 @@ class OrderSubSuggestionsRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
+        const sql = '''
+        INSERT OR REPLACE INTO OrderSubSuggestions (
+          sugId,
+          orderSubId,
+          productId,
+          price,
+          note,
+          flag
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?
+        )
+        ''';
         for (final suggestion in suggestions) {
-          batch.insert(
-            'OrderSubSuggestions',
-            suggestion.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          await txn.rawInsert(
+            sql,
+            [
+              suggestion.id,
+              suggestion.orderSubId,
+              suggestion.prodId,
+              suggestion.price,
+              suggestion.note ?? '',
+              suggestion.flag ?? 1,
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {

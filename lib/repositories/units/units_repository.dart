@@ -219,10 +219,34 @@ class UnitsRepository {
   Future<Either<Failure, void>> addUnit(Units unit) async {
     try {
       final db = await _database;
-      await db.insert(
-        'Units',
-        unit.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO Units (
+          id,
+          unitId,
+          code,
+          name,
+          displayName,
+          type,
+          baseId,
+          baseQty,
+          comment,
+          flag
+        ) VALUES (
+          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''',
+        [
+          unit.id,
+          unit.code,
+          unit.name,
+          unit.displayName,
+          unit.type,
+          unit.baseId,
+          unit.baseQty,
+          unit.comment,
+          1,
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -235,15 +259,38 @@ class UnitsRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
+        const sql = '''
+        INSERT OR REPLACE INTO Units (
+          id,
+          unitId,
+          code,
+          name,
+          displayName,
+          type,
+          baseId,
+          baseQty,
+          comment,
+          flag
+        ) VALUES (
+          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''';
         for (final unit in units) {
-          batch.insert(
-            'Units',
-            unit.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          await txn.rawInsert(
+            sql,
+            [
+              unit.id,
+              unit.code,
+              unit.name,
+              unit.displayName,
+              unit.type,
+              unit.baseId,
+              unit.baseQty,
+              unit.comment,
+              1,
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {

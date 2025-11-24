@@ -442,10 +442,55 @@ class OutOfStockRepository {
   Future<Either<Failure, void>> addOutOfStockMaster(OutOfStock outOfStock) async {
     try {
       final db = await _database;
-      await db.insert(
-        'OutOfStockMaster',
-        outOfStock.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO OutOfStockMaster (
+          oospMasterId,
+          orderSubId,
+          custId,
+          salesmanId,
+          storekeeperId,
+          dateAndTime,
+          productId,
+          unitId,
+          carId,
+          qty,
+          availQty,
+          baseQty,
+          note,
+          narration,
+          createdDateTime,
+          updatedDateTime,
+          isCompleteflag,
+          flag,
+          UUID,
+          isViewed
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''',
+        [
+          outOfStock.id,
+          outOfStock.outosOrderSubId,
+          outOfStock.outosCustId,
+          outOfStock.outosSalesManId,
+          outOfStock.outosStockKeeperId,
+          outOfStock.outosDateAndTime,
+          outOfStock.outosProdId,
+          outOfStock.outosUnitId,
+          outOfStock.outosCarId,
+          outOfStock.outosQty,
+          outOfStock.outosAvailableQty,
+          outOfStock.outosUnitBaseQty,
+          outOfStock.outosNote ?? '',
+          outOfStock.outosNarration ?? '',
+          outOfStock.createdAt ?? '',
+          outOfStock.updatedAt ?? '',
+          outOfStock.outosIsCompleatedFlag,
+          outOfStock.outosFlag ?? 0,
+          outOfStock.uuid,
+          0,
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -460,15 +505,59 @@ class OutOfStockRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
+        const sql = '''
+        INSERT OR REPLACE INTO OutOfStockMaster (
+          oospMasterId,
+          orderSubId,
+          custId,
+          salesmanId,
+          storekeeperId,
+          dateAndTime,
+          productId,
+          unitId,
+          carId,
+          qty,
+          availQty,
+          baseQty,
+          note,
+          narration,
+          createdDateTime,
+          updatedDateTime,
+          isCompleteflag,
+          flag,
+          UUID,
+          isViewed
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''';
         for (final outOfStock in outOfStocks) {
-          batch.insert(
-            'OutOfStockMaster',
-            outOfStock.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          await txn.rawInsert(
+            sql,
+            [
+              outOfStock.id,
+              outOfStock.outosOrderSubId,
+              outOfStock.outosCustId,
+              outOfStock.outosSalesManId,
+              outOfStock.outosStockKeeperId,
+              outOfStock.outosDateAndTime,
+              outOfStock.outosProdId,
+              outOfStock.outosUnitId,
+              outOfStock.outosCarId,
+              outOfStock.outosQty,
+              outOfStock.outosAvailableQty,
+              outOfStock.outosUnitBaseQty,
+              outOfStock.outosNote ?? '',
+              outOfStock.outosNarration ?? '',
+              outOfStock.createdAt ?? '',
+              outOfStock.updatedAt ?? '',
+              outOfStock.outosIsCompleatedFlag,
+              outOfStock.outosFlag ?? 0,
+              outOfStock.uuid,
+              0,
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -482,10 +571,65 @@ class OutOfStockRepository {
   ) async {
     try {
       final db = await _database;
-      await db.insert(
-        'OutOfStockProducts',
-        outOfStockSub.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO OutOfStockProducts (
+          oospId,
+          oospMasterId,
+          orderSubId,
+          custId,
+          salesmanId,
+          storekeeperId,
+          dateAndTime,
+          supplierId,
+          productId,
+          unitId,
+          carId,
+          rate,
+          updateRate,
+          qty,
+          availQty,
+          baseQty,
+          note,
+          narration,
+          oospFlag,
+          createdDateTime,
+          updatedDateTime,
+          isCheckedflag,
+          flag,
+          UUID,
+          isViewed
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''',
+        [
+          outOfStockSub.id,
+          outOfStockSub.outosSubOutosId,
+          outOfStockSub.outosSubOrderSubId,
+          outOfStockSub.outosSubCustId,
+          outOfStockSub.outosSubSalesManId,
+          outOfStockSub.outosSubStockKeeperId,
+          outOfStockSub.outosSubDateAndTime,
+          outOfStockSub.outosSubSuppId,
+          outOfStockSub.outosSubProdId,
+          outOfStockSub.outosSubUnitId,
+          outOfStockSub.outosSubCarId,
+          outOfStockSub.outosSubRate,
+          outOfStockSub.outosSubUpdatedRate,
+          outOfStockSub.outosSubQty,
+          outOfStockSub.outosSubAvailableQty,
+          outOfStockSub.outosSubUnitBaseQty,
+          outOfStockSub.outosSubNote ?? '',
+          outOfStockSub.outosSubNarration ?? '',
+          outOfStockSub.outosSubStatusFlag,
+          outOfStockSub.createdAt,
+          outOfStockSub.updatedAt,
+          outOfStockSub.outosSubIsCheckedFlag,
+          outOfStockSub.outosSubFlag ?? 0,
+          outOfStockSub.uuid,
+          0,
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -500,15 +644,69 @@ class OutOfStockRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
+        const sql = '''
+        INSERT OR REPLACE INTO OutOfStockProducts (
+          oospId,
+          oospMasterId,
+          orderSubId,
+          custId,
+          salesmanId,
+          storekeeperId,
+          dateAndTime,
+          supplierId,
+          productId,
+          unitId,
+          carId,
+          rate,
+          updateRate,
+          qty,
+          availQty,
+          baseQty,
+          note,
+          narration,
+          oospFlag,
+          createdDateTime,
+          updatedDateTime,
+          isCheckedflag,
+          flag,
+          UUID,
+          isViewed
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''';
         for (final outOfStockSub in outOfStockSubs) {
-          batch.insert(
-            'OutOfStockProducts',
-            outOfStockSub.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          await txn.rawInsert(
+            sql,
+            [
+              outOfStockSub.id,
+              outOfStockSub.outosSubOutosId,
+              outOfStockSub.outosSubOrderSubId,
+              outOfStockSub.outosSubCustId,
+              outOfStockSub.outosSubSalesManId,
+              outOfStockSub.outosSubStockKeeperId,
+              outOfStockSub.outosSubDateAndTime,
+              outOfStockSub.outosSubSuppId,
+              outOfStockSub.outosSubProdId,
+              outOfStockSub.outosSubUnitId,
+              outOfStockSub.outosSubCarId,
+              outOfStockSub.outosSubRate,
+              outOfStockSub.outosSubUpdatedRate,
+              outOfStockSub.outosSubQty,
+              outOfStockSub.outosSubAvailableQty,
+              outOfStockSub.outosSubUnitBaseQty,
+              outOfStockSub.outosSubNote ?? '',
+              outOfStockSub.outosSubNarration ?? '',
+              outOfStockSub.outosSubStatusFlag,
+              outOfStockSub.createdAt,
+              outOfStockSub.updatedAt,
+              outOfStockSub.outosSubIsCheckedFlag,
+              outOfStockSub.outosSubFlag ?? 0,
+              outOfStockSub.uuid,
+              0,
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {

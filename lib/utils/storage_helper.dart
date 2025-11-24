@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Storage Helper
 /// Manages secure storage for tokens and user data
@@ -101,12 +103,75 @@ class StorageHelper {
   }
 
   // ============================================================================
+  // Pending Notifications Management
+  // ============================================================================
+
+  /// Get all pending notifications stored in SharedPreferences
+  /// Returns list of notification data maps
+  static Future<List<Map<String, dynamic>>> getPendingNotifications() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonString = prefs.getString('pending_notifications_list');
+      
+      if (jsonString == null || jsonString.isEmpty) {
+        return [];
+      }
+      
+      final List<dynamic> jsonList = json.decode(jsonString);
+      return jsonList
+          .map((item) => item as Map<String, dynamic>)
+          .toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Clear all pending notifications
+  static Future<void> clearPendingNotifications() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('pending_notifications_list');
+    } catch (e) {
+      // Ignore errors
+    }
+  }
+
+  /// Remove a specific pending notification by timestamp
+  /// Used to remove processed notifications
+  static Future<void> removePendingNotification(int timestamp) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonString = prefs.getString('pending_notifications_list');
+      
+      if (jsonString == null || jsonString.isEmpty) {
+        return;
+      }
+      
+      final List<dynamic> jsonList = json.decode(jsonString);
+      jsonList.removeWhere((item) {
+        final map = item as Map<String, dynamic>;
+        return map['timestamp'] == timestamp;
+      });
+      
+      await prefs.setString('pending_notifications_list', json.encode(jsonList));
+    } catch (e) {
+      // Ignore errors
+    }
+  }
+
+  // ============================================================================
   // Clear All Data
   // ============================================================================
 
-  /// Clear all stored data
+  /// Clear all stored data (including pending notifications)
   static Future<void> clearAll() async {
+    // Clear all FlutterSecureStorage (tokens, user data, etc.)
     await _storage.deleteAll();
+    
+    // Clear all SharedPreferences (not just pending notifications)
+    // This ensures no data from previous session remains
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
   }
 }
 

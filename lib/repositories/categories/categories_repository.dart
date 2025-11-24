@@ -155,10 +155,17 @@ class CategoriesRepository {
   Future<Either<Failure, void>> addCategory(Category category) async {
     try {
       final db = await _database;
-      await db.insert(
-        'Category',
-        category.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO Category (id, categoryId, name, remark, flag)
+        VALUES (NULL, ?, ?, ?, ?)
+        ''',
+        [
+          category.id,
+          category.name,
+          category.remark,
+          1,
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -172,15 +179,21 @@ class CategoriesRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
+        const sql = '''
+        INSERT OR REPLACE INTO Category (id, categoryId, name, remark, flag)
+        VALUES (NULL, ?, ?, ?, ?)
+        ''';
         for (final category in categories) {
-          batch.insert(
-            'Category',
-            category.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          await txn.rawInsert(
+            sql,
+            [
+              category.id,
+              category.name,
+              category.remark,
+              1,
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {

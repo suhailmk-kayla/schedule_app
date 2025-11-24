@@ -55,34 +55,39 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
 
   Future<void> _loadUnits() async {
     final productsProvider = Provider.of<ProductsProvider>(context, listen: false);
-    
     // Load base unit first
     await productsProvider.loadBaseUnits();
-    
     // If product has baseUnitId, load derived units
     if (widget.product.base_unit_id != -1) {
       await productsProvider.loadDerivedUnits(widget.product.base_unit_id);
     }
-
     // Get units from provider
     final units = productsProvider.unitList;
-    
-    // Set default unit if not set
+    // Set default unit if not set (matches KMP's ProductListScreen.kt line 1088-1090)
     if (_selectedUnitId == -1 && units.isNotEmpty) {
-      // Try to find default unit or base unit
-      Units? defaultUnit;
-      try {
-        defaultUnit = units.firstWhere(
-          (u) => u.id == widget.product.default_unit_id,
-        );
-      } catch (_) {
-        try {
-          defaultUnit = units.firstWhere(
-            (u) => u.id == widget.product.base_unit_id,
-          );
-        } catch (_) {
+      // Try to find default unit, base unit, or use first available
+      Units defaultUnit;
+      
+      // Try default_unit_id first (if valid)
+      if (widget.product.default_unit_id != -1) {
+        final found = units.where((u) => u.id == widget.product.default_unit_id).firstOrNull;
+        if (found != null) {
+          defaultUnit = found;
+        } else if (widget.product.base_unit_id != -1) {
+          // If not found, try base_unit_id (if valid)
+          final baseFound = units.where((u) => u.id == widget.product.base_unit_id).firstOrNull;
+          defaultUnit = baseFound ?? units.first;
+        } else {
+          // Use first unit in list (matches KMP line 1089)
           defaultUnit = units.first;
         }
+      } else if (widget.product.base_unit_id != -1) {
+        // Try base_unit_id if default_unit_id is not set
+        final baseFound = units.where((u) => u.id == widget.product.base_unit_id).firstOrNull;
+        defaultUnit = baseFound ?? units.first;
+      } else {
+        // Use first unit in list
+        defaultUnit = units.first;
       }
       
       _selectedUnitId = defaultUnit.id;

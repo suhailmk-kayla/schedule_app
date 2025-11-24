@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'dart:developer' as developer;
+import 'package:flutter/services.dart';
 import 'package:get_it/get_it.dart';
 import 'push_notification_handler.dart';
 import '../presentation/provider/sync_provider.dart';
@@ -31,6 +32,7 @@ class PushNotificationHelper {
 
       // Request permission for push notifications
       OneSignal.Notifications.requestPermission(true);
+      
 
       // Track push subscription changes (IMPORTANT: detects when token is ready)
       OneSignal.User.pushSubscription.addObserver((state) {
@@ -90,6 +92,13 @@ class PushNotificationHelper {
       OneSignal.Notifications.addPermissionObserver((state) {
         developer.log('OneSignal permission changed: ${state.toString()}');
       });
+
+      // Set up Firebase Messaging Service method channel
+      // This catches ALL notifications (including silent ones) before OneSignal processes them
+      // Matches KMP's MyFirebaseMessagingService approach
+      // Why: OneSignal SDK listeners might skip silent notifications, but FirebaseMessagingService receives ALL
+      // This ensures data syncing works even when app is in background or closed
+      _setupFirebaseMessagingChannel();
 
       _isInitialized = true;
       developer.log('OneSignal initialized successfully');
@@ -168,6 +177,204 @@ class PushNotificationHelper {
     }
     developer.log('OneSignal User ID not available after $maxRetries retries');
     return null;
+  }
+
+  /// Set up method channel to receive notifications from Firebase Messaging Service
+  /// This catches silent notifications that OneSignal listeners might miss
+  /// Matches KMP's MyFirebaseMessagingService approach
+  /// In KMP, MyFirebaseMessagingService directly calls PushNotificationHandler.handleNotification
+  /// Here, we forward to Flutter which then calls PushNotificationHandler.handleNotification
+  static void _setupFirebaseMessagingChannel() {
+    const MethodChannel channel = MethodChannel('com.foms.schedule/firebase_notifications');
+    
+    channel.setMethodCallHandler((call) async {
+      if (call.method == 'onNotificationReceived') {
+        developer.log('PushNotificationHelper: Notification received from Firebase service (silent notification handler)');
+        final data = call.arguments as Map<dynamic, dynamic>?;
+        if (data != null) {
+          // Convert Map<dynamic, dynamic> to Map<String, dynamic>
+          final notificationData = Map<String, dynamic>.from(
+            data.map((key, value) => MapEntry(key.toString(), value)),
+          );
+          developer.log('PushNotificationHelper: Processing notification from Firebase: $notificationData');
+          // Process through the same handler as OneSignal notifications
+          // This matches KMP's PushNotificationHandler.handleNotification(json, database)
+          await _processNotification(notificationData);
+        }
+      }
+    });
+    
+    developer.log('PushNotificationHelper: Firebase Messaging Service channel set up');
+  }
+
+  /// Process stored notifications from SharedPreferences
+  /// Called when app starts (after user is logged in)
+  /// Processes notifications that were stored when Flutter engine was unavailable
+  static Future<void> processStoredNotifications() async {
+    try {
+      // Check if user is logged in (don't process if not logged in)
+      final isLoggedIn = await StorageHelper.getIsUserLogin();
+      if (isLoggedIn != '1') {
+        developer.log('PushNotificationHelper: User not logged in, skipping stored notifications');
+        return;
+      }
+
+      // Get pending notifications
+      final pendingNotifications = await StorageHelper.getPendingNotifications();
+      
+      if (pendingNotifications.isEmpty) {
+        developer.log('PushNotificationHelper: No pending notifications to process');
+        return;
+      }
+
+      developer.log('PushNotificationHelper: Processing ${pendingNotifications.length} stored notifications');
+
+      // Get SyncProvider instance
+      SyncProvider? syncProvider;
+      try {
+        syncProvider = GetIt.instance<SyncProvider>();
+      } catch (e) {
+        developer.log('PushNotificationHelper: SyncProvider not available: $e');
+        return;
+      }
+
+      // Process each notification with duplicate prevention
+      final processedTimestamps = <int>[];
+      final processedDataIds = <String>{}; // Track processed data_ids to prevent duplicates
+      
+      for (final notification in pendingNotifications) {
+        try {
+          // Extract timestamp and data
+          final timestamp = notification['timestamp'] as int?;
+          final data = notification['data'] as Map<String, dynamic>?;
+          
+          if (timestamp == null || data == null) {
+            developer.log('PushNotificationHelper: Invalid notification format, skipping');
+            continue;
+          }
+
+          // Convert data to proper format (handle type casting)
+          final notificationData = _convertStoredDataToNotificationFormat(data);
+          
+          // Extract data_ids to create unique key for duplicate detection
+          final dataIds = _extractDataIds(notificationData);
+          final dataIdsKey = dataIds.join('|');
+          
+          // Skip if we've already processed this exact notification
+          if (processedDataIds.contains(dataIdsKey)) {
+            developer.log('PushNotificationHelper: Duplicate notification detected, skipping (timestamp: $timestamp)');
+            // Still remove it to prevent reprocessing
+            processedTimestamps.add(timestamp);
+            continue;
+          }
+
+          developer.log('PushNotificationHelper: Processing stored notification (timestamp: $timestamp)');
+
+          // Process notification
+          await PushNotificationHandler.handleNotification(
+            notificationData,
+            syncProvider,
+          );
+
+          // Mark as processed
+          processedTimestamps.add(timestamp);
+          processedDataIds.add(dataIdsKey);
+          developer.log('PushNotificationHelper: Successfully processed notification (timestamp: $timestamp)');
+        } catch (e, stackTrace) {
+          developer.log(
+            'PushNotificationHelper: Error processing stored notification: $e',
+            error: e,
+            stackTrace: stackTrace,
+          );
+          // Continue processing other notifications even if one fails
+        }
+      }
+
+      // Remove processed notifications
+      for (final timestamp in processedTimestamps) {
+        await StorageHelper.removePendingNotification(timestamp);
+      }
+
+      developer.log('PushNotificationHelper: Processed ${processedTimestamps.length} stored notifications');
+    } catch (e, stackTrace) {
+      developer.log(
+        'PushNotificationHelper: Error in processStoredNotifications: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  /// Extract data_ids from notification data to create unique key
+  /// Returns list of strings in format "table_id" for duplicate detection
+  static List<String> _extractDataIds(Map<String, dynamic> notificationData) {
+    final dataIds = <String>[];
+    
+    try {
+      // Try to extract from 'data' key
+      final data = notificationData['data'] as Map<String, dynamic>?;
+      if (data != null) {
+        final dataIdsArray = data['data_ids'] as List<dynamic>?;
+        if (dataIdsArray != null) {
+          for (final item in dataIdsArray) {
+            if (item is Map<String, dynamic>) {
+              final table = item['table']?.toString() ?? '0';
+              final id = item['id']?.toString() ?? '0';
+              dataIds.add('${table}_$id');
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+    
+    return dataIds;
+  }
+
+  /// Convert stored data to notification format
+  /// Handles proper type casting from JSON strings back to proper types
+  static Map<String, dynamic> _convertStoredDataToNotificationFormat(Map<String, dynamic> data) {
+    final result = <String, dynamic>{};
+    
+    for (final entry in data.entries) {
+      final key = entry.key;
+      final value = entry.value;
+      
+      if (value is Map) {
+        // Recursively convert nested maps
+        result[key] = _convertStoredDataToNotificationFormat(
+          Map<String, dynamic>.from(value),
+        );
+      } else if (value is List) {
+        // Convert list items
+        result[key] = value.map((item) {
+          if (item is Map) {
+            return _convertStoredDataToNotificationFormat(
+              Map<String, dynamic>.from(item),
+            );
+          }
+          return item;
+        }).toList();
+      } else if (value is String) {
+        // Try to parse as number if it looks like one
+        if (value == 'true' || value == 'false') {
+          result[key] = value == 'true';
+        } else if (RegExp(r'^-?\d+$').hasMatch(value)) {
+          // Integer
+          result[key] = int.tryParse(value) ?? value;
+        } else if (RegExp(r'^-?\d+\.\d+$').hasMatch(value)) {
+          // Double
+          result[key] = double.tryParse(value) ?? value;
+        } else {
+          result[key] = value;
+        }
+      } else {
+        result[key] = value;
+      }
+    }
+    
+    return result;
   }
 
   /// Check if OneSignal is initialized

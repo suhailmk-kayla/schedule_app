@@ -1,5 +1,4 @@
 import 'package:either_dart/either.dart';
-import 'package:sqflite/sqflite.dart';
 import '../local/database_helper.dart';
 import '../../models/packed_subs_model.dart';
 import '../../helpers/errors/failures.dart';
@@ -46,13 +45,12 @@ class PackedSubsRepository {
   }) async {
     try {
       final db = await _databaseHelper.database;
-      await db.insert(
-        'PackedSubs',
-        {
-          'orderSubId': orderSubId,
-          'quantity': quantity,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO PackedSubs (orderSubId, quantity)
+        VALUES (?, ?)
+        ''',
+        [orderSubId, quantity],
       );
       return const Right(null);
     } catch (e) {

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:schedule_frontend_flutter/helpers/admin_registration_helper.dart';
 import 'di.dart';
 import 'utils/push_notification_helper.dart';
 import 'utils/notification_manager.dart';
@@ -20,7 +19,6 @@ import 'presentation/provider/units_provider.dart';
 import 'presentation/provider/categories_provider.dart';
 import 'presentation/provider/sub_categories_provider.dart';
 import 'presentation/provider/cars_provider.dart';
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // final result = await createAdminAccount();
@@ -33,15 +31,41 @@ void main() async {
     // Log error but don't block app startup
     debugPrint('OneSignal initialization failed: $e');
   }
-
   // Initialize dependencies (database, dio, repositories, providers)
   await setupDependencies();
-
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    if (state == AppLifecycleState.resumed) {
+      // App came to foreground from background
+      // Process any stored notifications that were received while app was in background
+      PushNotificationHelper.processStoredNotifications();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

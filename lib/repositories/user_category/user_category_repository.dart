@@ -96,10 +96,17 @@ class UserCategoryRepository {
   Future<Either<Failure, void>> addUserCategory(UserCategory category) async {
     try {
       final db = await _database;
-      await db.insert(
-        'UsersCategory',
-        category.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO UsersCategory (id, userCategoryId, name, permissionJson, flag)
+        VALUES (NULL, ?, ?, ?, ?)
+        ''',
+        [
+          category.id,
+          category.name,
+          category.permissionJson,
+          category.flag,
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -114,15 +121,21 @@ class UserCategoryRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
+        const sql = '''
+        INSERT OR REPLACE INTO UsersCategory (id, userCategoryId, name, permissionJson, flag)
+        VALUES (NULL, ?, ?, ?, ?)
+        ''';
         for (final category in categories) {
-          batch.insert(
-            'UsersCategory',
-            category.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          await txn.rawInsert(
+            sql,
+            [
+              category.id,
+              category.name,
+              category.permissionJson,
+              category.flag,
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {

@@ -156,10 +156,17 @@ class CarNameRepository {
   Future<Either<Failure, void>> addCarName(Name carName) async {
     try {
       final db = await _database;
-      await db.insert(
-        'CarName',
-        carName.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO CarName (id,carNameId, carBrandId, name, flag)
+        VALUES (NULL, ?, ?, ?)
+        ''',
+        [
+          carName.id,
+          carName.carBrandId,
+          carName.carName,
+          carName.flag ?? 1,
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -172,15 +179,21 @@ class CarNameRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
+        const sql = '''
+        INSERT OR REPLACE INTO CarName (id, carNameId, carBrandId, name, flag)
+        VALUES (NULL, ?, ?, ?, ?)
+        ''';
         for (final carName in carNames) {
-          batch.insert(
-            'CarName',
-            carName.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          await txn.rawInsert(
+            sql,
+            [
+              carName.id,
+              carName.carBrandId,
+              carName.carName,
+              carName.flag ?? 1,
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {

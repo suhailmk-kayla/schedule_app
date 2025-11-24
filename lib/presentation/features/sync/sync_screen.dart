@@ -5,6 +5,7 @@ import '../../provider/sync_provider.dart';
 import '../home/home_screen.dart';
 import '../../../utils/storage_helper.dart';
 import '../../../utils/asset_images.dart';
+import '../../../utils/push_notification_helper.dart';
 
 /// Sync Screen
 /// Handles data synchronization
@@ -97,6 +98,16 @@ class _SyncScreenState extends State<SyncScreen>
         // Mark user as logged in
         await StorageHelper.setIsUserLogin('1');
         developer.log('SyncScreen: isUserLogin set to 1');
+        
+        // Process stored notifications (from when app was terminated)
+        // This happens AFTER login sync completes, so we don't interfere with login sync
+        try {
+          await PushNotificationHelper.processStoredNotifications();
+        } catch (e) {
+          // Log error but don't block navigation
+          developer.log('SyncScreen: Error processing stored notifications: $e');
+        }
+        
         if (mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(

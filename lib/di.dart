@@ -242,9 +242,11 @@ Future<void> setupDependencies() async {
 
   getIt.registerLazySingleton<OrdersProvider>(
     () => OrdersProvider(
+      usersRepository: getIt<UsersRepository>(),
       ordersRepository: getIt<OrdersRepository>(),
       routesRepository: getIt<RoutesRepository>(),
       packedSubsRepository: getIt<PackedSubsRepository>(),
+      orderSubSuggestionsRepository: getIt<OrderSubSuggestionsRepository>(),
       unitsRepository: getIt<UnitsRepository>(),
     ),
   );

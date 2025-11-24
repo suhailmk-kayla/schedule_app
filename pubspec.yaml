@@ -54,6 +54,9 @@ dependencies:
   # Secure Storage
   flutter_secure_storage: ^9.0.0
 
+  # Shared Preferences (for pending notifications)
+  shared_preferences: ^2.2.2
+
   # App Info
   package_info_plus: ^8.0.0
 

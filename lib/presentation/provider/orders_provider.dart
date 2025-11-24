@@ -3,9 +3,14 @@ import '../../repositories/orders/orders_repository.dart';
 import '../../repositories/routes/routes_repository.dart';
 import '../../repositories/packed_subs/packed_subs_repository.dart';
 import '../../repositories/units/units_repository.dart';
+import '../../repositories/users/users_repository.dart';
+import '../../repositories/order_sub_suggestions/order_sub_suggestions_repository.dart';
 import '../../models/order_api.dart';
 import '../../models/order_sub_with_details.dart';
+import '../../models/order_item_detail.dart';
+import '../../models/order_with_name.dart';
 import '../../models/master_data_api.dart';
+import '../../utils/config.dart';
 import '../../utils/storage_helper.dart';
 import 'package:intl/intl.dart';
 
@@ -17,15 +22,21 @@ class OrdersProvider extends ChangeNotifier {
   final RoutesRepository _routesRepository;
   final PackedSubsRepository _packedSubsRepository;
   final UnitsRepository? _unitsRepository;
+  final UsersRepository _usersRepository;
+  final OrderSubSuggestionsRepository _orderSubSuggestionsRepository;
 
   OrdersProvider({
+    required UsersRepository usersRepository,
     required OrdersRepository ordersRepository,
     required RoutesRepository routesRepository,
     required PackedSubsRepository packedSubsRepository,
+    required OrderSubSuggestionsRepository orderSubSuggestionsRepository,
     UnitsRepository? unitsRepository,
-  })  : _ordersRepository = ordersRepository,
+  })  : _usersRepository = usersRepository,
+        _ordersRepository = ordersRepository,
         _routesRepository = routesRepository,
         _packedSubsRepository = packedSubsRepository,
+        _orderSubSuggestionsRepository = orderSubSuggestionsRepository,
         _unitsRepository = unitsRepository;
 
   // ============================================================================
@@ -46,6 +57,24 @@ class OrdersProvider extends ChangeNotifier {
 
   Order? _orderMaster;
   Order? get orderMaster => _orderMaster;
+
+  OrderWithName? _orderDetails;
+  OrderWithName? get orderDetails => _orderDetails;
+
+  List<OrderItemDetail> _orderDetailItems = [];
+  List<OrderItemDetail> get orderDetailItems => _orderDetailItems;
+
+  bool _orderDetailsLoading = false;
+  bool get orderDetailsLoading => _orderDetailsLoading;
+
+  String? _orderDetailsError;
+  String? get orderDetailsError => _orderDetailsError;
+
+  final Map<int, int> _replacedOrderSubIds = {};
+  Map<int, int> get replacedOrderSubIds => _replacedOrderSubIds;
+
+  final Map<int, OrderItemDetail> _replacedOrderItems = {};
+  Map<int, OrderItemDetail> get replacedOrderItems => _replacedOrderItems;
 
   List<Route> _routeList = [];
   List<Route> get routeList => _routeList;
@@ -135,12 +164,14 @@ class OrdersProvider extends ChangeNotifier {
     _setLoading(true);
     _clearError();
 
+    final userType = await StorageHelper.getUserType();
     final userId = await StorageHelper.getUserId();
+    final int? salesmanId = userType == 3 ? userId : null;
     final result = await _ordersRepository.getAllOrders(
       searchKey: _searchKey,
       routeId: _routeId == -1 ? -1 : _routeId,
       date: _date,
-      salesmanId: userId,
+      salesmanId: salesmanId,
     );
 
     result.fold(
@@ -186,6 +217,90 @@ class OrdersProvider extends ChangeNotifier {
         notifyListeners();
       },
     );
+  }
+
+  /// Load order details with metadata (admin view)
+  Future<void> loadOrderDetails(int orderId) async {
+    _orderDetailsLoading = true;
+    _orderDetailsError = null;
+    notifyListeners();
+
+    final orderResult = await _ordersRepository.getOrderWithNamesById(orderId);
+    if (orderResult.isLeft) {
+      _orderDetailsError = orderResult.left.message;
+      _orderDetailsLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    final orderWithName = orderResult.right;
+    if (orderWithName == null) {
+      _orderDetailsError = 'Order not found';
+      _orderDetailsLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    final itemsResult = await _ordersRepository.getAllOrderSubAndDetails(orderId);
+    if (itemsResult.isLeft) {
+      _orderDetailsError = itemsResult.left.message;
+      _orderDetailsLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    final details = itemsResult.right;
+    final List<OrderItemDetail> builtItems = [];
+    final Map<int, int> replacementIds = {};
+    final Map<int, OrderItemDetail> replacementItems = {};
+
+    for (final detail in details) {
+      final suggestionsResult =
+          await _orderSubSuggestionsRepository.getAllSuggestionsBySubId(detail.orderSub.id);
+      final suggestions = suggestionsResult.fold(
+        (_) => <OrderSubSuggestion>[],
+        (value) => value,
+      );
+
+      final packedResult = await _packedSubsRepository.getPackedList(detail.orderSub.id);
+      final isPacked = packedResult.fold(
+        (_) => false,
+        (packedList) => packedList.isNotEmpty,
+      );
+
+      final item = OrderItemDetail(
+        details: detail,
+        suggestions: suggestions,
+        isPacked: isPacked,
+      );
+      builtItems.add(item);
+
+      final replacedId = _extractReplacedOrderSubId(detail.orderSub.orderSubNote);
+      if (replacedId != null) {
+        replacementIds[replacedId] = detail.orderSub.id;
+        replacementItems[detail.orderSub.id] = item;
+      }
+    }
+
+    _orderDetails = orderWithName;
+    _orderDetailItems = builtItems;
+    _replacedOrderSubIds
+      ..clear()
+      ..addAll(replacementIds);
+    _replacedOrderItems
+      ..clear()
+      ..addAll(replacementItems);
+    _orderDetailsLoading = false;
+    notifyListeners();
+  }
+
+  void clearOrderDetails() {
+    _orderDetails = null;
+    _orderDetailItems = [];
+    _replacedOrderSubIds.clear();
+    _replacedOrderItems.clear();
+    _orderDetailsError = null;
+    notifyListeners();
   }
 
   /// Create order via API and update local DB
@@ -631,9 +746,17 @@ class OrdersProvider extends ChangeNotifier {
   }
 
   /// Send order (check stock) - calls API
-  /// Converted from KMP's sendOrder
-  Future<bool> sendOrder(double freightCharge, double total) async {
-    if (_orderMaster == null) return false;
+  /// Converted from KMP's sendOrder (OrderViewModel.kt lines 721-820)
+  /// Matches exact functionality and conditionals from KMP
+  Future<bool> sendOrder(
+    double freightCharge,
+    double total,
+    int storekeeperId,
+  ) async {
+    if (_orderMaster == null) {
+      _setError('Unknown error occurred');
+      return false;
+    }
     if (_orderMaster!.orderCustId == -1) {
       _setError('Please Select a customer!');
       return false;
@@ -642,12 +765,206 @@ class OrdersProvider extends ChangeNotifier {
     _setLoading(true);
     _clearError();
 
-    // TODO: Implement API call to send order
-    // This requires building the order payload with all order subs
-    // For now, return false
-    _setError('Send order API not yet implemented');
-    _setLoading(false);
-    return false;
+    try {
+      // Get all order subs with details (matches KMP line 728)
+      final subsResult = await _ordersRepository.getAllOrderSubAndDetails(_orderMaster!.id);
+      if (subsResult.isLeft) {
+        _setError(subsResult.left.message);
+        _setLoading(false);
+        return false;
+      }
+      final subList = subsResult.right;
+
+      // Get admins and storekeepers for push notifications (matches KMP lines 729-736)
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      final storekeepersResult = await _usersRepository.getUsersByCategory(2);
+      
+      final List<Map<String, dynamic>> userIds = [];
+      
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            userIds.add({
+              'user_id': admin.id,
+              'silent_push': 1,
+            });
+          }
+        },
+      );
+      
+      storekeepersResult.fold(
+        (_) {},
+        (storekeepers) {
+          for (final storekeeper in storekeepers) {
+            userIds.add({
+              'user_id': storekeeper.id,
+              'silent_push': 0,
+            });
+          }
+        },
+      );
+
+      // Build push notification payload (matches KMP's sentPushNotification - OrderViewModel.kt line 738-739)
+      // KMP calls: sentPushNotification(arrayListOf(), userIds, "New Order Received")
+      // This builds the notification JSON object structure
+      final notificationJsonObject = <String, dynamic>{
+        'ids': userIds,
+        'data_message': 'New Order Received',
+        'data': {
+          'data_ids': <Map<String, dynamic>>[], // Empty array as per KMP line 738
+          'show_notification': '0',
+          'message': 'New Order Received',
+        },
+      };
+
+      // Build order params (matches KMP line 740-747)
+      final params = _createOrderParams(
+        _orderMaster!,
+        subList,
+        total,
+        freightCharge,
+        storekeeperId,
+        notificationJsonObject,
+      );
+
+      // Call API (matches KMP line 749-750)
+      final apiResult = await _ordersRepository.sendOrder(params);
+      
+      if (apiResult.isLeft) {
+        _setError(apiResult.left.message);
+        _setLoading(false);
+        return false;
+      }
+
+      final orderApi = apiResult.right;
+      final order = orderApi.data;
+
+      // Save order to local DB (matches KMP lines 758-778)
+      // CRITICAL: Primary key 'id' is auto-generated by SQLite (set to NULL in repository)
+      // The Order model's 'id' field maps to 'orderId' column (stores API response id)
+      // KMP: id = 0 (primary key, auto-generated), orderId = API response id
+      final newOrder = Order(
+        id: order.id, // This maps to 'orderId' column, NOT the primary key - matches KMP line 760: orderId = id
+        uuid: order.uuid,
+        orderInvNo: order.orderInvNo,
+        orderCustId: order.orderCustId,
+        orderCustName: order.orderCustName,
+        orderSalesmanId: order.orderSalesmanId,
+        orderStockKeeperId: order.orderStockKeeperId,
+        orderBillerId: order.orderBillerId,
+        orderCheckerId: order.orderCheckerId,
+        orderDateTime: order.orderDateTime,
+        orderTotal: order.orderTotal,
+        orderFreightCharge: order.orderFreightCharge,
+        orderNote: order.orderNote,
+        orderApproveFlag: order.orderApproveFlag,
+        orderFlag: 1, // Normal order flag (matches KMP line 775)
+        createdAt: order.createdAt,
+        updatedAt: order.updatedAt,
+      );
+
+      final addOrderResult = await _ordersRepository.addOrder(newOrder);
+      if (addOrderResult.isLeft) {
+        _setError(addOrderResult.left.message);
+        _setLoading(false);
+        return false;
+      }
+
+      // Save order subs to local DB (matches KMP lines 781-815)
+      if (order.items != null && order.items!.isNotEmpty) {
+        for (int index = 0; index < order.items!.length; index++) {
+          final sub = order.items![index];
+          // CRITICAL: Primary key 'id' is auto-generated by SQLite (not included in repository INSERT)
+          // The OrderSub model's 'id' field maps to 'orderSubId' column (stores API response id)
+          // KMP: First param = 0 (primary key, auto-generated), second param = API response id
+          final orderSub = OrderSub(
+            id: sub.id, // This maps to 'orderSubId' column, NOT the primary key - matches KMP line 785: orderSubId = s.id
+            orderSubOrdrInvId: sub.orderSubOrdrInvId,
+            orderSubOrdrId: sub.orderSubOrdrId,
+            orderSubCustId: sub.orderSubCustId,
+            orderSubSalesmanId: sub.orderSubSalesmanId,
+            orderSubStockKeeperId: sub.orderSubStockKeeperId,
+            orderSubDateTime: sub.orderSubDateTime,
+            orderSubPrdId: sub.orderSubPrdId,
+            orderSubUnitId: sub.orderSubUnitId,
+            orderSubCarId: sub.orderSubCarId,
+            orderSubRate: sub.orderSubRate,
+            orderSubUpdateRate: sub.orderSubUpdateRate,
+            orderSubQty: sub.orderSubQty,
+            orderSubAvailableQty: sub.orderSubAvailableQty,
+            orderSubUnitBaseQty: sub.orderSubUnitBaseQty,
+            orderSubIsCheckedFlag: sub.orderSubIsCheckedFlag,
+            orderSubOrdrFlag: sub.orderSubOrdrFlag,
+            orderSubNote: sub.orderSubNote,
+            orderSubNarration: sub.orderSubNarration,
+            orderSubFlag: sub.orderSubFlag,
+            createdAt: sub.createdAt,
+            updatedAt: sub.updatedAt,
+          );
+
+          final addSubResult = await _ordersRepository.addOrderSub(orderSub);
+          if (addSubResult.isLeft) {
+            _setError(addSubResult.left.message);
+            _setLoading(false);
+            return false;
+          }
+        }
+      }
+
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Create order params for API
+  /// Converted from KMP's createOrderParams (OrderViewModel.kt lines 952-1002)
+  /// Matches exact payload structure from KMP
+  Map<String, dynamic> _createOrderParams(
+    Order orderMaster,
+    List<OrderSubWithDetails> subList,
+    double total,
+    double freight,
+    int storekeeperId,
+    Map<String, dynamic> notificationJsonObject,
+  ) {
+    final params = <String, dynamic>{
+      'uuid': orderMaster.uuid,
+      'order_cust_id': orderMaster.orderCustId,
+      'order_cust_name': orderMaster.orderCustName,
+      'order_salesman_id': orderMaster.orderSalesmanId,
+      'order_stock_keeper_id': storekeeperId,
+      'order_biller_id': orderMaster.orderBillerId,
+      'order_checker_id': orderMaster.orderCheckerId,
+      'order_date_time': orderMaster.orderDateTime,
+      'order_total': total,
+      'order_freight_charge': freight,
+      'order_note': orderMaster.orderNote ?? '',
+      'order_approve_flag': 1,
+      'items': subList.map((item) {
+        return {
+          'order_sub_prd_id': item.orderSub.orderSubPrdId,
+          'order_sub_unit_id': item.orderSub.orderSubUnitId,
+          'order_sub_car_id': item.orderSub.orderSubCarId,
+          'order_sub_rate': item.orderSub.orderSubRate,
+          'order_sub_update_rate': item.orderSub.orderSubUpdateRate,
+          'order_sub_qty': item.orderSub.orderSubQty,
+          'order_sub_available_qty': item.orderSub.orderSubAvailableQty,
+          'order_sub_unit_base_qty': item.orderSub.orderSubUnitBaseQty,
+          'order_sub_ordr_flag': 1,
+          'order_sub_is_checked_flag': 0,
+          'order_sub_note': item.orderSub.orderSubNote ?? '',
+          'order_sub_narration': item.orderSub.orderSubNarration ?? '',
+        };
+      }).toList(),
+      'notification': notificationJsonObject,
+    };
+
+    return params;
   }
 
   /// Add product to order
@@ -789,6 +1106,20 @@ class OrdersProvider extends ChangeNotifier {
 
   String _getDBFormatDate() {
     return DateFormat('yyyy-MM-dd').format(DateTime.now());
+  }
+
+  int? _extractReplacedOrderSubId(String? note) {
+    if (note == null || note.isEmpty) {
+      return null;
+    }
+    if (!note.contains(ApiConfig.replacedSubDelOrderSubId)) {
+      return null;
+    }
+    final parts = note.split(ApiConfig.replacedSubDelOrderSubId);
+    if (parts.isEmpty) {
+      return null;
+    }
+    return int.tryParse(parts.last.trim());
   }
 
   void _setLoading(bool loading) {

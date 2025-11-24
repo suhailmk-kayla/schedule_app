@@ -1,5 +1,4 @@
 import 'package:either_dart/either.dart';
-import 'package:sqflite/sqflite.dart';
 import '../local/database_helper.dart';
 import '../../models/sync_models.dart';
 import '../../helpers/errors/failures.dart';
@@ -21,13 +20,12 @@ class SyncTimeRepository {
   }) async {
     try {
       final db = await _databaseHelper.database;
-      await db.insert(
-        'SyncTime',
-        {
-          'table_name': tableName,
-          'update_date': updateDate,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO SyncTime (id, table_name, update_date)
+        VALUES (NULL, ?, ?)
+        ''',
+        [tableName, updateDate],
       );
       return const Right(null);
     } catch (e) {

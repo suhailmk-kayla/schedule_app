@@ -200,10 +200,30 @@ class RoutesRepository {
   Future<Either<Failure, void>> addRoute(Route route) async {
     try {
       final db = await _database;
-      await db.insert(
-        'Routes',
-        route.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO Routes (
+          id,
+          routeId,
+          code,
+          name,
+          salesmanId,
+          createdDateTime,
+          updatedDateTime,
+          flag
+        ) VALUES (
+          NULL, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''',
+        [
+          route.id,
+          route.code,
+          route.name,
+          route.salesmanId,
+          route.createdAt ?? '',
+          route.updatedAt ?? '',
+          1,
+        ],
       );
       return const Right(null);
     } catch (e) {
@@ -216,15 +236,34 @@ class RoutesRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        final batch = txn.batch();
+        const sql = '''
+        INSERT OR REPLACE INTO Routes (
+          id,
+          routeId,
+          code,
+          name,
+          salesmanId,
+          createdDateTime,
+          updatedDateTime,
+          flag
+        ) VALUES (
+          NULL, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''';
         for (final route in routes) {
-          batch.insert(
-            'Routes',
-            route.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          await txn.rawInsert(
+            sql,
+            [
+              route.id,
+              route.code,
+              route.name,
+              route.salesmanId,
+              route.createdAt ?? '',
+              route.updatedAt ?? '',
+              1,
+            ],
           );
         }
-        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {

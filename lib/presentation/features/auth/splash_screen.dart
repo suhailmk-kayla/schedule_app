@@ -4,6 +4,7 @@ import 'package:schedule_frontend_flutter/utils/asset_images.dart';
 import '../../provider/auth_provider.dart';
 import '../home/home_screen.dart';
 import 'login_screen.dart';
+import '../../../utils/push_notification_helper.dart';
 
 /// Splash Screen
 /// Shows logo and checks if user is logged in
@@ -51,14 +52,27 @@ class _SplashScreenState extends State<SplashScreen>
 
     // Check if user is already logged in
     if (authProvider.isAuthenticated) {
-      // User is already logged in, navigate to home
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (context) => const HomeScreen(),
-        ),
-      );
+      // User is already logged in
+      // Process stored notifications (from when app was terminated)
+      // This happens AFTER login check, so we don't process during login sync
+      try {
+        await PushNotificationHelper.processStoredNotifications();
+      } catch (e) {
+        // Log error but don't block navigation
+        debugPrint('Error processing stored notifications: $e');
+      }
+      
+      // Navigate to home
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => const HomeScreen(),
+          ),
+        );
+      }
     } else {
       // User is not logged in, show login screen
+      // Don't process stored notifications here - they'll be processed after login
       setState(() {
         _showLogin = true;
       });

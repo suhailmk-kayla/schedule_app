@@ -8,6 +8,6 @@ class ApiConfig {
   static const bool isProductionMode = false;
 
   static const String noteSplitDel = '***###***';
-  // static const String replacedSubDelOrderSubId = '***$###$***OrderSubId=';
+  static const String replacedSubDelOrderSubId = '***\$###\$***OrderSubId=';
 }
 

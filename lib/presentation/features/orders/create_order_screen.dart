@@ -107,8 +107,13 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     final total = _calculateTotal(ordersProvider);
     final freight = double.tryParse(_freightChargeController.text) ?? 0.0;
 
-    final success = await ordersProvider.sendOrder(freight, total);
+    // Send order with -1 for storekeeperId (no specific storekeeper assigned)
+    // All storekeepers get notified, any one can accept it later
+    // Matches KMP's CreateOrderScreen.kt line 354: sendOrder(..., -1, ...)
+    final success = await ordersProvider.sendOrder(freight, total, -1);
     if (success) {
+      // Delete temp order and subs (matches KMP line 362)
+      await ordersProvider.deleteOrderAndSub();
       if (mounted) {
         Navigator.of(context).pop();
       }
