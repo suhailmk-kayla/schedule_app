@@ -5,10 +5,15 @@ import 'package:provider/provider.dart';
 import '../../provider/salesman_provider.dart';
 import '../../provider/users_provider.dart';
 
-/// Create Salesman Screen
-/// Converted from KMP's CreateSalesmanScreen.kt
+/// Create/Edit Salesman Screen
+/// Converted from KMP's CreateSalesmanScreen.kt and EditUserScreen.kt
 class CreateSalesmanScreen extends StatefulWidget {
-  const CreateSalesmanScreen({super.key});
+  final int? userId; // Salesman's user ID (required for edit mode)
+
+  const CreateSalesmanScreen({
+    super.key,
+    this.userId,
+  });
 
   @override
   State<CreateSalesmanScreen> createState() => _CreateSalesmanScreenState();
@@ -29,6 +34,30 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
   void initState() {
     super.initState();
     _codeController.addListener(_stripCodeSpaces);
+    // If editing, load salesman data
+    if (widget.userId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadSalesmanData();
+      });
+    }
+  }
+
+  Future<void> _loadSalesmanData() async {
+    if (widget.userId == null) return;
+
+    final usersProvider = Provider.of<UsersProvider>(context, listen: false);
+    await usersProvider.loadUserById(widget.userId!);
+
+    if (usersProvider.currentUser == null) return;
+
+    final user = usersProvider.currentUser!.user;
+    setState(() {
+      _codeController.text = user.code;
+      _nameController.text = user.name;
+      _phoneController.text = user.phoneNo;
+      _addressController.text = user.address;
+      // Password field is not loaded for edit mode
+    });
   }
 
   @override
@@ -74,14 +103,23 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
     setState(() => _isSaving = true);
 
     final usersProvider = context.read<UsersProvider>();
-    final success = await usersProvider.createUser(
-      code: _codeController.text.trim(),
-      name: _nameController.text.trim(),
-      phone: _phoneController.text.trim(),
-      categoryId: 3, // Salesman category
-      address: _addressController.text.trim(),
-      password: _passwordController.text,
-    );
+    final success = widget.userId == null
+        ? await usersProvider.createUser(
+            code: _codeController.text.trim(),
+            name: _nameController.text.trim(),
+            phone: _phoneController.text.trim(),
+            categoryId: 3, // Salesman category
+            address: _addressController.text.trim(),
+            password: _passwordController.text,
+          )
+        : await usersProvider.updateUser(
+            userId: widget.userId!,
+            code: _codeController.text.trim(),
+            name: _nameController.text.trim(),
+            phone: _phoneController.text.trim(),
+            categoryId: 3, // Salesman category
+            address: _addressController.text.trim(),
+          );
 
     if (!mounted) return;
 
@@ -91,11 +129,15 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
       await context.read<SalesmanProvider>().loadSalesmen();
       Navigator.of(context).pop(true);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Salesman created successfully')),
+        SnackBar(
+          content: Text(widget.userId == null
+              ? 'Salesman created successfully'
+              : 'Salesman updated successfully'),
+        ),
       );
     } else {
       final message =
-          usersProvider.errorMessage ?? 'Failed to create salesman. Please try again.';
+          usersProvider.errorMessage ?? 'Failed to ${widget.userId == null ? 'create' : 'update'} salesman. Please try again.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
@@ -143,7 +185,7 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Create Salesman'),
+          title: Text(widget.userId == null ? 'Create Salesman' : 'Edit Salesman'),
         ),
         body: SafeArea(
           child: SingleChildScrollView(
@@ -191,31 +233,33 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
                     maxLines: 3,
                     textInputAction: TextInputAction.newline,
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                  if (widget.userId == null) ...[
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                          ),
+                          onPressed: () {
+                            setState(() => _obscurePassword = !_obscurePassword);
+                          },
                         ),
-                        onPressed: () {
-                          setState(() => _obscurePassword = !_obscurePassword);
-                        },
                       ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Password is required';
+                        }
+                        if (value.length < 4) {
+                          return 'Password must be at least 4 characters';
+                        }
+                        return null;
+                      },
                     ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Password is required';
-                      }
-                      if (value.length < 4) {
-                        return 'Password must be at least 4 characters';
-                      }
-                      return null;
-                    },
-                  ),
+                  ],
                   const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: _isSaving ? null : _handleSave,

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../provider/units_provider.dart';
-import '../../../../models/master_data_api.dart';
 
 /// Create Unit Screen
 /// Form to create a new unit
@@ -62,6 +61,9 @@ class _CreateUnitScreenState extends State<CreateUnitScreen> {
 
   void _showUnitTypeBottomSheet() {
     showModalBottomSheet(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.2,
+      ),
       context: context,
       builder: (context) {
         return Consumer<UnitsProvider>(

@@ -4,7 +4,7 @@
     <!-- OneSignal SDK handles the runtime permission request, but manifest declaration is mandatory -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
-        android:label="schedule_frontend_flutter"
+        android:label="Schedule"
         android:name="${applicationName}"
         android:allowBackup="false"
         android:fullBackupContent="false"
@@ -36,12 +36,9 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        
         <meta-data
             android:name="com.onesignal.NotificationServiceExtension"
             android:value="com.foms.schedule.OneSignalNotificationServiceExtension" />
-        
-     
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

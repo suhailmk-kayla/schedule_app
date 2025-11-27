@@ -414,9 +414,9 @@ class _AddRouteDialogState extends State<_AddRouteDialog> {
           builder: (context) => Consumer<RoutesProvider>(
             builder: (context, provider, _) {
               return AlertDialog(
-                title: const Text('Select Checker'),
+                title: const Text('Select Salesman'),
                 content: provider.salesmanList.isEmpty
-                    ? const Text('No checker found')
+                    ? const Text('No Salesman found')
                     : SizedBox(
                         width: double.maxFinite,
                         child: ListView.builder(
@@ -479,7 +479,7 @@ class _AddRouteDialogState extends State<_AddRouteDialog> {
                   child: Padding(
                     padding: EdgeInsets.only(bottom: 4),
                     child: Text(
-                      'Checker',
+                      'Salesman',
                       style: TextStyle(fontSize: 14, color: Colors.grey),
                     ),
                   ),
@@ -498,7 +498,7 @@ class _AddRouteDialogState extends State<_AddRouteDialog> {
                       });
                     },
                     child: Text(
-                      _checkerSt.isEmpty ? 'Select Checker' : _checkerSt,
+                      _checkerSt.isEmpty ? 'Select Salesman' : _checkerSt,
                       style: TextStyle(
                         color: _checkerSt.isEmpty ? Colors.grey : Colors.black,
                       ),

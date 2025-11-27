@@ -274,6 +274,16 @@ class ProductUnit {
   factory ProductUnit.fromJson(Map<String, dynamic> json) =>
       _$ProductUnitFromJson(json);
   Map<String, dynamic> toJson() => _$ProductUnitToJson(this);
+
+  /// Convert from database map (camelCase column names)
+  factory ProductUnit.fromMap(Map<String, dynamic> map) {
+    return ProductUnit(
+      id: map['productUnitId'] as int? ?? -1,
+      prd_id: map['productId'] as int? ?? -1,
+      base_unit_id: map['baseUnitId'] as int? ?? -1,
+      derived_unit_id: map['derivedUnitId'] as int? ?? -1,
+    );
+  }
 }
 
 @JsonSerializable()
@@ -312,4 +322,62 @@ double _toDouble(dynamic value) {
   if (value is num) return value.toDouble();
   if (value is String) return double.tryParse(value) ?? 0.0;
   return 0.0;
+}
+
+/// Product With Details Model
+/// Contains Product with category, subcategory, supplier, and base unit names from JOIN queries
+/// Converted from KMP's GetAllProductsById result
+class ProductWithDetails {
+  final Product product;
+  
+  // Joined fields from query
+  final String? categoryName;
+  final String? subCategoryName;
+  final String? supplierName;
+  final String? baseUnitName;
+
+  const ProductWithDetails({
+    required this.product,
+    this.categoryName,
+    this.subCategoryName,
+    this.supplierName,
+    this.baseUnitName,
+  });
+
+  /// Convert from database map (from JOIN query)
+  factory ProductWithDetails.fromMap(Map<String, dynamic> map) {
+    return ProductWithDetails(
+      product: Product.fromMap(map),
+      categoryName: map['categoryName'] as String?,
+      subCategoryName: map['subCategoryName'] as String?,
+      supplierName: map['supplierName'] as String?,
+      baseUnitName: map['baseUnitName'] as String?,
+    );
+  }
+}
+
+/// Product Unit With Details Model
+/// Contains ProductUnit with base and derived unit names from JOIN queries
+/// Converted from KMP's GetDerivedUnitsByProduct
+class ProductUnitWithDetails {
+  final ProductUnit productUnit;
+  final String? baseName;
+  final String? derivenName;
+  final double? baseQty;
+
+  const ProductUnitWithDetails({
+    required this.productUnit,
+    this.baseName,
+    this.derivenName,
+    this.baseQty,
+  });
+
+  factory ProductUnitWithDetails.fromMap(Map<String, dynamic> map) {
+    return ProductUnitWithDetails(
+      productUnit: ProductUnit.fromMap(map),
+      baseName: map['baseName'] as String?,
+      derivenName: map['derivenName'] as String?,
+      baseQty: (map['baseQty'] as num?)?.toDouble(),
+    );
+  }
 }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:developer' as developer;
 import '../../provider/sync_provider.dart';
-import '../home/home_screen.dart';
+import '../../../utils/navigation_helper.dart';
 import '../../../utils/storage_helper.dart';
 import '../../../utils/asset_images.dart';
 import '../../../utils/push_notification_helper.dart';
@@ -109,11 +109,8 @@ class _SyncScreenState extends State<SyncScreen>
         }
         
         if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => const HomeScreen(),
-            ),
-          );
+          // Navigate based on user type (matches KMP BaseScreen.kt logic)
+          await NavigationHelper.navigateToInitialScreen(context);
         }
       }
     }

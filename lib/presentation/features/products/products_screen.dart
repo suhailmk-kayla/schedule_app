@@ -110,11 +110,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         value: provider.filterCategoryId == -1
                             ? null
                             : provider.filterCategoryId,
+                        hint: const Text('Category'),
                         items: [
-                          const DropdownMenuItem<int>(
-                            value: -1,
-                            child: Text('All Category'),
-                          ),
                           ...provider.categoryList.map(
                             (c) => DropdownMenuItem<int>(
                               value: c.id,
@@ -126,7 +123,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           labelText: 'Category',
                           border: OutlineInputBorder(),
                           isDense: true,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
+                        icon: const Icon(Icons.arrow_drop_down),
                         onChanged: (val) {
                           final categoryId = val ?? -1;
                           final categoryName = categoryId == -1
@@ -146,11 +145,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         value: provider.filterSubCategoryId == -1
                             ? null
                             : provider.filterSubCategoryId,
+                        hint: const Text('Sub Category'),
                         items: [
-                          const DropdownMenuItem<int>(
-                            value: -1,
-                            child: Text('Sub Category'),
-                          ),
                           ...provider.subCategoryList.map(
                             (s) => DropdownMenuItem<int>(
                               value: s.id,
@@ -162,7 +158,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           labelText: 'Sub Category',
                           border: OutlineInputBorder(),
                           isDense: true,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
+                        icon: const Icon(Icons.arrow_drop_down),
                         onChanged: (val) {
                           final subId = val ?? -1;
                           final subName = subId == -1

@@ -3,11 +3,16 @@ import 'package:provider/provider.dart';
 import '../../provider/customers_provider.dart';
 import '../../../utils/storage_helper.dart';
 
-/// Create Customer Screen
-/// Screen for adding new customers
-/// Converted from KMP's CreateCustomerScreen.kt
+/// Create/Edit Customer Screen
+/// Screen for adding new customers or editing existing ones
+/// Converted from KMP's CreateCustomerScreen.kt and EditCustomerScreen.kt
 class CreateCustomerScreen extends StatefulWidget {
-  const CreateCustomerScreen({super.key});
+  final int? customerId; // If provided, this is edit mode
+
+  const CreateCustomerScreen({
+    super.key,
+    this.customerId,
+  });
 
   @override
   State<CreateCustomerScreen> createState() => _CreateCustomerScreenState();
@@ -66,6 +71,40 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
     final provider = Provider.of<CustomersProvider>(context, listen: false);
     await provider.loadSalesmen();
     await provider.loadRoutes();
+
+    // If editing, load customer data
+    if (widget.customerId != null) {
+      await _loadCustomerData();
+    }
+  }
+
+  Future<void> _loadCustomerData() async {
+    if (widget.customerId == null) return;
+
+    final provider = Provider.of<CustomersProvider>(context, listen: false);
+    final customer = await provider.getCustomerById(widget.customerId!);
+
+    if (customer == null || !mounted) return;
+
+    // Get customer with names for salesman and route
+    final customersWithNames = provider.customers;
+    final customerWithNames = customersWithNames.firstWhere(
+      (c) => c.customerId == widget.customerId,
+      orElse: () => throw Exception('Customer not found in list'),
+    );
+
+    setState(() {
+      _codeController.text = customer.code;
+      _nameController.text = customer.name;
+      _phoneController.text = customer.phoneNo;
+      _addressController.text = customer.address;
+      _salesmanId = customer.salesManId;
+      _salesmanSt = customerWithNames.saleman ?? 'Select salesman';
+      _routeId = customer.routId;
+      _routeSt = customerWithNames.route ?? 'Select route';
+      _rating = customer.rating.toDouble();
+      _hasChanges = false; // Reset after loading
+    });
   }
 
   void _onFieldChanged() {
@@ -261,17 +300,30 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
 
     final provider = Provider.of<CustomersProvider>(context, listen: false);
     
-    final success = await provider.createCustomer(
-      code: _codeController.text.trim(),
-      name: _nameController.text.trim(),
-      phone: _phoneController.text.trim().isEmpty 
-          ? '0' 
-          : _phoneController.text.trim(),
-      address: _addressController.text.trim(),
-      routeId: _routeId,
-      salesmanId: _salesmanId,
-      rating: _rating.toInt(),
-    );
+    final success = widget.customerId == null
+        ? await provider.createCustomer(
+            code: _codeController.text.trim(),
+            name: _nameController.text.trim(),
+            phone: _phoneController.text.trim().isEmpty 
+                ? '0' 
+                : _phoneController.text.trim(),
+            address: _addressController.text.trim(),
+            routeId: _routeId,
+            salesmanId: _salesmanId,
+            rating: _rating.toInt(),
+          )
+        : await provider.updateCustomer(
+            customerId: widget.customerId!,
+            code: _codeController.text.trim(),
+            name: _nameController.text.trim(),
+            phone: _phoneController.text.trim().isEmpty 
+                ? '0' 
+                : _phoneController.text.trim(),
+            address: _addressController.text.trim(),
+            routeId: _routeId,
+            salesmanId: _salesmanId,
+            rating: _rating.toInt(),
+          );
 
     if (success && mounted) {
       Navigator.of(context).pop(true); // Return true to indicate success
@@ -314,7 +366,7 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Create Customer'),
+          title: Text(widget.customerId == null ? 'Create Customer' : 'Edit Customer'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () async {

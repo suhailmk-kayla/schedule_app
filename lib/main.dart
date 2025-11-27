@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/helpers/admin_registration_helper.dart';
 import 'di.dart';
 import 'utils/push_notification_helper.dart';
 import 'utils/notification_manager.dart';
@@ -22,8 +23,8 @@ import 'presentation/provider/cars_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // final result = await createAdminAccount();
-
   // Initialize OneSignal for push notifications (must be before setupDependencies)
+
   try {
     await PushNotificationHelper.initialize();
   }
@@ -35,7 +36,6 @@ void main() async {
   await setupDependencies();
   runApp(const MyApp());
 }
-
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 

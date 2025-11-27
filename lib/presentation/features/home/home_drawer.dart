@@ -16,6 +16,7 @@ import '../customers/customers_screen.dart';
 import '../users/users_screen.dart';
 import '../salesman/salesman_screen.dart';
 import '../routes/routes_screen.dart';
+import '../about/about_screen.dart';
 
 /// Home Drawer
 /// Displays user info, menu items, and logout
@@ -106,7 +107,10 @@ class _HomeDrawerState extends State<HomeDrawer> {
         );
         break;
       case MenuType.about:
-        // TODO: Show about dialog
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AboutScreen()),
+        );
         break;
       default:
         break;

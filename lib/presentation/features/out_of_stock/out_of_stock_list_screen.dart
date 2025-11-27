@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:schedule_frontend_flutter/presentation/features/home/home_drawer.dart';
 import '../../provider/out_of_stock_provider.dart';
 import '../../../models/master_data_api.dart';
 import '../../../utils/storage_helper.dart';
@@ -122,7 +123,9 @@ class _OutOfStockListScreenState extends State<OutOfStockListScreen> {
     final isMenuIcon = _userType == 4; // Admin
 
     return Scaffold(
+      drawer: _userType == 4 ? HomeDrawer() : null,
       appBar: AppBar(
+        
         title: _showSearchBar
             ? TextField(
                 controller: _searchController,
@@ -136,17 +139,19 @@ class _OutOfStockListScreenState extends State<OutOfStockListScreen> {
                   provider.getAllOosp();
                 },
               )
-            : const Text('Out of stocks'),
-        leading: IconButton(
-          icon: Icon(isMenuIcon ? Icons.menu : Icons.arrow_back),
-          onPressed: () {
-            if (isMenuIcon) {
-              Scaffold.of(context).openDrawer();
-            } else {
-              Navigator.of(context).pop();
-            }
-          },
-        ),
+            :  Text(
+              _userType == 4 ? 'Orders' : 'Out of stocks',
+            ),
+        // leading: IconButton(
+        //   icon: Icon(isMenuIcon ? Icons.menu : Icons.arrow_back),
+        //   onPressed: () {
+        //     if (isMenuIcon) {
+              
+        //     } else {
+        //       Navigator.of(context).pop();
+        //     }
+        //   },
+        // ),
         actions: [
           IconButton(
             icon: Icon(_showSearchBar ? Icons.close : Icons.search),

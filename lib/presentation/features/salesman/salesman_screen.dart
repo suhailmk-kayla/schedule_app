@@ -5,6 +5,7 @@ import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/salesman_provider.dart';
 import '../../../models/salesman_model.dart';
 import 'create_salesman_screen.dart';
+import 'salesman_details_screen.dart';
 
 /// Salesman Screen
 /// Displays list of salesmen with search and navigation
@@ -40,13 +41,13 @@ class _SalesmanScreenState extends State<SalesmanScreen> {
   }
 
   void _handleItemClick(SalesMan salesman) {
-    // Navigate to UserDetails screen (TODO: implement UserDetailsScreen)
-    // Navigator.push(
-    //   context,
-    //   MaterialPageRoute(
-    //     builder: (_) => UserDetailsScreen(userId: salesman.userId),
-    //   ),
-    // );
+    // Navigate to salesman details screen
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SalesmanDetailsScreen(userId: salesman.userId),
+      ),
+    );
   }
 
   void _handleReportViewClick(int userId) {

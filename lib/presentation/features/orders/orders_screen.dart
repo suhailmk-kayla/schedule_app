@@ -1,13 +1,20 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:schedule_frontend_flutter/presentation/features/home/home_drawer.dart';
+import 'package:schedule_frontend_flutter/presentation/features/orders/order_details_storekeeper_screen.dart';
 import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/orders_provider.dart';
 import '../../../models/order_api.dart';
 import '../../../models/order_with_name.dart';
+import '../../../utils/order_flags.dart';
 import '../../../utils/storage_helper.dart';
 import 'create_order_screen.dart';
+import 'order_details_checker_screen.dart';
 import 'order_details_screen.dart';
+import 'order_details_salesman_screen.dart';
 
 /// Orders Screen
 /// Displays list of orders with search, route filter, and date filter
@@ -68,6 +75,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
         }
 
         return Scaffold(
+          drawer: _userType == 5|| _userType == 6|| _userType == 7 ? HomeDrawer() : null,
       appBar: AppBar(
         title: _showSearchBar
             ? TextField(
@@ -83,16 +91,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 },
               )
             : const Text('Order List'),
-        leading: IconButton(
-          icon: Icon(isMenuIcon ? Icons.menu : Icons.arrow_back),
-          onPressed: () {
-            if (isMenuIcon) {
-              Scaffold.of(context).openDrawer();
-            } else {
-              Navigator.of(context).pop();
-            }
-          },
-        ),
+     
         actions: [
           IconButton(
             icon: Icon(_showSearchBar ? Icons.close : Icons.search),
@@ -168,13 +167,36 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => OrderDetailsScreen(orderId: order.id),
+                                    builder: (_) =>
+                                        OrderDetailsScreen(orderId: order.id),
                                   ),
                                 );
+                              } else if (_userType == 2) {
+                                developer.log(
+                                    'The current role is storekeeper: ${order.id}');
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        OrderDetailsStorekeeperScreen(
+                                            orderId: order.id),
+                                  ),
+                                );
+                              } else if (_userType == 3) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => OrderDetailsSalesmanScreen(
+                                        orderId: order.id),
+                                  ),
+                                );
+                              } else if (_userType == 6) {
+                                _handleCheckerOrderTap(context, order);
                               } else {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('Order details for this role will be available soon.'),
+                                    content: Text(
+                                        'Order details for this role will be available soon.'),
                                   ),
                                 );
                               }
@@ -251,6 +273,54 @@ class _OrdersScreenState extends State<OrdersScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _handleCheckerOrderTap(BuildContext context, Order order) async {
+    final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    if (order.orderCheckerId == -1) {
+      final success = await ordersProvider.sendToBillerOrChecker(
+        isBiller: false,
+        userId: _userId,
+        order: order,
+        approvalFlag: OrderApprovalFlag.checkerIsChecking,
+      );
+
+      if (!mounted) return;
+      if (!success) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              ordersProvider.errorMessage ??
+                  'Failed to claim order for checking.',
+            ),
+          ),
+        );
+        return;
+      }
+    } else if (order.orderApproveFlag == OrderApprovalFlag.checkerIsChecking &&
+        order.orderCheckerId != _userId) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content:
+              Text('Another checker is currently working on this order.'),
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    await navigator.push(
+      MaterialPageRoute(
+        builder: (_) => OrderDetailsCheckerScreen(orderId: order.id),
+      ),
+    );
+
+    if (!mounted) return;
+    ordersProvider.loadOrders();
   }
 }
 

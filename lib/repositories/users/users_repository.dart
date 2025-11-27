@@ -422,7 +422,7 @@ class UsersRepository {
         };
       }
       
-      final response = await _dio.get(
+      final response= await _dio.get(
         ApiEndpoints.usersDownload,
         queryParameters: queryParams,
       );
@@ -584,6 +584,7 @@ class UsersRepository {
     required String name,
     required String phone,
     required String address,
+    required int categoryId,
   }) async {
     try {
       // 1. Call API
@@ -616,6 +617,46 @@ class UsersRepository {
       );
       if (updateResult.isLeft) {
         return updateResult.map((_) => userSuccessApi.user);
+      }
+
+      // 4. If salesman (categoryId == 3), update salesman table
+      // Check response.data for second_id (salesManId)
+      if (categoryId == 3 && response.data is Map<String, dynamic>) {
+        final responseData = response.data as Map<String, dynamic>;
+        final data = responseData['data'] as Map<String, dynamic>?;
+        if (data != null) {
+          final salesManId = data['second_id'] as int?;
+          if (salesManId != null && salesManId != -1 && _salesManRepository != null) {
+            // Update salesman table
+            await _salesManRepository.updateSalesManLocal(
+              salesManId: salesManId,
+              code: code,
+              name: name,
+              phone: phone,
+              address: address,
+            );
+          }
+        }
+      }
+
+      // 5. If supplier (categoryId == 4), update supplier table
+      // Check response.data for second_id (supplierId)
+      if (categoryId == 4 && response.data is Map<String, dynamic>) {
+        final responseData = response.data as Map<String, dynamic>;
+        final data = responseData['data'] as Map<String, dynamic>?;
+        if (data != null) {
+          final supplierId = data['second_id'] as int?;
+          if (supplierId != null && supplierId != -1 && _suppliersRepository != null) {
+            // Update supplier table
+            await _suppliersRepository.updateSupplierLocal(
+              supplierId: supplierId,
+              code: code,
+              name: name,
+              phone: phone,
+              address: address,
+            );
+          }
+        }
       }
 
       return Right(userSuccessApi.user);
@@ -682,6 +723,40 @@ class UsersRepository {
       }
 
       return const Right(null);
+    } on DioException catch (e) {
+      return Left(NetworkFailure.fromDioError(e));
+    } catch (e) {
+      return Left(UnknownFailure.fromError(e));
+    }
+  }
+
+  /// Logout all users from all devices via API (admin-only)
+  Future<Either<Failure, void>> logoutAllUsersFromDevices({
+    required int currentUserId,
+    required Map<String, dynamic> notificationPayload,
+  }) async {
+    try {
+      final response = await _dio.post(
+        ApiEndpoints.logoutAllUserDevice,
+        data: {
+          'id': currentUserId,
+          'notification': notificationPayload,
+        },
+      );
+
+      if (response.data is Map<String, dynamic>) {
+        final map = response.data as Map<String, dynamic>;
+        final status = map['status']?.toString() ?? '2';
+        if (status == '1') {
+          return const Right(null);
+        }
+        final message = map['data']?.toString() ??
+            map['message']?.toString() ??
+            'Failed to logout all devices';
+        return Left(ServerFailure.fromError(message));
+      }
+
+      return Left(ServerFailure.fromError('Invalid response from server'));
     } on DioException catch (e) {
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {

@@ -3,10 +3,17 @@ import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../provider/users_provider.dart';
 
-/// Create Supplier Screen
-/// Converted from KMP's CreateSupplierScreen.kt
+/// Create/Edit Supplier Screen
+/// Converted from KMP's CreateSupplierScreen.kt and EditUserScreen.kt
 class CreateSupplierScreen extends StatefulWidget {
-  const CreateSupplierScreen({super.key});
+  final int? supplierId; // If provided, this is edit mode
+  final int? userId; // Supplier's user ID (required for edit mode)
+
+  const CreateSupplierScreen({
+    super.key,
+    this.supplierId,
+    this.userId,
+  });
 
   @override
   State<CreateSupplierScreen> createState() => _CreateSupplierScreenState();
@@ -21,6 +28,35 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
 
   bool _showDiscardDialog = false;
   bool _showErrorDialog = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // If editing, load supplier data
+    if (widget.userId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadSupplierData();
+      });
+    }
+  }
+
+  Future<void> _loadSupplierData() async {
+    if (widget.userId == null) return;
+
+    final usersProvider = Provider.of<UsersProvider>(context, listen: false);
+    await usersProvider.loadUserById(widget.userId!);
+
+    if (usersProvider.currentUser == null) return;
+
+    final user = usersProvider.currentUser!.user;
+    setState(() {
+      _codeController.text = user.code;
+      _nameController.text = user.name;
+      _phoneController.text = user.phoneNo;
+      _addressController.text = user.address;
+      // Password field is not loaded for edit mode
+    });
+  }
 
   @override
   void dispose() {
@@ -55,20 +91,29 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
       ToastHelper.showWarning('Enter name');
       return;
     }
-    if (password.isEmpty) {
+    if (widget.userId == null && password.isEmpty) {
       ToastHelper.showWarning('Enter password');
       return;
     }
 
     final usersProvider = Provider.of<UsersProvider>(context, listen: false);
-    final success = await usersProvider.createUser(
-      code: code,
-      name: name,
-      phone: phone,
-      categoryId: 4, // Supplier category (matches KMP)
-      address: address,
-      password: password,
-    );
+    final success = widget.userId == null
+        ? await usersProvider.createUser(
+            code: code,
+            name: name,
+            phone: phone,
+            categoryId: 4, // Supplier category (matches KMP)
+            address: address,
+            password: password,
+          )
+        : await usersProvider.updateUser(
+            userId: widget.userId!,
+            code: code,
+            name: name,
+            phone: phone,
+            categoryId: 4, // Supplier category
+            address: address,
+          );
 
     if (!mounted) return;
 
@@ -102,7 +147,7 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Create Supplier'),
+          title: Text(widget.userId == null ? 'Create Supplier' : 'Edit Supplier'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: _handlePop,
@@ -157,24 +202,26 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                     ),
                     maxLines: 3,
                   ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _passwordController,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      border: OutlineInputBorder(),
+                  if (widget.userId == null) ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _passwordController,
+                      decoration: const InputDecoration(
+                        labelText: 'Password',
+                        border: OutlineInputBorder(),
+                      ),
+                      obscureText: true,
+                      onChanged: (value) {
+                        if (value.contains(' ')) {
+                          final sanitized = value.replaceAll(' ', '');
+                          _passwordController.value = TextEditingValue(
+                            text: sanitized,
+                            selection: TextSelection.collapsed(offset: sanitized.length),
+                          );
+                        }
+                      },
                     ),
-                    obscureText: true,
-                    onChanged: (value) {
-                      if (value.contains(' ')) {
-                        final sanitized = value.replaceAll(' ', '');
-                        _passwordController.value = TextEditingValue(
-                          text: sanitized,
-                          selection: TextSelection.collapsed(offset: sanitized.length),
-                        );
-                      }
-                    },
-                  ),
+                  ],
                   const SizedBox(height: 24),
                   // if (_codeController.text.isNotEmpty &&
                   //     _nameController.text.isNotEmpty &&

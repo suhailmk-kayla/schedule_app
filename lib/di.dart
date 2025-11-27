@@ -248,6 +248,9 @@ Future<void> setupDependencies() async {
       packedSubsRepository: getIt<PackedSubsRepository>(),
       orderSubSuggestionsRepository: getIt<OrderSubSuggestionsRepository>(),
       unitsRepository: getIt<UnitsRepository>(),
+      productsRepository: getIt<ProductsRepository>(),
+      pushNotificationBuilder: getIt<PushNotificationBuilder>(),
+      outOfStockRepository: getIt<OutOfStockRepository>(),
     ),
   );
 
@@ -306,6 +309,7 @@ Future<void> setupDependencies() async {
 
   getIt.registerLazySingleton<OutOfStockProvider>(
     () => OutOfStockProvider(
+      dio: getIt<Dio>(),
       outOfStockRepository: getIt<OutOfStockRepository>(),
       packedSubsRepository: getIt<PackedSubsRepository>(),
     ),

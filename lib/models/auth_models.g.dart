@@ -39,14 +39,14 @@ LoginResponse _$LoginResponseFromJson(Map<String, dynamic> json) =>
     LoginResponse(
       status: (json['status'] as num?)?.toInt() ?? 2,
       message: json['message'] as String? ?? '',
-      data: json['data'] == null
-          ? null
-          : LoginResponseData.fromJson(json['data'] as Map<String, dynamic>),
+      error: json['error'] as String? ?? '',
+      data: LoginResponse._dataFromJson(json['data']),
     );
 
 Map<String, dynamic> _$LoginResponseToJson(LoginResponse instance) =>
     <String, dynamic>{
       'status': instance.status,
       'message': instance.message,
+      'error': instance.error,
       'data': instance.data,
     };

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/asset_images.dart';
 import '../../provider/auth_provider.dart';
-import '../home/home_screen.dart';
 import 'login_screen.dart';
+import '../../../utils/navigation_helper.dart';
 import '../../../utils/push_notification_helper.dart';
 
 /// Splash Screen
@@ -62,13 +62,9 @@ class _SplashScreenState extends State<SplashScreen>
         debugPrint('Error processing stored notifications: $e');
       }
       
-      // Navigate to home
+      // Navigate based on user type (matches KMP BaseScreen.kt logic)
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => const HomeScreen(),
-          ),
-        );
+        await NavigationHelper.navigateToInitialScreen(context);
       }
     } else {
       // User is not logged in, show login screen

@@ -7,6 +7,7 @@ import '../../provider/orders_provider.dart';
 import '../../../models/master_data_api.dart';
 import '../../../utils/storage_helper.dart';
 import 'create_customer_screen.dart';
+import 'customer_details_screen.dart';
 
 /// Customers Screen
 /// Displays list of customers with search, route filter, and order creation
@@ -68,8 +69,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Future<void> _handleItemClick(CustomerWithNames customer) async {
     if (widget.orderId == null || widget.orderId!.isEmpty) {
       // Navigate to customer details
-      // TODO: Navigate to CustomerDetailsScreen
-      // Navigator.push(context, MaterialPageRoute(builder: (_) => CustomerDetailsScreen(customerId: customer.customerId)));
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CustomerDetailsScreen(customerId: customer.customerId),
+        ),
+      );
     } else {
       // Selection mode - update order customer and navigate back
       // Converted from KMP's select callback (BaseScreen.kt line 913-919)
@@ -369,7 +374,10 @@ class _CustomerListItem extends StatelessWidget {
                           IconButton(
                             iconSize: 36,
                             padding: const EdgeInsets.all(5),
-                            icon: const Icon(Icons.shopping_cart),
+                            icon: ImageIcon(
+                              color: Colors.black,
+                              AssetImage(AssetImages.imagesOrder
+                              )),
                             onPressed: onOrderClick,
                           ),
                       ],
@@ -458,22 +466,27 @@ class _StarRating extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(5, (index) {
+        Color color;
         final starIndex = index + 1;
         IconData icon;
         if (rating >= starIndex) {
           icon = Icons.star; // Full star
+          color = Colors.black;
         } else if (rating >= starIndex - 0.5) {
           icon = Icons.star_half; // Half star
+          color = Colors.black;
         } else {
           icon = Icons.star_border; // Empty star
+          color = Colors.grey;
         }
         return Icon(
           icon,
           size: 20,
-          color: Colors.amber,
+          color: color,
         );
       }),
     );

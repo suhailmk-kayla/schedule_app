@@ -32,8 +32,9 @@ class PushNotificationHelper {
 
       // Request permission for push notifications
       OneSignal.Notifications.requestPermission(true);
-      
 
+      OneSignal.User.pushSubscription.optIn();
+      
       // Track push subscription changes (IMPORTANT: detects when token is ready)
       OneSignal.User.pushSubscription.addObserver((state) {
         developer.log('Push Subscription State Changed:');
@@ -61,27 +62,38 @@ class PushNotificationHelper {
         // Process notification when clicked (in case it wasn't processed in foreground)
         _processNotification(event.notification.additionalData);
       });
-
+      
       // Set up foreground notification handler
       // This is called when notification is received while app is in foreground
-      OneSignal.Notifications.addForegroundWillDisplayListener((event) {
-        developer.log('OneSignal notification received in foreground: ${event.notification}');
+      OneSignal.Notifications.addForegroundWillDisplayListener((event) async {
+        developer.log('OneSignal notification received in foreground:');
         
         // Extract additional data from notification
         final additionalData = event.notification.additionalData;
         if (additionalData != null) {
-          _processNotification(additionalData);
+          try {
+            await _processNotification(additionalData);
+          } catch (e, stackTrace) {
+            developer.log(
+              'PushNotificationHelper: Foreground handler failed: $e',
+              error: e,
+              stackTrace: stackTrace,
+            );
+          }
         }
         
         // For silent pushes (show_notification: "0"), prevent default display
-        final showNotification = additionalData?['data']?['show_notification'] as String?;
-        if (showNotification == '0') {
-          developer.log('PushNotificationHelper: Silent push detected, preventing display');
-          event.preventDefault(); // ✅ This method EXISTS!
-          return;
-        }
-        
-        // Regular notifications will display automatically
+        final showNotification = (additionalData?['show_notification'] ??
+                additionalData?['data']?['show_notification'])
+            ?.toString();
+        // Check if notification has title/body (payload notification)
+final hasTitle = event.notification.title != null && event.notification.title!.isNotEmpty;
+final hasBody = event.notification.body != null && event.notification.body!.isNotEmpty;
+final isPayloadNotification = hasTitle || hasBody;
+if (!isPayloadNotification || showNotification == '0') {
+  // Only prevent if it's data-only OR explicitly marked as silent
+  event.preventDefault();
+}
       });
 
       // Note: Background notifications (when app is closed) are handled by addClickListener
@@ -91,6 +103,7 @@ class PushNotificationHelper {
       // Set up permission observer
       OneSignal.Notifications.addPermissionObserver((state) {
         developer.log('OneSignal permission changed: ${state.toString()}');
+        
       });
 
       // Set up Firebase Messaging Service method channel
@@ -112,38 +125,68 @@ class PushNotificationHelper {
   /// Extracts data from OneSignal notification and routes to PushNotificationHandler
   /// Matches KMP's pattern where notification data is extracted and processed
   static Future<void> _processNotification(Map<String, dynamic>? additionalData) async {
+    developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    developer.log('🔄 _processNotification() START');
+    developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
     if (additionalData == null || additionalData.isEmpty) {
-      developer.log('PushNotificationHelper: No additional data in notification');
+      developer.log('⚠️ No additional data in notification');
+      developer.log('  • additionalData: $additionalData');
+      developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       return;
     }
+    
+    developer.log('✅ Additional data found');
+    developer.log('  • Data keys: ${additionalData.keys}');
+    developer.log('  • Data size: ${additionalData.length} entries');
+    developer.log('  • Full data: $additionalData');
+    
     try {
       // Get SyncProvider instance from dependency injection
       // We need to get it lazily since it might not be registered yet
+      developer.log('📦 Getting SyncProvider from dependency injection...');
       SyncProvider? syncProvider;
       try {
         syncProvider = GetIt.instance<SyncProvider>();
+        developer.log('✅ SyncProvider retrieved successfully');
       } catch (e) {
-        developer.log('PushNotificationHelper: SyncProvider not available yet: $e');
+        developer.log('⚠️ SyncProvider not available on first try: $e');
+        developer.log('  → Attempting alternative retrieval method...');
         // Try to get it from GetIt with optional check
         if (GetIt.instance.isRegistered<SyncProvider>()) {
           syncProvider = GetIt.instance<SyncProvider>();
+          developer.log('✅ SyncProvider retrieved via isRegistered check');
         } else {
-          developer.log('PushNotificationHelper: SyncProvider not registered, cannot process notification');
+          developer.log('❌ SyncProvider not registered in GetIt');
+          developer.log('  → Cannot process notification');
+          developer.log('  → This might happen if notification arrives before app initialization');
+          developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           return;
         }
       }
 
       // Process notification through handler
+      developer.log('🚀 Calling PushNotificationHandler.handleNotification()...');
+      developer.log('  • additionalData: $additionalData');
+      developer.log('  • syncProvider: available');
+      
       await PushNotificationHandler.handleNotification(
         additionalData,
         syncProvider,
       );
+      
+      developer.log('✅ PushNotificationHandler.handleNotification() completed');
+      developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     } catch (e, stackTrace) {
+      developer.log('❌ Error in _processNotification()');
+      developer.log('  • Error: $e');
+      developer.log('  • Error type: ${e.runtimeType}');
       developer.log(
         'PushNotificationHelper: Error processing notification: $e',
         error: e,
         stackTrace: stackTrace,
       );
+      developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     }
   }
 
@@ -185,26 +228,70 @@ class PushNotificationHelper {
   /// In KMP, MyFirebaseMessagingService directly calls PushNotificationHandler.handleNotification
   /// Here, we forward to Flutter which then calls PushNotificationHandler.handleNotification
   static void _setupFirebaseMessagingChannel() {
+    developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    developer.log('📡 Setting up Firebase Messaging Service method channel...');
+    developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
     const MethodChannel channel = MethodChannel('com.foms.schedule/firebase_notifications');
     
     channel.setMethodCallHandler((call) async {
+      developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      developer.log('📨 Method channel call received');
+      developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      developer.log('  • Method: ${call.method}');
+      developer.log('  • Arguments type: ${call.arguments.runtimeType}');
+      developer.log('  • Arguments: ${call.arguments}');
+      
       if (call.method == 'onNotificationReceived') {
-        developer.log('PushNotificationHelper: Notification received from Firebase service (silent notification handler)');
+        developer.log('✅ Method matches: onNotificationReceived');
+        developer.log('  → This is a notification from service extension');
+        developer.log('  → Processing notification data...');
+        
         final data = call.arguments as Map<dynamic, dynamic>?;
         if (data != null) {
+          developer.log('  • Data is not null');
+          developer.log('  • Data keys: ${data.keys}');
+          developer.log('  • Data size: ${data.length} entries');
+          
           // Convert Map<dynamic, dynamic> to Map<String, dynamic>
           final notificationData = Map<String, dynamic>.from(
             data.map((key, value) => MapEntry(key.toString(), value)),
           );
-          developer.log('PushNotificationHelper: Processing notification from Firebase: $notificationData');
-          // Process through the same handler as OneSignal notifications
-          // This matches KMP's PushNotificationHandler.handleNotification(json, database)
-          await _processNotification(notificationData);
+          
+          developer.log('✅ Notification data converted successfully');
+          developer.log('  • Converted keys: ${notificationData.keys}');
+          developer.log('  • Notification data: $notificationData');
+          developer.log('  → Calling _processNotification()...');
+          
+          try {
+            // Process through the same handler as OneSignal notifications
+            // This matches KMP's PushNotificationHandler.handleNotification(json, database)
+            await _processNotification(notificationData);
+            developer.log('✅ Notification processed successfully');
+          } catch (e, stackTrace) {
+            developer.log(
+              '❌ Error processing notification: $e',
+              error: e,
+              stackTrace: stackTrace,
+            );
+          }
+        } else {
+          developer.log('⚠️ Notification data is null');
+          developer.log('  → Cannot process notification');
         }
+      } else {
+        developer.log('⚠️ Unknown method: ${call.method}');
+        developer.log('  → Expected: onNotificationReceived');
       }
+      
+      developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     });
     
-    developer.log('PushNotificationHelper: Firebase Messaging Service channel set up');
+    developer.log('✅ Firebase Messaging Service method channel set up successfully');
+    developer.log('  • Channel name: com.foms.schedule/firebase_notifications');
+    developer.log('  • Handler registered: true');
+    developer.log('  • Ready to receive notifications from service extension');
+    developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   }
 
   /// Process stored notifications from SharedPreferences

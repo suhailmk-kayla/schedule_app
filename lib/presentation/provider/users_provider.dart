@@ -259,6 +259,44 @@ class UsersProvider extends ChangeNotifier {
     );
   }
 
+  /// Update user
+  /// Converted from KMP's updateUser
+  Future<bool> updateUser({
+    required int userId,
+    required String code,
+    required String name,
+    required String phone,
+    required int categoryId,
+    required String address,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final result = await _usersRepository.updateUser(
+      userId: userId,
+      code: code,
+      name: name,
+      phone: phone,
+      address: address,
+      categoryId: categoryId,
+    );
+
+    return result.fold(
+      (failure) {
+        _errorMessage = failure.message;
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      },
+      (_) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      },
+    );
+  }
+
   /// Load storekeepers (category 2)
   /// Converted from KMP's getStorekeepers
   Future<void> loadStorekeepers() async {

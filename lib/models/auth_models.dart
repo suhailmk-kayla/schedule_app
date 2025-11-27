@@ -64,12 +64,19 @@ class LoginResponse {
   @JsonKey(defaultValue: '')
   final String message;
 
-  @JsonKey(defaultValue: null)
+  @JsonKey(name: 'error', defaultValue: '')
+  final String error; // Some responses use 'error' instead of 'message'
+
+  @JsonKey(
+    defaultValue: null,
+    fromJson: _dataFromJson, // Custom converter
+  )
   final LoginResponseData? data;
 
   const LoginResponse({
     this.status = 2,
     this.message = '',
+    this.error = '',
     this.data,
   });
 
@@ -78,5 +85,21 @@ class LoginResponse {
   Map<String, dynamic> toJson() => _$LoginResponseToJson(this);
 
   bool get isSuccess => status == 1;
+  
+  // Get error message - check both 'error' and 'message' fields
+  String get errorMessage {
+    if (error.isNotEmpty) return error;
+    if (message.isNotEmpty) return message;
+    return 'Login failed. Please try again.';
+  }
+  
+  // Custom converter to handle data field when it's a List or not a Map
+  static LoginResponseData? _dataFromJson(dynamic json) {
+    if (json == null) return null;
+    if (json is List) return null; // Empty array or list means no data
+    if (json is Map<String, dynamic>) {
+      return LoginResponseData.fromJson(json);
+    }
+    return null; // Invalid type, return null
+  }
 }
-

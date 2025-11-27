@@ -91,13 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Title
-            Text(
-              'Schedule App',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
+
             const SizedBox(height: 32),
 
             // User Code/Name Field

@@ -25,7 +25,9 @@ import '../../models/sync_models.dart';
 import '../../models/salesman_model.dart';
 import '../../models/supplier_model.dart';
 import '../../models/user_category_model.dart';
+import '../../models/master_data_api.dart';
 import '../../utils/storage_helper.dart';
+import '../../utils/notification_id.dart';
 
 /// Sync Provider
 /// Handles batch downloading and syncing all master data
@@ -2724,6 +2726,70 @@ class SyncProvider extends ChangeNotifier {
       developer.log('SyncProvider: clearAllTable() - Error: $e');
       rethrow;
     }
+  }
+
+  /// Logout all users from all devices (admin only - matches KMP About screen)
+  Future<void> logoutAllUsersFromDevices() async {
+    developer.log('SyncProvider: logoutAllUsersFromDevices() - Start');
+
+    final usersResult = await _usersRepository.getAllUsers();
+    final users = usersResult.fold<List<User>>(
+      (failure) {
+        developer.log(
+          'SyncProvider: logoutAllUsersFromDevices() - Failed to load users: ${failure.message}',
+        );
+        throw Exception(failure.message);
+      },
+      (data) => data,
+    );
+
+    final currentUserId = await StorageHelper.getUserId();
+    final payload = _buildLogoutNotificationPayload(users, currentUserId);
+
+    final result = await _usersRepository.logoutAllUsersFromDevices(
+      currentUserId: currentUserId,
+      notificationPayload: payload,
+    );
+
+    result.fold(
+      (failure) {
+        developer.log(
+          'SyncProvider: logoutAllUsersFromDevices() - API error: ${failure.message}',
+        );
+        throw Exception(failure.message);
+      },
+      (_) => developer.log(
+        'SyncProvider: logoutAllUsersFromDevices() - Success',
+      ),
+    );
+  }
+
+  Map<String, dynamic> _buildLogoutNotificationPayload(
+    List<User> users,
+    int currentUserId,
+  ) {
+    final ids = users
+        .where((user) => user.id != currentUserId)
+        .map((user) => {
+              'user_id': user.id,
+              'silent_push': 1,
+            })
+        .toList();
+
+    return {
+      'ids': ids,
+      'data_message': 'Logout device',
+      'data': {
+        'data_ids': [
+          {
+            'table': NotificationId.logout,
+            'id': 0,
+          },
+        ],
+        'show_notification': '0',
+        'message': 'Logout device',
+      },
+    };
   }
 
   /// Update progress with throttling (Priority 2: Performance optimization)

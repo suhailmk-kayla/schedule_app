@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Converted from KMP's AppSettings.kt
 class StorageHelper {
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
+  static const MethodChannel _storageChannel = MethodChannel('com.foms.schedule/storage');
 
   // Storage keys (matching KMP's AppSettings keys)
   static const String _keyUserToken = 'key_user_token';
@@ -106,14 +109,16 @@ class StorageHelper {
   // Pending Notifications Management
   // ============================================================================
 
-  /// Get all pending notifications stored in SharedPreferences
+  /// Get all pending notifications stored in native SharedPreferences
+  /// Uses method channel to access native SharedPreferences file
   /// Returns list of notification data maps
   static Future<List<Map<String, dynamic>>> getPendingNotifications() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonString = prefs.getString('pending_notifications_list');
+      // Call native method to get JSON string from native SharedPreferences
+      final jsonString = await _storageChannel.invokeMethod<String>('getPendingNotifications');
       
       if (jsonString == null || jsonString.isEmpty) {
+        developer.log('StorageHelper: No pending notifications found');
         return [];
       }
       
@@ -122,39 +127,30 @@ class StorageHelper {
           .map((item) => item as Map<String, dynamic>)
           .toList();
     } catch (e) {
+      developer.log('StorageHelper: Error getting pending notifications: $e');
       return [];
     }
   }
 
-  /// Clear all pending notifications
+  /// Clear all pending notifications from native SharedPreferences
   static Future<void> clearPendingNotifications() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('pending_notifications_list');
+      await _storageChannel.invokeMethod('clearPendingNotifications');
     } catch (e) {
+      developer.log('StorageHelper: Error clearing pending notifications: $e');
       // Ignore errors
     }
   }
 
-  /// Remove a specific pending notification by timestamp
+  /// Remove a specific pending notification by timestamp from native SharedPreferences
   /// Used to remove processed notifications
   static Future<void> removePendingNotification(int timestamp) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonString = prefs.getString('pending_notifications_list');
-      
-      if (jsonString == null || jsonString.isEmpty) {
-        return;
-      }
-      
-      final List<dynamic> jsonList = json.decode(jsonString);
-      jsonList.removeWhere((item) {
-        final map = item as Map<String, dynamic>;
-        return map['timestamp'] == timestamp;
+      await _storageChannel.invokeMethod('removePendingNotification', {
+        'timestamp': timestamp,
       });
-      
-      await prefs.setString('pending_notifications_list', json.encode(jsonList));
     } catch (e) {
+      developer.log('StorageHelper: Error removing pending notification: $e');
       // Ignore errors
     }
   }

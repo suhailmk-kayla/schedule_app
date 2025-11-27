@@ -5,6 +5,8 @@ import '../../repositories/packed_subs/packed_subs_repository.dart';
 import '../../repositories/units/units_repository.dart';
 import '../../repositories/users/users_repository.dart';
 import '../../repositories/order_sub_suggestions/order_sub_suggestions_repository.dart';
+import '../../repositories/products/products_repository.dart';
+import '../../repositories/out_of_stock/out_of_stock_repository.dart';
 import '../../models/order_api.dart';
 import '../../models/order_sub_with_details.dart';
 import '../../models/order_item_detail.dart';
@@ -12,6 +14,8 @@ import '../../models/order_with_name.dart';
 import '../../models/master_data_api.dart';
 import '../../utils/config.dart';
 import '../../utils/storage_helper.dart';
+import '../../utils/order_flags.dart';
+import '../../utils/push_notification_builder.dart';
 import 'package:intl/intl.dart';
 
 /// Orders Provider
@@ -24,6 +28,9 @@ class OrdersProvider extends ChangeNotifier {
   final UnitsRepository? _unitsRepository;
   final UsersRepository _usersRepository;
   final OrderSubSuggestionsRepository _orderSubSuggestionsRepository;
+  final ProductsRepository? _productsRepository;
+  final PushNotificationBuilder _pushNotificationBuilder;
+  final OutOfStockRepository _outOfStockRepository;
 
   OrdersProvider({
     required UsersRepository usersRepository,
@@ -32,12 +39,18 @@ class OrdersProvider extends ChangeNotifier {
     required PackedSubsRepository packedSubsRepository,
     required OrderSubSuggestionsRepository orderSubSuggestionsRepository,
     UnitsRepository? unitsRepository,
+    ProductsRepository? productsRepository,
+    required PushNotificationBuilder pushNotificationBuilder,
+    required OutOfStockRepository outOfStockRepository,
   })  : _usersRepository = usersRepository,
         _ordersRepository = ordersRepository,
         _routesRepository = routesRepository,
         _packedSubsRepository = packedSubsRepository,
         _orderSubSuggestionsRepository = orderSubSuggestionsRepository,
-        _unitsRepository = unitsRepository;
+        _unitsRepository = unitsRepository,
+        _productsRepository = productsRepository,
+        _pushNotificationBuilder = pushNotificationBuilder,
+        _outOfStockRepository = outOfStockRepository;
 
   // ============================================================================
   // State Variables
@@ -443,6 +456,26 @@ class OrdersProvider extends ChangeNotifier {
     return success;
   }
 
+  /// Remove suggestion by ID
+  /// Converted from KMP's removeSuggestion
+  Future<bool> removeSuggestion(int sugId) async {
+    final result = await _orderSubSuggestionsRepository.removeSuggestion(sugId);
+
+    bool success = false;
+    result.fold(
+      (failure) => _setError(failure.message),
+      (_) {
+        success = true;
+        // Reload order details to reflect changes
+        if (_orderDetails != null) {
+          loadOrderDetails(_orderDetails!.order.id);
+        }
+      },
+    );
+
+    return success;
+  }
+
   /// Clear current order
   void clearCurrentOrder() {
     _currentOrder = null;
@@ -743,6 +776,337 @@ class OrdersProvider extends ChangeNotifier {
 
     _setLoading(false);
     return true;
+  }
+
+  /// Save order as draft with note map, available qty map, and out of stock list
+  /// Updates order subs locally and sets flag to 3 (draft)
+  /// Converted from KMP's saveAsDraft(noteMap, availableQtyMap, outOfStockList, handler)
+  Future<bool> saveAsDraftWithNotes({
+    required Map<int, String> noteMap,
+    required Map<int, String> availableQtyMap,
+    required List<int> outOfStockList,
+  }) async {
+    if (_orderDetails == null || _orderDetailItems.isEmpty) {
+      _setError('Order not loaded');
+      return false;
+    }
+
+    _setLoading(true);
+    _clearError();
+
+    try {
+      // Update each order sub with notes, available qty, and out of stock flag
+      for (final item in _orderDetailItems) {
+        final orderSubId = item.orderSub.id;
+        final orderSub = item.orderSub;
+
+        // Get note from map or use existing
+        String note = noteMap[orderSubId] ?? '';
+        if (orderSub.orderSubNote != null && 
+            orderSub.orderSubNote!.contains(ApiConfig.noteSplitDel)) {
+          // If note contains split delimiter, keep the first part
+          note = orderSub.orderSubNote!.split(ApiConfig.noteSplitDel).first;
+        }
+
+        // Get available qty from map or use existing
+        double availableQty = orderSub.orderSubAvailableQty;
+        if (availableQtyMap.containsKey(orderSubId)) {
+          availableQty = double.tryParse(availableQtyMap[orderSubId] ?? '0') ?? 0.0;
+        }
+
+        // Determine order flag based on out of stock list
+        int orderFlag = orderSub.orderSubOrdrFlag;
+        if (outOfStockList.contains(orderSubId)) {
+          orderFlag = OrderSubFlag.outOfStock;
+        } else if (orderSub.orderSubIsCheckedFlag == 0) {
+          // If not checked yet, set to inStock if not in out of stock list
+          orderFlag = OrderSubFlag.inStock;
+        }
+
+        // Create updated order sub
+        final updatedOrderSub = OrderSub(
+          id: orderSub.id,
+          orderSubOrdrInvId: orderSub.orderSubOrdrInvId,
+          orderSubOrdrId: orderSub.orderSubOrdrId,
+          orderSubCustId: orderSub.orderSubCustId,
+          orderSubSalesmanId: orderSub.orderSubSalesmanId,
+          orderSubStockKeeperId: orderSub.orderSubStockKeeperId,
+          orderSubDateTime: orderSub.orderSubDateTime,
+          orderSubPrdId: orderSub.orderSubPrdId,
+          orderSubUnitId: orderSub.orderSubUnitId,
+          orderSubCarId: orderSub.orderSubCarId,
+          orderSubRate: orderSub.orderSubRate,
+          orderSubUpdateRate: orderSub.orderSubUpdateRate,
+          orderSubQty: orderSub.orderSubQty,
+          orderSubAvailableQty: availableQty,
+          orderSubUnitBaseQty: orderSub.orderSubUnitBaseQty,
+          orderSubIsCheckedFlag: orderSub.orderSubIsCheckedFlag,
+          orderSubOrdrFlag: orderFlag,
+          orderSubNote: note,
+          orderSubNarration: orderSub.orderSubNarration,
+          orderSubFlag: orderSub.orderSubFlag,
+          createdAt: orderSub.createdAt,
+          updatedAt: orderSub.updatedAt,
+        );
+
+        // Update order sub in local DB
+        final updateResult = await _ordersRepository.addOrderSub(updatedOrderSub);
+        if (updateResult.isLeft) {
+          _setError('Failed to update order sub: ${updateResult.left.message}');
+          _setLoading(false);
+          return false;
+        }
+      }
+
+      // Update order flag to 3 (draft)
+      final flagResult = await _ordersRepository.updateOrderFlag(
+        orderId: _orderDetails!.order.id,
+        flag: 3,
+      );
+
+      if (flagResult.isLeft) {
+        _setError(flagResult.left.message);
+        _setLoading(false);
+        return false;
+      }
+
+      // Reload order details to reflect changes
+      await loadOrderDetails(_orderDetails!.order.id);
+
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      _setError('Error saving draft: $e');
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Update process flag (isProcessFinish)
+  /// Converted from KMP's updateProcessFlag
+  Future<bool> updateProcessFlag({
+    required int orderId,
+    required int isProcessFinish,
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    final result = await _ordersRepository.updateProcessFlag(
+      orderId: orderId,
+      isProcessFinish: isProcessFinish,
+    );
+
+    bool success = false;
+    result.fold(
+      (failure) => _setError(failure.message),
+      (_) => success = true,
+    );
+
+    _setLoading(false);
+    return success;
+  }
+
+  /// Inform updates to order (storekeeper updates)
+  /// Sends order updates to API with notes, available quantities, and out of stock flags
+  /// Converted from KMP's informUpdates
+  Future<bool> informUpdates({
+    required Map<int, String> noteMap,
+    required Map<int, String> availableQtyMap,
+    required List<int> outOfStockList,
+    required Function(String) onFailure,
+    required Function() onSuccess,
+  }) async {
+    if (_orderDetails == null || _orderDetailItems.isEmpty) {
+      onFailure('Order not loaded');
+      return false;
+    }
+
+    _setLoading(true);
+    _clearError();
+
+    try {
+      final order = _orderDetails!.order;
+      final currentUserId = await StorageHelper.getUserId();
+
+      // 1. Build push notification user list (matches KMP lines 598-615)
+      final List<Map<String, dynamic>> userIds = [];
+
+      // Get admins
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            userIds.add({
+              'user_id': admin.id,
+              'silent_push': 1,
+            });
+          }
+        },
+      );
+
+      // Get storekeepers (excluding current user)
+      final storekeepersResult = await _usersRepository.getUsersByCategory(2);
+      storekeepersResult.fold(
+        (_) {},
+        (storekeepers) {
+          for (final storekeeper in storekeepers) {
+            if (storekeeper.id != currentUserId) {
+              userIds.add({
+                'user_id': storekeeper.id,
+                'silent_push': 1,
+              });
+            }
+          }
+        },
+      );
+
+      // Get billers if order has biller
+      if (order.orderBillerId != -1) {
+        final billersResult = await _usersRepository.getUsersByCategory(5);
+        billersResult.fold(
+          (_) {},
+          (billers) {
+            for (final biller in billers) {
+              userIds.add({
+                'user_id': biller.id,
+                'silent_push': 1,
+              });
+            }
+          },
+        );
+      }
+
+      // Add salesman with silent_push = 0 (visible notification)
+      if (order.orderSalesmanId != -1) {
+        userIds.add({
+          'user_id': order.orderSalesmanId,
+          'silent_push': 0,
+        });
+      }
+
+      // 2. Build push notification payload
+      final notificationPayload = {
+        'ids': userIds,
+        'data_message': 'Updates from storekeeper',
+        'data': {
+          'data_ids': [
+            {'table': 8, 'id': order.id} // Order table
+          ],
+          'show_notification': '0',
+          'message': 'Updates from storekeeper',
+        },
+      };
+
+      // 3. Build items array with updated notes, available qty, and flags
+      final List<Map<String, dynamic>> itemsArray = [];
+
+      for (final item in _orderDetailItems) {
+        final orderSub = item.orderSub;
+        final orderSubId = orderSub.id;
+
+        // Extract note (remove split delimiter if present)
+        String note = noteMap[orderSubId] ?? '';
+        if (orderSub.orderSubNote != null &&
+            orderSub.orderSubNote!.contains(ApiConfig.noteSplitDel)) {
+          note = orderSub.orderSubNote!.split(ApiConfig.noteSplitDel).first;
+        }
+
+        // Get available qty
+        double availableQty = orderSub.orderSubAvailableQty;
+        if (availableQtyMap.containsKey(orderSubId)) {
+          availableQty = double.tryParse(availableQtyMap[orderSubId] ?? '0') ?? 0.0;
+        } else if (outOfStockList.contains(orderSubId)) {
+          availableQty = 0.0;
+        }
+
+        // Determine order flag
+        int orderFlag = orderSub.orderSubOrdrFlag;
+        if (orderSub.orderSubIsCheckedFlag == 0) {
+          // If not checked yet, update based on out of stock list
+          if (outOfStockList.contains(orderSubId)) {
+            orderFlag = OrderSubFlag.outOfStock;
+          } else {
+            orderFlag = OrderSubFlag.inStock;
+          }
+        }
+
+        // Build suggestions array
+        final List<Map<String, dynamic>> suggestionsArray = [];
+        if (item.suggestions.isNotEmpty) {
+          for (final suggestion in item.suggestions) {
+            suggestionsArray.add({
+              'prod_id': suggestion.prodId,
+              'price': suggestion.price,
+              'note': suggestion.note ?? '',
+            });
+          }
+        }
+
+        // Build item payload
+        itemsArray.add({
+          'order_sub_id': orderSubId,
+          'order_sub_prd_id': orderSub.orderSubPrdId,
+          'order_sub_unit_id': orderSub.orderSubUnitId,
+          'order_sub_car_id': orderSub.orderSubCarId,
+          'order_sub_rate': orderSub.orderSubRate,
+          'order_sub_date_time': orderSub.orderSubDateTime,
+          'order_sub_update_rate': orderSub.orderSubUpdateRate,
+          'order_sub_qty': orderSub.orderSubQty,
+          'order_sub_available_qty': availableQty,
+          'order_sub_unit_base_qty': orderSub.orderSubUnitBaseQty,
+          'order_sub_ordr_flag': orderFlag,
+          'order_sub_is_checked_flag': 1,
+          'order_sub_note': note,
+          'order_sub_narration': orderSub.orderSubNarration ?? '',
+          'suggestions': suggestionsArray,
+        });
+      }
+
+      // 4. Build order update payload
+      final payload = {
+        'order_id': order.id,
+        'uuid': order.uuid,
+        'order_cust_id': order.orderCustId,
+        'order_cust_name': order.orderCustName,
+        'order_salesman_id': order.orderSalesmanId,
+        'order_stock_keeper_id': order.orderStockKeeperId,
+        'order_biller_id': order.orderBillerId,
+        'order_checker_id': order.orderCheckerId,
+        'order_date_time': order.orderDateTime,
+        'order_total': order.orderTotal,
+        'order_freight_charge': order.orderFreightCharge,
+        'order_note': order.orderNote ?? '',
+        'order_approve_flag': OrderApprovalFlag.verifiedByStorekeeper,
+        'items': itemsArray,
+        'notification': notificationPayload,
+      };
+
+      // 5. Call API
+      final result = await _ordersRepository.updateOrderWithCustomPayload(payload);
+
+      result.fold(
+        (failure) {
+          _setError(failure.message);
+          _setLoading(false);
+          onFailure(failure.message);
+        },
+        (updatedOrder) {
+          // Reload order details to reflect changes
+          loadOrderDetails(order.id);
+          _setLoading(false);
+          onSuccess();
+        },
+      );
+
+      return result.isRight;
+    } catch (e) {
+      final errorMsg = 'Error informing updates: $e';
+      _setError(errorMsg);
+      _setLoading(false);
+      onFailure(errorMsg);
+      return false;
+    }
   }
 
   /// Send order (check stock) - calls API
@@ -1134,6 +1498,820 @@ class OrdersProvider extends ChangeNotifier {
 
   void _clearError() {
     _errorMessage = null;
+  }
+
+  // ============================================================================
+  // Salesman Order Details Methods
+  // ============================================================================
+
+  /// Send order to biller or checker
+  /// Converted from KMP's sendToBillerOrChecker
+  Future<bool> sendToBillerOrChecker({
+    required bool isBiller,
+    required int userId,
+    required Order order,
+    int? approvalFlag,
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      // Get users for notifications
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      final List<Map<String, dynamic>> userIds = [];
+
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            userIds.add({
+              'user_id': admin.id,
+              'silent_push': 1,
+            });
+          }
+        },
+      );
+
+      if (isBiller) {
+        final billersResult = await _usersRepository.getUsersByCategory(5);
+        billersResult.fold(
+          (_) {},
+          (billers) {
+            for (final biller in billers) {
+              userIds.add({
+                'user_id': biller.id,
+                'silent_push': 0,
+              });
+            }
+          },
+        );
+      }
+
+      if (approvalFlag != null) {
+        userIds.add({
+          'user_id': order.orderSalesmanId,
+          'silent_push': 1,
+        });
+        final checkersResult = await _usersRepository.getUsersByCategory(6);
+        checkersResult.fold(
+          (_) {},
+          (checkers) {
+            for (final checker in checkers) {
+              if (userId != checker.id) {
+                userIds.add({
+                  'user_id': checker.id,
+                  'silent_push': 1,
+                });
+              }
+            }
+          },
+        );
+      }
+
+      // Build notification data
+      final dataIds = [
+        {'table': 8, 'id': order.id}
+      ];
+
+      final notificationJsonObject = {
+        'ids': userIds,
+        'data_message': 'Order received',
+        'data': {
+          'data_ids': dataIds,
+          'show_notification': '0',
+          'message': 'Order received',
+        },
+      };
+
+      // Build API params
+      final params = {
+        'order_id': order.id,
+        'is_biller': isBiller ? 1 : 0,
+        'user_Id': userId,
+        'order_approve_flag': approvalFlag ?? order.orderApproveFlag,
+        'notification': notificationJsonObject,
+      };
+
+      // Call API
+      final result = await _ordersRepository.updateBillerOrChecker(params);
+
+      bool success = false;
+      result.fold(
+        (failure) => _setError(failure.message),
+        (_) {
+          success = true;
+          // Update local DB if needed
+          if (approvalFlag != null) {
+            _ordersRepository.updateOrderApproveFlag(
+              orderId: order.id,
+              approveFlag: OrderApprovalFlag.checkerIsChecking,
+              notification: null,
+            );
+          }
+        },
+      );
+
+      _setLoading(false);
+      return success;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Send order to checkers
+  /// Converted from KMP's sendToCheckers
+  Future<bool> sendToCheckers(Order order) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      // Get users for notifications
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      final checkersResult = await _usersRepository.getUsersByCategory(6);
+      final List<Map<String, dynamic>> userIds = [];
+
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            userIds.add({
+              'user_id': admin.id,
+              'silent_push': 1,
+            });
+          }
+        },
+      );
+
+      checkersResult.fold(
+        (_) {},
+        (checkers) {
+          for (final checker in checkers) {
+            userIds.add({
+              'user_id': checker.id,
+              'silent_push': 0,
+            });
+          }
+        },
+      );
+
+      // Build notification data
+      final dataIds = [
+        {'table': 8, 'id': order.id}
+      ];
+
+      final notificationJsonObject = {
+        'ids': userIds,
+        'data_message': 'Order received',
+        'data': {
+          'data_ids': dataIds,
+          'show_notification': '0',
+          'message': 'Order received',
+        },
+      };
+
+      // Call API
+      final result = await _ordersRepository.updateOrderApproveFlag(
+        orderId: order.id,
+        approveFlag: OrderApprovalFlag.sendToChecker,
+        notification: notificationJsonObject,
+      );
+
+      bool success = false;
+      result.fold(
+        (failure) => _setError(failure.message),
+        (_) {
+          success = true;
+          // Local DB is already updated by the repository method
+        },
+      );
+
+      _setLoading(false);
+      return success;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Report single item to admin (creates out of stock entry)
+  /// Converted from KMP's reportAdmin (lines 1683-1828)
+  Future<bool> reportAdmin(
+    OrderSub orderSub, {
+    String uuid = '',
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      if (_productsRepository == null) {
+        _setError('ProductsRepository not available');
+        _setLoading(false);
+        return false;
+      }
+
+      // 1. Get product info for defaultSupplierId and autoSend
+      final productResult = await _productsRepository.getProductById(orderSub.orderSubPrdId);
+      int defaultSupplierId = -1;
+      int autoSendToSupplier = 0;
+      
+      productResult.fold(
+        (_) {},
+        (product) {
+          if (product != null) {
+            defaultSupplierId = product.default_supp_id;
+            autoSendToSupplier = (defaultSupplierId != -1) ? product.auto_sendto_supplier_flag : 0;
+          }
+        },
+      );
+
+      final subFlag = (autoSendToSupplier == 1) ? 1 : 0;
+
+      // 2. Generate UUID if not provided (matching KMP line 1533-1534)
+      String finalUuid = uuid;
+      if (finalUuid.isEmpty) {
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final deviceToken = await StorageHelper.getDeviceToken();
+        final userId = await StorageHelper.getUserId();
+        finalUuid = '$timestamp$deviceToken$userId${orderSub.id}';
+      }
+
+      // 3. Get current date/time in DB format
+      final now = DateTime.now();
+      final dateTimeStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
+
+      // 4. Create OutOfStockMaster (matching KMP lines 1695-1717)
+      final oospMaster = OutOfStock(
+        id: 0,
+        outosOrderSubId: orderSub.id,
+        outosCustId: orderSub.orderSubCustId,
+        outosSalesManId: orderSub.orderSubSalesmanId,
+        outosStockKeeperId: orderSub.orderSubStockKeeperId,
+        outosDateAndTime: orderSub.orderSubDateTime,
+        outosProdId: orderSub.orderSubPrdId,
+        outosUnitId: orderSub.orderSubUnitId,
+        outosCarId: orderSub.orderSubCarId,
+        outosQty: orderSub.orderSubQty - orderSub.orderSubAvailableQty,
+        outosAvailableQty: orderSub.orderSubQty - orderSub.orderSubAvailableQty,
+        outosUnitBaseQty: orderSub.orderSubUnitBaseQty,
+        outosNote: '',
+        outosNarration: orderSub.orderSubNarration ?? '',
+        outosIsCompleatedFlag: 0,
+        outosFlag: 1,
+        uuid: finalUuid,
+        createdAt: dateTimeStr,
+        updatedAt: dateTimeStr,
+      );
+
+      // 5. Create OutOfStockProducts (matching KMP lines 1718-1745)
+      final oosp = OutOfStockSub(
+        id: 0,
+        outosSubOutosId: 0,
+        outosSubOrderSubId: orderSub.id,
+        outosSubCustId: orderSub.orderSubCustId,
+        outosSubSalesManId: orderSub.orderSubSalesmanId,
+        outosSubStockKeeperId: orderSub.orderSubStockKeeperId,
+        outosSubDateAndTime: orderSub.orderSubDateTime,
+        outosSubSuppId: defaultSupplierId,
+        outosSubProdId: orderSub.orderSubPrdId,
+        outosSubUnitId: orderSub.orderSubUnitId,
+        outosSubCarId: orderSub.orderSubCarId,
+        outosSubRate: orderSub.orderSubRate,
+        outosSubUpdatedRate: orderSub.orderSubUpdateRate,
+        outosSubQty: orderSub.orderSubQty - orderSub.orderSubAvailableQty,
+        outosSubAvailableQty: orderSub.orderSubQty - orderSub.orderSubAvailableQty,
+        outosSubUnitBaseQty: orderSub.orderSubUnitBaseQty,
+        outosSubNote: '',
+        outosSubNarration: orderSub.orderSubNarration ?? '',
+        outosSubStatusFlag: subFlag,
+        outosSubIsCheckedFlag: 0,
+        outosSubFlag: 1,
+        uuid: finalUuid,
+        createdAt: dateTimeStr,
+        updatedAt: dateTimeStr,
+      );
+
+      // 6. Build notification payload (matching KMP lines 1746-1753)
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      final List<Map<String, dynamic>> userIds = [];
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            userIds.add({
+              'user_id': admin.id,
+              'silent_push': 0, // Matching KMP: PushUserData(it.userId, 0)
+            });
+          }
+        },
+      );
+
+      final notificationPayload = {
+        'ids': userIds,
+        'data_message': 'Product out of stock reported',
+        'data': {
+          'data_ids': [],
+          'show_notification': '0',
+          'message': 'Product out of stock reported',
+        },
+      };
+
+      // 7. Call API (matching KMP lines 1754-1827)
+      final result = await _outOfStockRepository.createOutOfStock(
+        OutOfStock(
+          id: 0,
+          outosOrderSubId: oospMaster.outosOrderSubId,
+          outosCustId: oospMaster.outosCustId,
+          outosSalesManId: oospMaster.outosSalesManId,
+          outosStockKeeperId: oospMaster.outosStockKeeperId,
+          outosDateAndTime: oospMaster.outosDateAndTime,
+          outosProdId: oospMaster.outosProdId,
+          outosUnitId: oospMaster.outosUnitId,
+          outosCarId: oospMaster.outosCarId,
+          outosQty: oospMaster.outosQty,
+          outosAvailableQty: oospMaster.outosAvailableQty,
+          outosUnitBaseQty: oospMaster.outosUnitBaseQty,
+          outosNote: '',
+          outosNarration: oospMaster.outosNarration,
+          outosIsCompleatedFlag: 0,
+          outosFlag: 1,
+          uuid: finalUuid,
+          createdAt: dateTimeStr,
+          updatedAt: dateTimeStr,
+          items: [oosp],
+        ),
+        notificationPayload: notificationPayload,
+      );
+
+      return await result.fold(
+        (failure) async {
+          _setError(failure.message);
+          _setLoading(false);
+          return false;
+        },
+        (outOfStock) async {
+          // 8. Store sub items in local DB with current DB format dates and isViewed=1
+          // KMP uses getDBFormatDateTime() when storing from API response (lines 1780-1781, 1811-1812)
+          // KMP sets isViewed=1 for reportAdmin (lines 1785, 1816)
+          final now = DateTime.now();
+          final dateTimeStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
+
+          // Update master with current DB format dates and isViewed=1 (matching KMP lines 1780-1781, 1785)
+          final masterToStore = OutOfStock(
+            id: outOfStock.id,
+            outosOrderSubId: outOfStock.outosOrderSubId,
+            outosCustId: outOfStock.outosCustId,
+            outosSalesManId: outOfStock.outosSalesManId,
+            outosStockKeeperId: outOfStock.outosStockKeeperId,
+            outosDateAndTime: outOfStock.outosDateAndTime,
+            outosProdId: outOfStock.outosProdId,
+            outosUnitId: outOfStock.outosUnitId,
+            outosCarId: outOfStock.outosCarId,
+            outosQty: outOfStock.outosQty,
+            outosAvailableQty: outOfStock.outosAvailableQty,
+            outosUnitBaseQty: outOfStock.outosUnitBaseQty,
+            outosNote: outOfStock.outosNote,
+            outosNarration: outOfStock.outosNarration,
+            outosIsCompleatedFlag: outOfStock.outosIsCompleatedFlag,
+            outosFlag: outOfStock.outosFlag,
+            uuid: outOfStock.uuid,
+            createdAt: dateTimeStr, // Use current DB format (matching KMP line 1780)
+            updatedAt: dateTimeStr, // Use current DB format (matching KMP line 1781)
+            items: outOfStock.items,
+          );
+
+          // Re-store master with isViewed=1 (matching KMP line 1785)
+          await _outOfStockRepository.addOutOfStockMaster(masterToStore, isViewed: 1);
+
+          // Store sub items with API dates and isViewed=1 (matching KMP lines 1811-1812, 1816)
+          // Note: KMP uses created_at and updated_at from API for sub items (not getDBFormatDateTime)
+          if (outOfStock.items != null) {
+            for (final sub in outOfStock.items!) {
+              // Use API dates for sub items (matching KMP lines 1811-1812)
+              await _outOfStockRepository.addOutOfStockProduct(sub, isViewed: 1);
+            }
+          }
+
+          // Note: KMP's reportAdmin does NOT update order flag (only reportAllAdmin does)
+          // Matching KMP lines 1787-1823: Only stores records, no flag update
+          _setLoading(false);
+          return true;
+        },
+      );
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Report all items to admin (batch creates out of stock entries)
+  /// Converted from KMP's reportAllAdmin (lines 1516-1681)
+  Future<bool> reportAllAdmin() async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      if (_productsRepository == null) {
+        _setError('ProductsRepository not available');
+        _setLoading(false);
+        return false;
+      }
+
+      // 1. Build out of stock maps (matching KMP lines 1520-1590)
+      final Map<OutOfStock, OutOfStockSub> outOfStocks = {};
+      final stopwatch = Stopwatch()..start();
+
+      for (final item in _orderDetailItems) {
+        if (item.orderSub.orderSubOrdrFlag == OrderSubFlag.outOfStock) {
+          final orderSub = item.orderSub;
+
+          // Get product info
+          final productResult = await _productsRepository.getProductById(orderSub.orderSubPrdId);
+          int defaultSupplierId = -1;
+          int autoSendToSupplier = 0;
+
+          productResult.fold(
+            (_) {},
+            (product) {
+              if (product != null) {
+                defaultSupplierId = product.default_supp_id;
+                autoSendToSupplier = (defaultSupplierId != -1) ? product.auto_sendto_supplier_flag : 0;
+              }
+            },
+          );
+
+          final subFlag = (autoSendToSupplier == 1) ? 1 : 0;
+
+          // Generate UUID (matching KMP line 1533-1534)
+          final timestamp = DateTime.now().millisecondsSinceEpoch;
+          final deviceToken = await StorageHelper.getDeviceToken();
+          final userId = await StorageHelper.getUserId();
+          final finalUuid = '$timestamp$deviceToken$userId${orderSub.id}';
+
+          // Get current date/time
+          final now = DateTime.now();
+          final dateTimeStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
+
+          // Create OutOfStockMaster (matching KMP lines 1535-1557)
+          final oospMaster = OutOfStock(
+            id: 0,
+            outosOrderSubId: orderSub.id,
+            outosCustId: orderSub.orderSubCustId,
+            outosSalesManId: orderSub.orderSubSalesmanId,
+            outosStockKeeperId: orderSub.orderSubStockKeeperId,
+            outosDateAndTime: orderSub.orderSubDateTime,
+            outosProdId: orderSub.orderSubPrdId,
+            outosUnitId: orderSub.orderSubUnitId,
+            outosCarId: orderSub.orderSubCarId,
+            outosQty: orderSub.orderSubQty - orderSub.orderSubAvailableQty,
+            outosAvailableQty: orderSub.orderSubQty - orderSub.orderSubAvailableQty,
+            outosUnitBaseQty: orderSub.orderSubUnitBaseQty,
+            outosNote: '',
+            outosNarration: orderSub.orderSubNarration ?? '',
+            outosIsCompleatedFlag: 0,
+            outosFlag: 1,
+            uuid: finalUuid,
+            createdAt: dateTimeStr,
+            updatedAt: dateTimeStr,
+          );
+
+          // Create OutOfStockProducts (matching KMP lines 1558-1585)
+          final oosp = OutOfStockSub(
+            id: 0,
+            outosSubOutosId: 0,
+            outosSubOrderSubId: orderSub.id,
+            outosSubCustId: orderSub.orderSubCustId,
+            outosSubSalesManId: orderSub.orderSubSalesmanId,
+            outosSubStockKeeperId: orderSub.orderSubStockKeeperId,
+            outosSubDateAndTime: orderSub.orderSubDateTime,
+            outosSubSuppId: defaultSupplierId,
+            outosSubProdId: orderSub.orderSubPrdId,
+            outosSubUnitId: orderSub.orderSubUnitId,
+            outosSubCarId: orderSub.orderSubCarId,
+            outosSubRate: orderSub.orderSubRate,
+            outosSubUpdatedRate: orderSub.orderSubUpdateRate,
+            outosSubQty: orderSub.orderSubQty - orderSub.orderSubAvailableQty,
+            outosSubAvailableQty: orderSub.orderSubQty - orderSub.orderSubAvailableQty,
+            outosSubUnitBaseQty: orderSub.orderSubUnitBaseQty,
+            outosSubNote: '',
+            outosSubNarration: orderSub.orderSubNarration ?? '',
+            outosSubStatusFlag: subFlag,
+            outosSubIsCheckedFlag: 0,
+            outosSubFlag: 1,
+            uuid: finalUuid,
+            createdAt: dateTimeStr,
+            updatedAt: dateTimeStr,
+          );
+
+          outOfStocks[oospMaster] = oosp;
+        }
+      }
+
+      // Delay matching time taken (matching KMP line 1592)
+      stopwatch.stop();
+      if (stopwatch.elapsedMilliseconds > 0) {
+        await Future.delayed(Duration(milliseconds: stopwatch.elapsedMilliseconds));
+      }
+
+      // 2. Build notification payload (matching KMP lines 1593-1600)
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      final List<Map<String, dynamic>> userIds = [];
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            userIds.add({
+              'user_id': admin.id,
+              'silent_push': 0, // Matching KMP: PushUserData(it.userId, 0)
+            });
+          }
+        },
+      );
+
+      final notificationPayload = {
+        'ids': userIds,
+        'data_message': 'Product out of stock reported',
+        'data': {
+          'data_ids': [],
+          'show_notification': '0',
+          'message': 'Product out of stock reported',
+        },
+      };
+
+      // 3. Call API (matching KMP lines 1601-1679)
+      final mastersList = outOfStocks.keys.toList();
+      final subsList = outOfStocks.values.toList();
+
+      final result = await _outOfStockRepository.createOutOfStockAll(
+        outOfStockMasters: mastersList,
+        outOfStockSubs: subsList,
+        notificationPayload: notificationPayload,
+      );
+
+      return await result.fold(
+        (failure) async {
+          _setError(failure.message);
+          _setLoading(false);
+          return false;
+        },
+        (outOfStockList) async {
+          // 4. Update flags and reload order details (matching KMP lines 1610-1674)
+          // Note: Records are already stored in createOutOfStockAll with correct dates and isViewed
+          for (int index = 0; index < outOfStockList.length; index++) {
+            final outOfStock = outOfStockList[index];
+
+            // Update order sub flag to 4 (reported) - matching KMP line 1672
+            await _ordersRepository.updateOrderSubFlag(
+              orderSubId: outOfStock.outosOrderSubId,
+              flag: 4, // Reported flag
+            );
+
+            // On last item, reload order details (matching KMP line 1675-1677)
+            if (index == outOfStockList.length - 1) {
+              if (_orderDetails != null) {
+                await loadOrderDetails(_orderDetails!.order.id);
+              }
+            }
+          }
+
+          _setLoading(false);
+          return true;
+        },
+      );
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  // ============================================================================
+  // Checker Order Details Methods
+  // ============================================================================
+
+  /// Delete temp order subs (orderFlag = 0) for checker discard flow
+  Future<bool> deleteTempOrderSubs(int orderId) async {
+    final result = await _ordersRepository.deleteTempOrderSubs(orderId);
+    bool success = false;
+    result.fold(
+      (failure) => _setError(failure.message),
+      (_) => success = true,
+    );
+    return success;
+  }
+
+  /// Submit checked report (checker role)
+  Future<bool> sendCheckedReport({
+    required Map<int, double> updatedQtyMap,
+    required Map<int, String> noteMap,
+  }) async {
+    if (_orderDetails == null) {
+      _setError('Order not loaded');
+      return false;
+    }
+
+    _setLoading(true);
+    _clearError();
+
+    try {
+      final order = _orderDetails!.order;
+
+      final orderSubsResult = await _ordersRepository.getAllOrderSubAndDetails(order.id);
+      if (orderSubsResult.isLeft) {
+        _setError(orderSubsResult.left.message);
+        _setLoading(false);
+        return false;
+      }
+
+      final tempSubsResult = await _ordersRepository.getTempOrderSubAndDetails(order.id);
+      if (tempSubsResult.isLeft) {
+        _setError(tempSubsResult.left.message);
+        _setLoading(false);
+        return false;
+      }
+
+      final orderSubs = orderSubsResult.right;
+      final tempSubs = tempSubsResult.right;
+
+      final currentUserId = await StorageHelper.getUserId();
+      final notificationIds = await _pushNotificationBuilder.buildOrderNotificationList(
+        currentUserId: currentUserId,
+        checkerId: order.orderCheckerId,
+        billerId: order.orderBillerId,
+        includeStorekeepers: true,
+        includeCheckers: true,
+        includeBillers: true,
+      );
+
+      if (order.orderSalesmanId != -1) {
+        notificationIds.add({
+          'user_id': order.orderSalesmanId,
+          'silent_push': 0,
+        });
+      }
+
+      final notificationPayload = {
+        'ids': notificationIds,
+        'data_message': 'Order checked and completed',
+        'data': {
+          'data_ids': [
+            {'table': 8, 'id': order.id},
+          ],
+          'show_notification': '0',
+          'message': 'Order checked and completed',
+        },
+      };
+
+      final itemsPayload = <Map<String, dynamic>>[];
+
+      for (final detail in orderSubs) {
+        itemsPayload.add(
+          _buildCheckerItemPayload(
+            detail: detail,
+            updatedQtyMap: updatedQtyMap,
+            noteMap: noteMap,
+            markAsReplaced: _replacedOrderSubIds.containsKey(detail.orderSub.id),
+          ),
+        );
+      }
+
+      for (final detail in tempSubs) {
+        itemsPayload.add(
+          _buildCheckerTempItemPayload(
+            detail: detail,
+            updatedQtyMap: updatedQtyMap,
+            noteMap: noteMap,
+          ),
+        );
+      }
+
+      final payload = {
+        'order_id': order.id,
+        'uuid': order.uuid,
+        'order_cust_id': order.orderCustId,
+        'order_cust_name': order.orderCustName,
+        'order_salesman_id': order.orderSalesmanId,
+        'order_stock_keeper_id': order.orderStockKeeperId,
+        'order_biller_id': order.orderBillerId == -1 ? 0 : order.orderBillerId,
+        'order_checker_id': order.orderCheckerId,
+        'order_date_time': order.orderDateTime,
+        'order_total': order.orderTotal,
+        'order_freight_charge': order.orderFreightCharge,
+        'order_note': order.orderNote ?? '',
+        'order_approve_flag': OrderApprovalFlag.completed,
+        'items': itemsPayload,
+        'notification': notificationPayload,
+      };
+
+      final result = await _ordersRepository.updateOrderWithCustomPayload(payload);
+
+      bool success = false;
+      result.fold(
+        (failure) => _setError(failure.message),
+        (_) => success = true,
+      );
+
+      _setLoading(false);
+      if (success) {
+        await loadOrderDetails(order.id);
+      }
+      return success;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  Map<String, dynamic> _buildCheckerItemPayload({
+    required OrderSubWithDetails detail,
+    required Map<int, double> updatedQtyMap,
+    required Map<int, String> noteMap,
+    bool markAsReplaced = false,
+  }) {
+    final sub = detail.orderSub;
+    double qty = sub.orderSubQty;
+    double availableQty = sub.orderSubAvailableQty;
+    int orderFlag = sub.orderSubOrdrFlag;
+    String note = noteMap[sub.id]?.trim().isNotEmpty == true ? noteMap[sub.id]!.trim() : (sub.orderSubNote ?? '');
+
+    if (markAsReplaced) {
+      orderFlag = OrderSubFlag.replaced;
+    } else if (updatedQtyMap.containsKey(sub.id)) {
+      final newQty = updatedQtyMap[sub.id] ?? 0.0;
+      final message = newQty == 0
+          ? 'Checker cancelled Item(qty : ${qty.toStringAsFixed(2)})'
+          : 'Checker changed Item quantity (${qty.toStringAsFixed(2)} -> ${newQty.toStringAsFixed(2)})';
+      note = _appendCheckerNote(note, message);
+      qty = newQty;
+      availableQty = 0.0;
+      orderFlag = OrderSubFlag.inStock;
+    }
+
+    return {
+      'order_sub_id': sub.id,
+      'order_sub_prd_id': sub.orderSubPrdId,
+      'order_sub_unit_id': sub.orderSubUnitId,
+      'order_sub_car_id': sub.orderSubCarId,
+      'order_sub_rate': sub.orderSubRate,
+      'order_sub_date_time': sub.orderSubDateTime,
+      'order_sub_update_rate': sub.orderSubUpdateRate,
+      'order_sub_qty': qty,
+      'order_sub_available_qty': availableQty,
+      'order_sub_unit_base_qty': sub.orderSubUnitBaseQty,
+      'order_sub_ordr_flag': orderFlag,
+      'order_sub_is_checked_flag': 1,
+      'order_sub_note': note,
+      'order_sub_narration': sub.orderSubNarration ?? '',
+    };
+  }
+
+  Map<String, dynamic> _buildCheckerTempItemPayload({
+    required OrderSubWithDetails detail,
+    required Map<int, double> updatedQtyMap,
+    required Map<int, String> noteMap,
+  }) {
+    final sub = detail.orderSub;
+    double qty = sub.orderSubQty;
+    double availableQty = sub.orderSubAvailableQty;
+    int orderFlag = sub.orderSubOrdrFlag;
+    String note = noteMap[sub.id]?.trim().isNotEmpty == true ? noteMap[sub.id]!.trim() : (sub.orderSubNote ?? '');
+
+    if (updatedQtyMap.containsKey(sub.id)) {
+      qty = updatedQtyMap[sub.id] ?? 0.0;
+      availableQty = 0.0;
+      orderFlag = OrderSubFlag.inStock;
+    }
+
+    return {
+      'order_sub_id': sub.id,
+      'order_sub_prd_id': sub.orderSubPrdId,
+      'order_sub_unit_id': sub.orderSubUnitId,
+      'order_sub_car_id': sub.orderSubCarId,
+      'order_sub_rate': sub.orderSubRate,
+      'order_sub_date_time': sub.orderSubDateTime,
+      'order_sub_update_rate': sub.orderSubUpdateRate,
+      'order_sub_qty': qty,
+      'order_sub_available_qty': availableQty,
+      'order_sub_unit_base_qty': sub.orderSubUnitBaseQty,
+      'order_sub_ordr_flag': orderFlag,
+      'order_sub_is_checked_flag': 1,
+      'order_sub_note': note,
+      'order_sub_narration': sub.orderSubNarration ?? '',
+    };
+  }
+
+  String _appendCheckerNote(String existingNote, String message) {
+    if (existingNote.isEmpty) {
+      return message;
+    }
+    if (existingNote.contains(ApiConfig.noteSplitDel)) {
+      return '$existingNote$message';
+    }
+    return '$existingNote${ApiConfig.noteSplitDel}$message';
   }
 }
 

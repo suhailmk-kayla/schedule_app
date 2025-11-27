@@ -62,6 +62,7 @@ class PushNotificationSender {
               if (user.catId == 4) {
                 continue;
               }
+             
 
               userIds.add({
                 'user_id': user.id,
@@ -87,7 +88,7 @@ class PushNotificationSender {
         'data_message': message,
         'data': {
           'data_ids': dataIdsArray,
-          'show_notification': '0', // Silent push
+          'show_notification': 0, // Silent push
           'message': message,
         },
       };
@@ -106,7 +107,9 @@ class PushNotificationSender {
             // Accept all status codes to avoid throwing on non-2xx responses
             validateStatus: (status) => true,
             // Don't try to parse response as JSON - server might return empty or non-JSON
-            responseType: ResponseType.plain,
+            responseType: ResponseType.json,
+            receiveTimeout: const Duration(seconds: 120), // Increase to 2 minutes
+            sendTimeout: const Duration(seconds: 30), 
           ),
         );
 

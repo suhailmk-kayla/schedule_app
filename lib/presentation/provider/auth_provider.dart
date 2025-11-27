@@ -189,9 +189,7 @@ class AuthProvider extends ChangeNotifier {
 
         return Right(userData);
       } else {
-        final errorMsg = loginResponse.message.isNotEmpty
-            ? loginResponse.message
-            : 'Login failed. Please try again.';
+        final errorMsg = loginResponse.errorMessage;
         developer.log('Login error message: $errorMsg');
         _setError(errorMsg);
         _setLoading(false);

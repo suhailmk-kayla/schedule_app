@@ -21,6 +21,7 @@ class OneSignalNotificationServiceExtension : INotificationServiceExtension {
     private val tag = "OneSignalServiceExtension"
     private val pendingNotificationsPrefs = "pending_notifications"
     private val pendingNotificationsKey = "pending_notifications_list"
+    // final jsonString = prefs.getString('pending_notifications_list');
 
     override fun onNotificationReceived(event: INotificationReceivedEvent) {
         Log.e(tag, "========== onNotificationReceived() CALLED ==========")
@@ -32,6 +33,18 @@ class OneSignalNotificationServiceExtension : INotificationServiceExtension {
         Log.d(tag, "Notification ID: ${notification.notificationId}")
         Log.d(tag, "Title: ${notification.title}")
         Log.d(tag, "Body: ${notification.body}")
+        
+        // Determine notification type
+        val hasTitle = notification.title != null && notification.title!!.isNotEmpty()
+        val hasBody = notification.body != null && notification.body!!.isNotEmpty()
+        val isDataOnly = !hasTitle && !hasBody
+        
+        Log.d(tag, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        Log.d(tag, "📋 NOTIFICATION TYPE ANALYSIS:")
+        Log.d(tag, "  • Has Title: $hasTitle (${if (hasTitle) notification.title else "null/empty"})")
+        Log.d(tag, "  • Has Body: $hasBody (${if (hasBody) notification.body else "null/empty"})")
+        Log.d(tag, "  • Notification Type: ${if (isDataOnly) "🔵 DATA-ONLY" else "🟢 PAYLOAD (Display)"}")
+        Log.d(tag, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
         // Extract additional data (JSONObject, not Map)
         val additionalData = notification.additionalData
@@ -50,14 +63,42 @@ class OneSignalNotificationServiceExtension : INotificationServiceExtension {
                 // Check if app is in foreground
                 val isForeground = isAppInForeground(context)
                 
+                Log.d(tag, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                Log.d(tag, "📱 APP STATE:")
+                Log.d(tag, "  • App in Foreground: $isForeground")
+                Log.d(tag, "  • Notification Type: ${if (isDataOnly) "DATA-ONLY" else "PAYLOAD"}")
+                Log.d(tag, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                
                 if (isForeground) {
-                    Log.d(tag, "App is in foreground - Flutter listeners will handle processing")
-                    Log.d(tag, "Service Extension: Skipping storage (Flutter listeners will process)")
-                    // Don't store, don't prevent default - let Flutter listeners handle everything
-                    // Flutter listeners will process the notification and prevent display for silent pushes
-                    return // Early return - let Flutter listeners handle everything
+                    if (isDataOnly) {
+                        // DATA-ONLY notification in foreground
+                        // OneSignal SDK won't call addForegroundWillDisplayListener for data-only notifications
+                        // Service Extension MUST handle it
+                        Log.d(tag, "🔵 DATA-ONLY notification in FOREGROUND")
+                        Log.d(tag, "  → Service Extension MUST handle it (OneSignal SDK won't call addForegroundWillDisplayListener)")
+                        Log.d(tag, "  → Sending to Flutter via method channel")
+                        
+                        // Send to Flutter via method channel
+                        sendToFlutter(context, notificationData)
+                        
+                        // Prevent OneSignal from trying to process (it won't anyway for data-only, but good practice)
+                        event.preventDefault()
+                        return // Early return - service extension handled it
+                    } else {
+                        // PAYLOAD notification in foreground
+                        // OneSignal SDK WILL call addForegroundWillDisplayListener
+                        // Let OneSignal SDK handle it - don't intercept
+                        Log.d(tag, "🟢 PAYLOAD notification in FOREGROUND")
+                        Log.d(tag, "  → OneSignal SDK's addForegroundWillDisplayListener will handle it")
+                        Log.d(tag, "  → Service Extension: Not intercepting (letting OneSignal SDK process)")
+                        
+                        // Don't intercept - let OneSignal SDK's foreground listener handle it
+                        // Just return early without calling sendToFlutter or preventDefault
+                        return // Early return - let OneSignal SDK handle it
+                    }
                 } else {
-                    Log.d(tag, "App is in background/terminated - Service Extension handling")
+                    Log.d(tag, "📴 App is in BACKGROUND/TERMINATED")
+                    Log.d(tag, "  → Service Extension handling (Flutter engine not available)")
                     // Try to send to Flutter, otherwise store
                     sendToFlutter(context, notificationData)
                     
@@ -66,10 +107,16 @@ class OneSignalNotificationServiceExtension : INotificationServiceExtension {
                     val showNotification = (additionalDataMap["show_notification"] as? String)
                         ?: (additionalDataMap["data"] as? Map<*, *>)?.get("show_notification") as? String
                     
+                    Log.d(tag, "  • show_notification flag: ${showNotification ?: "not set"}")
+                    
                     if (showNotification == "0") {
-                        Log.d(tag, "Silent push detected (show_notification: 0) - Preventing notification display")
+                        Log.d(tag, "🔇 SILENT PUSH detected (show_notification: 0)")
+                        Log.d(tag, "  → Preventing notification display")
                         // Prevent OneSignal from displaying the notification only in background/terminated
                         event.preventDefault()
+                    } else {
+                        Log.d(tag, "🔔 DISPLAY NOTIFICATION (show_notification: ${showNotification ?: "1"})")
+                        Log.d(tag, "  → Notification will be displayed")
                     }
                 }
             } else {
@@ -165,54 +212,78 @@ class OneSignalNotificationServiceExtension : INotificationServiceExtension {
 
     /**
      * Send notification data to Flutter via method channel
+     * Uses static method channel reference from NotificationChannelHelper
+     * If channel is registered = app is in foreground = send immediately
+     * If channel is null = app is background/terminated = store in SharedPreferences
      */
     private fun sendToFlutter(context: Context, data: Map<String, Any>) {
         Log.d(tag, "========== sendToFlutter() START ==========")
+        Log.d(tag, "Attempting to send notification to Flutter...")
+        Log.d(tag, "  • Notification data keys: ${data.keys}")
+        Log.d(tag, "  • Notification data size: ${data.size} entries")
         
-        // Check if app is in foreground
+        // Check if app is in foreground (for logging purposes)
         val isForeground = isAppInForeground(context)
-        Log.d(tag, "App in foreground: $isForeground")
+        Log.d(tag, "App state check (for logging): $isForeground")
         
+        // Try to send via static method channel reference (set by MainActivity)
+        // This is more reliable than FlutterEngineCache in service extension context
+        Log.d(tag, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        Log.d(tag, "📡 METHOD 1: Trying static method channel reference")
+        Log.d(tag, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        val sentViaStaticChannel = NotificationChannelHelper.sendNotification(data)
+        
+        if (sentViaStaticChannel) {
+            Log.d(tag, "✅ SUCCESS: Notification sent via static method channel")
+            Log.d(tag, "  → App is confirmed to be in foreground")
+            Log.d(tag, "  → Flutter will process notification immediately")
+            Log.d(tag, "  → No need to store in SharedPreferences")
+            Log.d(tag, "========== sendToFlutter() END (SUCCESS) ==========")
+            return
+        }
+        
+        // Static channel failed, try FlutterEngineCache as fallback
+        Log.d(tag, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        Log.d(tag, "📡 METHOD 2: Trying FlutterEngineCache (fallback)")
+        Log.d(tag, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         try {
-            // Try to get Flutter engine from cache
             val flutterEngine = FlutterEngineCache.getInstance().get("main")
             
             if (flutterEngine != null) {
-                Log.d(tag, "✅ Flutter engine is available from cache")
+                Log.d(tag, "✅ Flutter engine found in cache")
                 try {
                     val channel = MethodChannel(
                         flutterEngine.dartExecutor.binaryMessenger,
                         "com.foms.schedule/firebase_notifications"
                     )
-                    Log.d(tag, "Sending notification to Flutter via MethodChannel...")
+                    Log.d(tag, "Sending notification via FlutterEngineCache method channel...")
                     channel.invokeMethod("onNotificationReceived", data)
-                    Log.d(tag, "✅ MethodChannel invokeMethod called successfully")
-                    
-                    // If app is in foreground and engine is available, we successfully sent it
-                    // Still store as backup in case Flutter side fails to process
-                    if (isForeground) {
-                        Log.d(tag, "App is in foreground - notification sent to Flutter, storing as backup")
-                        storeNotificationForLater(context, data)
-                    }
+                    Log.d(tag, "✅ MethodChannel invokeMethod called successfully (via FlutterEngineCache)")
+                    Log.d(tag, "  → Notification sent to Flutter")
+                    Log.d(tag, "========== sendToFlutter() END (SUCCESS) ==========")
                     return
                 } catch (e: Exception) {
-                    Log.e(tag, "❌ MethodChannel failed: ${e.message}")
+                    Log.e(tag, "❌ MethodChannel failed (via FlutterEngineCache): ${e.message}")
                     Log.e(tag, "Stack trace: ${e.stackTraceToString()}")
-                    storeNotificationForLater(context, data)
                 }
             } else {
                 Log.w(tag, "⚠️ Flutter engine NOT available from cache")
-                Log.d(tag, "  - App in foreground: $isForeground")
-                Log.d(tag, "  - This is normal if app is in background/terminated")
-                Log.d(tag, "  - Storing notification for later processing")
-                storeNotificationForLater(context, data)
+                Log.w(tag, "  → This is expected in service extension context")
             }
         } catch (e: Exception) {
-            Log.e(tag, "❌ Error in sendToFlutter: ${e.message}")
+            Log.e(tag, "❌ Error accessing FlutterEngineCache: ${e.message}")
             Log.e(tag, "Stack trace: ${e.stackTraceToString()}")
-            storeNotificationForLater(context, data)
         }
-        Log.d(tag, "========== sendToFlutter() END ==========")
+        
+        // Both methods failed - store in SharedPreferences
+        Log.d(tag, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        Log.d(tag, "📦 FALLBACK: Storing notification in SharedPreferences")
+        Log.d(tag, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        Log.d(tag, "  → Both method channel methods failed")
+        Log.d(tag, "  → App is likely in background/terminated")
+        Log.d(tag, "  → Notification will be processed when app resumes")
+        storeNotificationForLater(context, data)
+        Log.d(tag, "========== sendToFlutter() END (STORED) ==========")
     }
 
     /**
@@ -276,6 +347,15 @@ class OneSignalNotificationServiceExtension : INotificationServiceExtension {
             Log.e(tag, "✅ Notification stored successfully!")
             Log.e(tag, "  Total pending: ${notificationsArray.length()}")
             Log.e(tag, "  Timestamp: $timestamp")
+
+            val storedFinal = prefs.getString(pendingNotificationsKey, "[]")
+            Log.e(tag, "📌 Stored Pending Notification Data:\n$storedFinal")
+            try {
+    val prettyJson = JSONObject(storedFinal ?: "{}").toString(4)
+    Log.e(tag, "📌 Stored Pending Notification Data (Pretty):\n$prettyJson")
+} catch (e: Exception) {
+    Log.e(tag, "📌 Raw JSON (not pretty):\n$storedFinal")
+}
             
         } catch (e: Exception) {
             Log.e(tag, "❌ Error storing notification: ${e.message}")

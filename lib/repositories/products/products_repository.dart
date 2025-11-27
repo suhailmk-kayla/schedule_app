@@ -589,28 +589,14 @@ class ProductsRepository {
       // 3. Parse response
       // API returns: {status: 1, message: "...", product: {...}, productUnit: {...}}
       // Or error: {status: 0, message: "...", data: [...]}
-  late ProductApi productApi;
-  try {
-    productApi=ProductApi.fromJson(responseData);
-  } catch (e) {
-    developer.log('ProductsRepository: createProduct() - Error: $e');
-  } 
-  // = ProductApi.fromJson(responseData);
-
-      // if (productApi.status != 1) {
-      //   // Handle validation errors - API returns status 0 with data array
-      //   String errorMessage = productApi.message;
-      //   if (response.data is Map && response.data['data'] != null) {
-      //     final errors = response.data['data'] as List?;
-      //     if (errors != null && errors.isNotEmpty) {
-      //       errorMessage = errors.join('\n');
-      //     }
-      //   }
-      //   return Left(ServerFailure.fromError(
-      //     errorMessage.isEmpty ? 'Failed to create product' : errorMessage,
-      //   ));
-      // }
-
+      ProductApi productApi;
+      try {
+        productApi = ProductApi.fromJson(responseData);
+      } catch (e) {
+        developer.log('ProductsRepository: createProduct() - Error parsing response: $e');
+        return Left(ServerFailure.fromError('Failed to parse product response: $e'));
+      }
+      
       // 4. Store in local DB
       final addResult = await addProduct(productApi.product);
       if (addResult.isLeft) {
@@ -618,6 +604,17 @@ class ProductsRepository {
         return addResult.map((_) => productApi.product);
       }
       developer.log('ProductsRepository: createProduct() - Product: ${productApi.product.toJson()}');
+      
+      // 4b. Store ProductUnit in local DB (matches KMP line 209-210)
+      if (productApi.productUnit.id != -1) {
+        final productUnitAddResult = await addProductUnitLocal(productApi.productUnit);
+        if (productUnitAddResult.isLeft) {
+          developer.log(
+            'ProductsRepository: createProduct() - Failed to add product unit: ${productUnitAddResult.left}',
+          );
+          // Continue anyway - product is already stored
+        }
+      }
       
       // 5. Send push notification (fire-and-forget, non-blocking)
       // Matches KMP's sentPushNotification pattern (ProductViewModel.kt lines 206-212)
@@ -798,5 +795,353 @@ class ProductsRepository {
       return Left(UnknownFailure.fromError(e));
     }
   }
+
+  // ============================================================================
+  // PRODUCT CARS METHODS
+  // ============================================================================
+
+  /// Get product cars by product ID (grouped by brand/name/model/version)
+  /// Matches KMP's getProductCarByProductId (ProductsRepository.kt lines 230-253)
+  Future<Either<Failure, Map<String, Map<String, Map<String, List<String>>>>>>
+      getProductCarsByProductId(
+    int productId,
+  ) async {
+    try {
+      final db = await _database;
+      final maps = await db.rawQuery(
+        '''
+        SELECT
+          CarBrand.name AS carBrand,
+          CarName.name AS carName,
+          CASE
+            WHEN ProductCar.carModelId = -1 THEN ''
+            ELSE CarModel.name
+          END AS carModel,
+          CASE
+            WHEN ProductCar.carVersionId = -1 THEN ''
+            ELSE CarVersion.name
+          END AS carVersion,
+          ProductCar.*
+        FROM ProductCar
+        LEFT JOIN CarBrand ON CarBrand.carBrandId = ProductCar.carBrandId
+        LEFT JOIN CarName ON CarName.carNameId = ProductCar.carNameId
+        LEFT JOIN CarModel ON CarModel.carModelId = ProductCar.carModelId
+        LEFT JOIN CarVersion ON CarVersion.carVersionId = ProductCar.carVersionId
+        WHERE ProductCar.flag = 1 AND ProductCar.productId = ?
+        ORDER BY CarBrand.carBrandId, CarName.carNameId, CarModel.carModelId, CarVersion.carVersionId
+        ''',
+        [productId],
+      );
+
+      // Group by brand -> name -> model -> versions (matches KMP lines 236-247)
+      final carData = <String, Map<String, Map<String, List<String>>>>{};
+      for (final map in maps) {
+        final brand = map['carBrand'] as String? ?? '';
+        final name = map['carName'] as String? ?? '';
+        final model = map['carModel'] as String? ?? '';
+        final version = map['carVersion'] as String? ?? '';
+
+        if (brand.isEmpty || name.isEmpty) continue;
+
+        final brandMap = carData.putIfAbsent(brand, () => <String, Map<String, List<String>>>{});
+        final nameMap = brandMap.putIfAbsent(name, () => <String, List<String>>{});
+        final versionList = nameMap.putIfAbsent(model, () => <String>[]);
+        if (version.isNotEmpty && !versionList.contains(version)) {
+          versionList.add(version);
+        }
+      }
+
+      return Right(carData);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get product units by product ID (with derived unit names)
+  /// Matches KMP's getAllProductUnit (ProductsRepository.kt lines 288-298)
+  Future<Either<Failure, List<ProductUnitWithDetails>>> getProductUnitsByProductId(
+    int productId,
+  ) async {
+    try {
+      final db = await _database;
+      final maps = await db.rawQuery(
+        '''
+        SELECT
+          bu.name AS baseName,
+          du.name AS derivenName,
+          du.baseQty AS baseQty,
+          pu.*
+        FROM ProductUnits pu
+        LEFT JOIN Units bu ON pu.baseUnitId = bu.unitId
+        LEFT JOIN Units du ON pu.derivedUnitId = du.unitId
+        WHERE pu.productId = ? AND pu.flag = 1
+        ORDER BY pu.productId
+        ''',
+        [productId],
+      );
+
+      final units = maps.map((map) => ProductUnitWithDetails.fromMap(map)).toList();
+      return Right(units);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get product by ID with details (returns ProductWithDetails)
+  /// Matches KMP's getProductsById with JOIN query
+  Future<Either<Failure, ProductWithDetails?>> getProductByIdWithDetails(int productId) async {
+    try {
+      final db = await _database;
+      final maps = await db.rawQuery(
+        '''
+        SELECT
+          Category.name AS categoryName,
+          SubCategory.name AS subCategoryName,
+          Suppliers.name AS supplierName,
+          Units.name AS baseUnitName,
+          Product.*
+        FROM Product
+        LEFT JOIN Category ON Category.categoryId = Product.categoryId
+        LEFT JOIN SubCategory ON SubCategory.subCategoryId = Product.subCategoryId
+        LEFT JOIN Suppliers ON Suppliers.userId = Product.defaultSuppId
+        LEFT JOIN Units ON Units.unitId = Product.baseUnitId
+        WHERE Product.flag = 1 AND Product.productId = ?
+        ORDER BY Product.id DESC
+        LIMIT 1
+        ''',
+        [productId],
+      );
+
+      if (maps.isEmpty) {
+        return const Right(null);
+      }
+
+      final productWithDetails = ProductWithDetails.fromMap(maps.first);
+      return Right(productWithDetails);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Add product car via API and update local DB
+  /// Matches KMP's addCarToProduct (ProductViewModel.kt lines 427-447)
+  Future<Either<Failure, List<ProductCar>>> addProductCar({
+    required int productId,
+    required int brandId,
+    required int nameId,
+    required Map<String, Map<int, List<int>>> selectedMap, // modelId (as string) -> versionIds map
+  }) async {
+    try {
+      // Build params matching KMP's addProductCarParams (lines 309-354)
+      final List<Map<String, dynamic>> dataArray = [];
+      
+      if (selectedMap.isNotEmpty) {
+        selectedMap.forEach((modelIdStr, versionMap) {
+          final modelId = int.parse(modelIdStr);
+          versionMap.forEach((versionId, _) {
+            dataArray.add({
+              'product_id': productId,
+              'car_brand_id': brandId,
+              'car_name_id': nameId,
+              'car_model_id': modelId,
+              'car_version_id': versionId,
+            });
+          });
+          // If no versions for this model, add with version_id = -1
+          if (versionMap.isEmpty) {
+            dataArray.add({
+              'product_id': productId,
+              'car_brand_id': brandId,
+              'car_name_id': nameId,
+              'car_model_id': modelId,
+              'car_version_id': -1,
+            });
+          }
+        });
+      } else {
+        // If selectedMap is empty, add with model_id = -1 and version_id = -1
+        dataArray.add({
+          'product_id': productId,
+          'car_brand_id': brandId,
+          'car_name_id': nameId,
+          'car_model_id': -1,
+          'car_version_id': -1,
+        });
+      }
+
+      final response = await _dio.post(
+        ApiEndpoints.addProductCar,
+        data: {
+          'data': dataArray,  // Wrapped in "data" key as per KMP
+        },
+      );
+
+      final productCarApi = ProductCarApi.fromJson(response.data);
+      if (productCarApi.status != 1) {
+        return Left(ServerFailure.fromError(
+          'Failed to add car: ${productCarApi.message}',
+        ));
+      }
+
+      // Store in local DB
+      await addProductCars(productCarApi.data);
+
+      // Send push notification (matches KMP lines 437-441)
+      if (_pushNotificationSender != null && productCarApi.data.isNotEmpty) {
+        final dataIds = productCarApi.data
+            .map((car) => PushData(table: NotificationId.productCar, id: car.id))
+            .toList();
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Product car updates',
+        );
+      }
+
+      return Right(productCarApi.data);
+    } on DioException catch (e) {
+      return Left(NetworkFailure.fromDioError(e));
+    } catch (e) {
+      return Left(UnknownFailure.fromError(e));
+    }
+  }
+
+  /// Add product cars to local DB
+  /// Matches KMP's addProductCar (ProductsRepository.kt lines 184-191)
+  Future<Either<Failure, void>> addProductCars(List<ProductCar> productCars) async {
+    try {
+      final db = await _database;
+      await db.transaction((txn) async {
+        final batch = txn.batch();
+        for (final car in productCars) {
+          batch.insert(
+            'ProductCar',
+            {
+              'productCarId': car.id,
+              'productId': car.product_id,
+              'carBrandId': car.car_brand_id,
+              'carNameId': car.car_name_id,
+              'carModelId': car.car_model_id,
+              'carVersionId': car.car_version_id,
+              'flag': car.flag ?? 1,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+        await batch.commit(noResult: true);
+      });
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Add product unit via API and update local DB
+  /// Matches KMP's addUnitToProduct (ProductViewModel.kt lines 449-473)
+  Future<Either<Failure, ProductUnit>> addProductUnit({
+    required int productId,
+    required int baseUnitId,
+    required int derivedUnitId,
+  }) async {
+    try {
+      // Check if already exists (matches KMP lines 450-454)
+      final existResult = await checkProductUnitExist(
+        productId: productId,
+        baseUnitId: baseUnitId,
+        derivedUnitId: derivedUnitId,
+      );
+      existResult.fold(
+        (_) {},
+        (exists) {
+          if (exists) {
+            throw Exception('Already exist');
+          }
+        },
+      );
+
+      final response = await _dio.post(
+        ApiEndpoints.addProductUnit,
+        data: {
+          'prd_id': productId,  // Use "prd_id" not "product_id" as per KMP
+          'base_unit_id': baseUnitId,
+          'derived_unit_id': derivedUnitId,
+        },
+      );
+
+      final productUnitApi = ProductUnitApi.fromJson(response.data);
+      if (productUnitApi.status != 1) {
+        return Left(ServerFailure.fromError(
+          'Failed to add unit: ${productUnitApi.message}',
+        ));
+      }
+
+      // Store in local DB (matches KMP lines 467-468)
+      await addProductUnitLocal(productUnitApi.data);
+
+      // Send push notification (matches KMP lines 463-466)
+      if (_pushNotificationSender != null) {
+        final dataIds = [
+          PushData(table: NotificationId.productUnits, id: productUnitApi.data.id),
+        ];
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'Product unit updates',
+        );
+      }
+
+      return Right(productUnitApi.data);
+    } on DioException catch (e) {
+      return Left(NetworkFailure.fromDioError(e));
+    } catch (e) {
+      if (e.toString().contains('Already exist')) {
+        return Left(ValidationFailure.fromError('Already exist'));
+      }
+      return Left(UnknownFailure.fromError(e));
+    }
+  }
+
+  /// Check if product unit exists
+  /// Matches KMP's checkProductUnitExist (ProductsRepository.kt lines 276-285)
+  Future<Either<Failure, bool>> checkProductUnitExist({
+    required int productId,
+    required int baseUnitId,
+    required int derivedUnitId,
+  }) async {
+    try {
+      final db = await _database;
+      final maps = await db.query(
+        'ProductUnits',
+        where: 'productId = ? AND baseUnitId = ? AND derivedUnitId = ? AND flag = ?',
+        whereArgs: [productId, baseUnitId, derivedUnitId, 1],
+      );
+      return Right(maps.isNotEmpty);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Add product unit to local DB
+  /// Matches KMP's addProductUnit (ProductsRepository.kt lines 256-262)
+Future<Either<Failure, void>> addProductUnitLocal(ProductUnit productUnit) async {
+  try {
+    final db = await _database;
+
+    await db.rawInsert('''
+      INSERT OR REPLACE INTO ProductUnits 
+      (id,productUnitId, productId, baseUnitId, derivedUnitId, flag)
+      VALUES (NULL,?, ?, ?, ?, ?)
+    ''', [
+      productUnit.id,
+      productUnit.prd_id,
+      productUnit.base_unit_id,
+      productUnit.derived_unit_id,
+      1,
+    ]);
+
+    return const Right(null);
+  } catch (e) {
+    return Left(DatabaseFailure.fromError(e));
+  }
+}
+
 }
 

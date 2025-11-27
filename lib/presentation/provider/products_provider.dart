@@ -120,6 +120,16 @@ class ProductsProvider extends ChangeNotifier {
   List<Supplier> _supplierList = [];
   List<Supplier> get supplierList => _supplierList;
 
+  // Product Details State (for ProductDetailsScreen)
+  ProductWithDetails? _currentProductWithDetails;
+  ProductWithDetails? get currentProductWithDetails => _currentProductWithDetails;
+
+  Map<String, Map<String, Map<String, List<String>>>> _productCars = {};
+  Map<String, Map<String, Map<String, List<String>>>> get productCars => _productCars;
+
+  List<ProductUnitWithDetails> _productUnits = [];
+  List<ProductUnitWithDetails> get productUnits => _productUnits;
+
   // ============================================================================
   // Public Methods
   // ============================================================================
@@ -274,6 +284,120 @@ class ProductsProvider extends ChangeNotifier {
         notifyListeners();
       },
     );
+  }
+
+  /// Load product by ID with details (includes joined names)
+  /// Matches KMP's getProductsById and getProductByProductId
+  Future<ProductWithDetails?> loadProductByIdWithDetails(int productId) async {
+    _setLoading(true);
+    _clearError();
+
+    final result = await _productsRepository.getProductByIdWithDetails(productId);
+
+    ProductWithDetails? product;
+    result.fold(
+      (failure) => _setError(failure.message),
+      (p) {
+        product = p;
+        _currentProductWithDetails = p;
+        // Load derived units if base unit exists (matches KMP line 92-94)
+        if (p?.product.base_unit_id != -1) {
+          loadDerivedUnits(p!.product.base_unit_id);
+        }
+        // Load product cars and units (matches KMP lines 96-97)
+        loadProductCars(productId);
+        loadProductUnits(productId);
+      },
+    );
+
+    _setLoading(false);
+    return product;
+  }
+
+  /// Load product cars by product ID
+  /// Matches KMP's getProductByProductId
+  Future<void> loadProductCars(int productId) async {
+    final result = await _productsRepository.getProductCarsByProductId(productId);
+    result.fold(
+      (_) {},
+      (cars) {
+        _productCars = cars;
+        notifyListeners();
+      },
+    );
+  }
+
+  /// Load product units by product ID
+  /// Matches KMP's getProductUnitsByProductId
+  Future<void> loadProductUnits(int productId) async {
+    final result = await _productsRepository.getProductUnitsByProductId(productId);
+    result.fold(
+      (_) {},
+      (units) {
+        _productUnits = units;
+        notifyListeners();
+      },
+    );
+  }
+
+  /// Add car to product
+  /// Matches KMP's addCarToProduct
+  Future<String?> addCarToProduct({
+    required int productId,
+    required int brandId,
+    required int nameId,
+    required Map<String, Map<int, List<int>>> selectedMap,
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    final result = await _productsRepository.addProductCar(
+      productId: productId,
+      brandId: brandId,
+      nameId: nameId,
+      selectedMap: selectedMap,
+    );
+
+    String? error;
+    result.fold(
+      (failure) => error = failure.message,
+      (_) {
+        // Reload product cars (matches KMP pattern)
+        loadProductCars(productId);
+      },
+    );
+
+    _setLoading(false);
+    return error;
+  }
+
+  /// Add unit to product
+  /// Matches KMP's addUnitToProduct
+  Future<String?> addUnitToProduct({
+    required int productId,
+    required int baseUnitId,
+    required int derivedUnitId,
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    final result = await _productsRepository.addProductUnit(
+      productId: productId,
+      baseUnitId: baseUnitId,
+      derivedUnitId: derivedUnitId,
+    );
+
+    String? error;
+    result.fold(
+      (failure) => error = failure.message,
+      (_) {
+        // Reload product units (matches KMP pattern)
+        loadProductUnits(productId);
+      },
+    );
+
+    _setLoading(false);
+    return error;
   }
 
   // ============================================================================

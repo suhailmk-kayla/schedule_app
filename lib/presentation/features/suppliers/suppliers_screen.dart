@@ -5,6 +5,7 @@ import '../../../models/supplier_model.dart';
 import '../../../utils/asset_images.dart';
 import '../../../utils/storage_helper.dart';
 import 'create_supplier_screen.dart';
+import 'supplier_details_screen.dart';
 
 /// Suppliers Screen
 /// Displays list of suppliers with search functionality
@@ -117,15 +118,12 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               return _SupplierListItem(
                 supplier: supplier,
                 onTap: () {
-                  // TODO: Navigate to user details screen
-                  // Navigator.push(
-                  //   context,
-                  //   MaterialPageRoute(
-                  //     builder: (_) => UserDetailsScreen(userId: supplier.userId),
-                  //   ),
-                  // );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('User details for ${supplier.name}')),
+                  // Navigate to supplier details screen
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SupplierDetailsScreen(userId: supplier.userId ?? -1),
+                    ),
                   );
                 },
                 onReportTap: () {

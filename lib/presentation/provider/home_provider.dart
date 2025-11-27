@@ -114,8 +114,9 @@ class HomeProvider extends ChangeNotifier {
     // Out of Stock - Admin (1), Storekeeper (2), Supplier (4)
     if (userType == 4 || userType == 1 || userType == 2) {
       final outOfStockText = userType == 4 ? 'Orders' : 'Out of Stock';
+      final outOfStockImage = userType == 4 ? AssetImages.imagesOrder : AssetImages.imagesOutofstock;
       menuList.add(MenuItem(
-        imagePath: AssetImages.imagesOutofstock,
+        imagePath: outOfStockImage,
         type: MenuType.outOfStock,
         title: outOfStockText,
         icon: Icons.inventory_2,
@@ -134,7 +135,7 @@ class HomeProvider extends ChangeNotifier {
       ));
     }
 
-    // Customers - Admin (1), Salesman (3)
+    // Customers - Admin (1),
     if (userType == 1 || userType == 3) {
       menuList.add(MenuItem(
         imagePath: AssetImages.imagesCustomer,
