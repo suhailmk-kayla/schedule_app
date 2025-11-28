@@ -28,6 +28,8 @@ import '../../models/user_category_model.dart';
 import '../../models/master_data_api.dart';
 import '../../utils/storage_helper.dart';
 import '../../utils/notification_id.dart';
+import '../../di.dart';
+import 'auth_provider.dart';
 
 /// Sync Provider
 /// Handles batch downloading and syncing all master data
@@ -2612,9 +2614,25 @@ class SyncProvider extends ChangeNotifier {
 
   /// Logout user (special notification type)
   Future<void> logout() async {
-    // TODO: Implement logout logic
-    NotificationManager().triggerLogout();
-    developer.log('SyncProvider: logout called (TODO: implement full logout)');
+    developer.log('SyncProvider: logout() - Start (triggered by push notification)');
+    _isSyncing = true;
+    notifyListeners();
+    try {
+      await clearAllTable();
+      final authProvider = getIt<AuthProvider>();
+      await authProvider.logout();
+      NotificationManager().triggerLogout();
+      developer.log('SyncProvider: logout() - Completed');
+    } catch (e, stackTrace) {
+      developer.log(
+        'SyncProvider: logout() - Error: $e',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
   }
 
   // ============================================================================

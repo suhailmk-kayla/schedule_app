@@ -84,7 +84,7 @@ class PushNotificationHandler {
       final table = item['table'] as int? ?? 0;
       final id = item['id'] as int? ?? 0;
       developer.log('PushNotificationHandler: Downloading item - table: $table, id: $id');
-      if (table == 0 || id == 0) {
+      if (table == 0) {
         developer.log('PushNotificationHandler: Invalid table or id: table=$table, id=$id');
         return;
       }
@@ -179,7 +179,7 @@ class PushNotificationHandler {
           break;
         case NotificationId.logout:
           await syncProvider.logout();
-          developer.log('PushNotificationHandler: Logout downloaded: $id');
+          developer.log('PushNotificationHandler: request for logout recieved: $id');
           break;
         default:
           developer.log('PushNotificationHandler: Unknown table ID: $table');

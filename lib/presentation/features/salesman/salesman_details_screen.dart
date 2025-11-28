@@ -24,7 +24,7 @@ class _SalesmanDetailsScreenState extends State<SalesmanDetailsScreen> {
   bool _showChangePasswordDialog = false;
   bool _showConfirmDialog = false;
   String _confirmMessage = '';
-  int _confirmDialogType = 0; // 0-change password, 1-delete salesman
+  int _confirmDialogType = 0; // 0-change password, 1-delete salesman, 2-logout devices
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
   bool _passwordError = false;
@@ -85,6 +85,15 @@ class _SalesmanDetailsScreenState extends State<SalesmanDetailsScreen> {
     });
   }
 
+  void _handleLogoutDevice() {
+    if (!_isUserActive) return;
+    setState(() {
+      _confirmMessage = 'Do you want to logout this salesman from all devices?';
+      _confirmDialogType = 2;
+      _showConfirmDialog = true;
+    });
+  }
+
   void _handleChangePassword() {
     setState(() {
       _showChangePasswordDialog = true;
@@ -123,6 +132,15 @@ class _SalesmanDetailsScreenState extends State<SalesmanDetailsScreen> {
           if (success && mounted) {
             Navigator.of(context).pop();
           }
+        }
+        break;
+
+      case 2: // Logout devices
+        success = await usersProvider.logoutFromDevices(widget.userId);
+        if (success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Salesman logged out from all devices')),
+          );
         }
         break;
     }
@@ -301,21 +319,6 @@ class _SalesmanDetailsScreenState extends State<SalesmanDetailsScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        actions: [
-          // Edit button (top right)
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: _handleEdit,
-            tooltip: 'Edit',
-          ),
-          // Delete button (top right)
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: _handleDelete,
-            tooltip: 'Delete',
-            color: Colors.red,
-          ),
-        ],
       ),
       body: Consumer<UsersProvider>(
         builder: (context, usersProvider, child) {
@@ -355,122 +358,145 @@ class _SalesmanDetailsScreenState extends State<SalesmanDetailsScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          user.name.toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            const Text(
-                              'Code : ',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                            Text(
-                              user.code,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            const Text(
-                              'Category : ',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                            Text(
-                              userWithCategory.categoryName,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            const Text(
-                              'Phone : ',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                            Text(
-                              user.phoneNo,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
+                  child: Stack(
+                    children: [
+                      // Content
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Address : ',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                user.address,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.black,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            const Text(
-                              'Status : ',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
                             Text(
-                              _isUserActive ? 'Active' : 'Inactive',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: _isUserActive
-                                    ? Colors.green.shade700
-                                    : Colors.red,
-                                fontWeight: FontWeight.w500,
+                              user.name.toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
                               ),
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                const Text(
+                                  'Code : ',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                Text(
+                                  user.code,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                const Text(
+                                  'Category : ',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                Text(
+                                  userWithCategory.categoryName,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                const Text(
+                                  'Phone : ',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                Text(
+                                  user.phoneNo,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Address : ',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    user.address,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                const Text(
+                                  'Status : ',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                Text(
+                                  _isUserActive ? 'Active' : 'Inactive',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: _isUserActive
+                                        ? Colors.green.shade700
+                                        : Colors.red,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                      // Edit button - top right
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: IconButton(
+                          icon: const Icon(Icons.edit, size: 24),
+                          onPressed: _handleEdit,
+                        ),
+                      ),
+                      // Delete button - bottom right
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: IconButton(
+                          icon: const Icon(Icons.delete, size: 24, color: Colors.red),
+                          onPressed: _handleDelete,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -481,22 +507,50 @@ class _SalesmanDetailsScreenState extends State<SalesmanDetailsScreen> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: ElevatedButton(
-            onPressed: _handleChangePassword,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).primaryColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+          child: Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _handleChangePassword,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).primaryColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text(
+                    'Change Password',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
               ),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-            ),
-            child: const Text(
-              'Change Password',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-              ),
-            ),
+              if (_isUserActive) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _handleLogoutDevice,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text(
+                      'Logout Device',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),

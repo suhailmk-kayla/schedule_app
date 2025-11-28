@@ -42,6 +42,8 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
   @override
   void initState() {
     super.initState();
@@ -119,14 +121,29 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           create: (_) => getIt<CarsProvider>(),
         ),
       ],
-      child: MaterialApp(
-        title: 'Schedule App',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-          useMaterial3: true,
-        ),
-        home: const SplashScreen(),
+      child: Consumer<NotificationManager>(
+        builder: (context, notificationManager, _) {
+          if (notificationManager.notificationLogoutTrigger) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              notificationManager.resetLogoutTrigger();
+              _navigatorKey.currentState?.pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const SplashScreen()),
+                (route) => false,
+              );
+            });
+          }
+
+          return MaterialApp(
+            navigatorKey: _navigatorKey,
+            title: 'Schedule App',
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+              useMaterial3: true,
+            ),
+            home: const SplashScreen(),
+          );
+        },
       ),
     );
   }

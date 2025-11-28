@@ -220,33 +220,33 @@ class _SyncScreenState extends State<SyncScreen>
                       const SizedBox(height: 24),
 
                       // Progress Indicator
-                      SizedBox(
-                        width: 200,
-                        height: 200,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // Circular Progress
-                            CircularProgressIndicator(
-                              value: syncProvider.progress,
-                              strokeWidth: 8,
-                              backgroundColor: Colors.white.withValues(alpha: 0.3),
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                            ),
-                            // Progress Text
-                            Text(
-                              '${(syncProvider.progress * 100).toInt()}%',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      // SizedBox(
+                      //   width: 200,
+                      //   height: 200,
+                      //   child: Stack(
+                      //     alignment: Alignment.center,
+                      //     children: [
+                      //       // Circular Progress
+                      //       CircularProgressIndicator(
+                      //         value: syncProvider.progress,
+                      //         strokeWidth: 8,
+                      //         backgroundColor: Colors.white.withValues(alpha: 0.3),
+                      //         valueColor: const AlwaysStoppedAnimation<Color>(
+                      //           Colors.white,
+                      //         ),
+                      //       ),
+                      //       // Progress Text
+                      //       Text(
+                      //         '${(syncProvider.progress * 100).toInt()}%',
+                      //         style: const TextStyle(
+                      //           color: Colors.white,
+                      //           fontSize: 24,
+                      //           fontWeight: FontWeight.bold,
+                      //         ),
+                      //       ),
+                      //     ],
+                      //   ),
+                      // ),
                       const SizedBox(height: 32),
 
                       // Error Message

@@ -264,8 +264,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                               Expanded(
                                 flex: 1,
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.start,
                                   children: [
                                     const Text(
                                       'Price',

@@ -705,17 +705,12 @@ class UsersRepository {
     required int userId,
   }) async {
     try {
-      // TODO: Implement push notification logic similar to KMP
-      // For now, just call the logout endpoint
+      final notificationPayload = _buildLogoutNotificationPayloadForUser(userId);
       final response = await _dio.post(
         ApiEndpoints.logoutUserDevice,
         data: {
           'id': userId,
-          'notification': {
-            'title': 'Logout',
-            'body': 'User logged out from all devices',
-            'type': 'logout',
-          }, // TODO: Add proper notification payload
+          'notification': notificationPayload,
         },
       );
 
@@ -731,6 +726,28 @@ class UsersRepository {
     } catch (e) {
       return Left(UnknownFailure.fromError(e));
     }
+  }
+
+  Map<String, dynamic> _buildLogoutNotificationPayloadForUser(int userId) {
+    return {
+      'ids': [
+        {
+          'user_id': userId,
+          'silent_push': 0,
+        },
+      ],
+      'data_message': 'Logout device',
+      'data': {
+        'data_ids': [
+          {
+            'table': NotificationId.logout,
+            'id': 0,
+          },
+        ],
+        'show_notification': '0',
+        'message': 'Logout device',
+      },
+    };
   }
 
   /// Logout all users from all devices via API (admin-only)

@@ -92,7 +92,7 @@ class OrdersRepository {
           'Orders',
           where: whereClause,
           whereArgs: whereArgs,
-          orderBy: 'orderId',
+          orderBy: 'updatedDateTime DESC',
         );
       } else {
         maps = await db.query(
@@ -204,7 +204,7 @@ class OrdersRepository {
         'Orders',
         where: '(flag = 1 OR flag = 2 OR flag = 3) AND customerId = ? AND dateAndTime LIKE ?',
         whereArgs: [customerId, '%$date%'],
-        orderBy: 'orderId DESC',
+        orderBy: 'updatedDateTime DESC',
         limit: 1,
       );
 
@@ -222,7 +222,7 @@ class OrdersRepository {
       final maps = await db.query(
         'Orders',
         where: 'flag = 2',
-        orderBy: 'orderId DESC',
+        orderBy: 'updatedDateTime DESC',
         limit: 1,
       );
 
@@ -318,6 +318,7 @@ class OrdersRepository {
         'Orders',
         where: 'flag = 3 AND orderId = ?',
         whereArgs: [orderId],
+        orderBy: 'updatedDateTime DESC',
       );
 
       final orders = maps.map((map) => Order.fromMap(map)).toList();

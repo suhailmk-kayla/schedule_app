@@ -162,6 +162,60 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
           if (_showConfirmDialog) _buildConfirmDialog(),
         ],
       ),
+      bottomNavigationBar: Consumer<UsersProvider>(
+        builder: (context, provider, _) {
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _handleChangePassword,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).primaryColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: const Text(
+                        'Change Password',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (provider.isUserActive) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _handleLogoutDevice,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: const Text(
+                          'Logout Device',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -210,27 +264,12 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                 elevation: 4,
                 child: Stack(
                   children: [
+                    // Content
                     Padding(
-                      padding: const EdgeInsets.all(8.0),
+                      padding: const EdgeInsets.all(16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Edit button
-                          Align(
-                            alignment: Alignment(1, -.9),
-                            child: IconButton(
-                              icon: const Icon(Icons.edit, size: 24),
-                              onPressed: _handleEdit,
-                            ),
-                          ),
-                          // Delete button
-                          Align(
-                            alignment: Alignment(1, 1),
-                            child: IconButton(
-                              icon: const Icon(Icons.delete, size: 24, color: Colors.red),
-                              onPressed: _handleDelete,
-                            ),
-                          ),
                           // User name
                           Text(
                             user.name.toUpperCase(),
@@ -320,43 +359,26 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                         ],
                       ),
                     ),
+                    // Edit button - top right
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: IconButton(
+                        icon: const Icon(Icons.edit, size: 24),
+                        onPressed: _handleEdit,
+                      ),
+                    ),
+                    // Delete button - bottom right
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: IconButton(
+                        icon: const Icon(Icons.delete, size: 24, color: Colors.red),
+                        onPressed: _handleDelete,
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 16),
-              // Action buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _handleChangePassword,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).primaryColor,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: const Text('Change Password'),
-                    ),
-                  ),
-                  if (provider.isUserActive) ...[
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _handleLogoutDevice,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).primaryColor,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: const Text('Logout Device'),
-                      ),
-                    ),
-                  ],
-                ],
               ),
             ],
           ),
