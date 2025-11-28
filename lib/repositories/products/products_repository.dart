@@ -991,10 +991,13 @@ class ProductsRepository {
         final dataIds = productCarApi.data
             .map((car) => PushData(table: NotificationId.productCar, id: car.id))
             .toList();
+        // Fire-and-forget: don't await, just trigger in background
         _pushNotificationSender.sendPushNotification(
           dataIds: dataIds,
           message: 'Product car updates',
-        );
+        ).catchError((e) {
+          developer.log('ProductsRepository: Error sending push notification: $e');
+        });
       }
 
       return Right(productCarApi.data);
@@ -1078,6 +1081,7 @@ class ProductsRepository {
       await addProductUnitLocal(productUnitApi.data);
 
       // Send push notification (matches KMP lines 463-466)
+      // Fire-and-forget: don't await, just trigger in background
       if (_pushNotificationSender != null) {
         final dataIds = [
           PushData(table: NotificationId.productUnits, id: productUnitApi.data.id),
@@ -1085,7 +1089,9 @@ class ProductsRepository {
         _pushNotificationSender.sendPushNotification(
           dataIds: dataIds,
           message: 'Product unit updates',
-        );
+        ).catchError((e) {
+          developer.log('ProductsRepository: Error sending push notification: $e');
+        });
       }
 
       return Right(productUnitApi.data);

@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 import 'package:either_dart/either.dart';
 import 'package:sqflite/sqflite.dart';
@@ -158,8 +160,8 @@ class CarNameRepository {
       final db = await _database;
       await db.rawInsert(
         '''
-        INSERT OR REPLACE INTO CarName (id,carNameId, carBrandId, name, flag)
-        VALUES (NULL, ?, ?, ?)
+        INSERT OR REPLACE INTO CarName (id, carNameId, carBrandId, name, flag)
+        VALUES (NULL, ?, ?, ?, ?)
         ''',
         [
           carName.id,
@@ -170,6 +172,7 @@ class CarNameRepository {
       );
       return const Right(null);
     } catch (e) {
+      developer.log('CarNameRepository: Error adding car name: $e');
       return Left(DatabaseFailure.fromError(e));
     }
   }

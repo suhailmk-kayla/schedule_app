@@ -349,11 +349,12 @@ class SubCategoriesRepository {
   }) async {
     try {
       // 1. Call API
+      // Matches KMP: uses "category_id" not "cat_id" (SubCategoryViewModel.addSubCategory)
       final response = await _dio.post(
         ApiEndpoints.addSubCategory,
         data: {
           'name': name,
-          'cat_id': parentId,
+          'category_id': parentId,
           'remark': remark,
         },
       );

@@ -1,0 +1,281 @@
+{
+    "brands": [
+      {
+        "brand": "BMW",
+        "models": [
+          {
+            "model": "X5",
+            "variants": [
+              "X5 xDrive40i",
+              "X5 xDrive30d",
+              "X5 M50d",
+              "X5 M Competition",
+              "X5 xDrive45e Hybrid"
+            ]
+          },
+          {
+            "model": "3 Series",
+            "variants": [
+              "320i Sport",
+              "320d Luxury Line",
+              "330i M Sport",
+              "330e Plug-in Hybrid",
+              "M340i xDrive"
+            ]
+          },
+          {
+            "model": "5 Series",
+            "variants": [
+              "520d Luxury Line",
+              "530i M Sport",
+              "530d M Sport",
+              "540i xDrive",
+              "M550i xDrive"
+            ]
+          },
+          {
+            "model": "X3",
+            "variants": [
+              "X3 xDrive20d",
+              "X3 xDrive30i",
+              "X3 M Competition",
+              "X3 xDrive30e Hybrid",
+              "X3 xDrive40i"
+            ]
+          },
+          {
+            "model": "7 Series",
+            "variants": [
+              "740Li",
+              "730Ld",
+              "745Le Hybrid",
+              "750Li",
+              "760Li V12"
+            ]
+          }
+        ]
+      },
+      {
+        "brand": "Audi",
+        "models": [
+          {
+            "model": "A4",
+            "variants": [
+              "A4 35 TFSI Premium",
+              "A4 40 TFSI Technology",
+              "A4 S Line",
+              "A4 Quattro",
+              "S4 Turbo"
+            ]
+          },
+          {
+            "model": "A6",
+            "variants": [
+              "A6 45 TFSI Premium",
+              "A6 45 TFSI Technology",
+              "A6 Quattro",
+              "A6 S Line",
+              "S6 Performance"
+            ]
+          },
+          {
+            "model": "Q5",
+            "variants": [
+              "Q5 40 TFSI",
+              "Q5 45 TFSI Quattro",
+              "Q5 S Line",
+              "Q5 Premium Plus",
+              "SQ5 Turbo"
+            ]
+          },
+          {
+            "model": "Q7",
+            "variants": [
+              "Q7 45 TFSI",
+              "Q7 55 TFSI",
+              "Q7 Technology",
+              "Q7 S Line",
+              "SQ7 Performance"
+            ]
+          },
+          {
+            "model": "A8",
+            "variants": [
+              "A8 L 55 TFSI",
+              "A8 L 60 TDI",
+              "A8 Quattro",
+              "A8 L Technology",
+              "S8 Performance"
+            ]
+          }
+        ]
+      },
+      {
+        "brand": "Mercedes-Benz",
+        "models": [
+          {
+            "model": "C-Class",
+            "variants": [
+              "C200",
+              "C220d",
+              "C300 AMG Line",
+              "C300d",
+              "AMG C43"
+            ]
+          },
+          {
+            "model": "E-Class",
+            "variants": [
+              "E200",
+              "E220d",
+              "E350 AMG",
+              "E53 AMG",
+              "E63 S AMG"
+            ]
+          },
+          {
+            "model": "S-Class",
+            "variants": [
+              "S350d",
+              "S400d",
+              "S450 4MATIC",
+              "S500 4MATIC",
+              "AMG S63"
+            ]
+          },
+          {
+            "model": "GLC",
+            "variants": [
+              "GLC200",
+              "GLC220d",
+              "GLC300",
+              "GLC43 AMG",
+              "GLC Coupe"
+            ]
+          },
+          {
+            "model": "GLE",
+            "variants": [
+              "GLE300d",
+              "GLE400d",
+              "GLE450",
+              "GLE53 AMG",
+              "GLE63 S AMG"
+            ]
+          }
+        ]
+      },
+      {
+        "brand": "Toyota",
+        "models": [
+          {
+            "model": "Corolla",
+            "variants": [
+              "Corolla L",
+              "Corolla LE",
+              "Corolla XLE",
+              "Corolla SE",
+              "Corolla Hybrid"
+            ]
+          },
+          {
+            "model": "Camry",
+            "variants": [
+              "Camry LE",
+              "Camry SE",
+              "Camry XLE",
+              "Camry XSE",
+              "Camry Hybrid"
+            ]
+          },
+          {
+            "model": "Fortuner",
+            "variants": [
+              "Fortuner 4x2",
+              "Fortuner 4x4",
+              "Fortuner Legender",
+              "Fortuner Diesel",
+              "Fortuner Sigma4"
+            ]
+          },
+          {
+            "model": "Innova",
+            "variants": [
+              "Innova GX",
+              "Innova VX",
+              "Innova ZX",
+              "Innova Crysta Diesel",
+              "Innova Hybrid"
+            ]
+          },
+          {
+            "model": "RAV4",
+            "variants": [
+              "RAV4 LE",
+              "RAV4 XLE",
+              "RAV4 XSE Hybrid",
+              "RAV4 Adventure",
+              "RAV4 Limited"
+            ]
+          }
+        ]
+      },
+      {
+        "brand": "Honda",
+        "models": [
+          {
+            "model": "Civic",
+            "variants": [
+              "Civic LX",
+              "Civic EX",
+              "Civic Sport",
+              "Civic Touring",
+              "Civic Si"
+            ]
+          },
+          {
+            "model": "Accord",
+            "variants": [
+              "Accord LX",
+              "Accord EX",
+              "Accord Sport",
+              "Accord Hybrid",
+              "Accord Touring"
+            ]
+          },
+          {
+            "model": "CR-V",
+            "variants": [
+              "CR-V LX",
+              "CR-V EX",
+              "CR-V EX-L",
+              "CR-V Touring",
+              "CR-V Hybrid"
+            ]
+          },
+          {
+            "model": "City",
+            "variants": [
+              "City SV",
+              "City V",
+              "City VX",
+              "City ZX",
+              "City Hybrid"
+            ]
+          },
+          {
+            "model": "HR-V",
+            "variants": [
+              "HR-V LX",
+              "HR-V EX",
+              "HR-V EX-L",
+              "HR-V Touring",
+              "HR-V Sport"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+  
+

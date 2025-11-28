@@ -585,11 +585,14 @@ class OutOfStockProvider extends ChangeNotifier {
 
           userIds.add({'user_id': subItem.supplierId, 'silent_push': 0});
 
-          await _pushNotificationSender.sendPushNotification(
+          // Fire-and-forget: don't await, just trigger in background
+          _pushNotificationSender.sendPushNotification(
             dataIds: [PushData(table: 12, id: subItem.oospId)],
             customUserIds: userIds,
             message: 'Order confirmed',
-          );
+          ).catchError((e) {
+            developer.log('OutOfStockProvider: Error sending push notification: $e');
+          });
 
           _setLoading(false);
           onSuccess();
@@ -673,11 +676,14 @@ class OutOfStockProvider extends ChangeNotifier {
             },
           );
 
-          await _pushNotificationSender.sendPushNotification(
+          // Fire-and-forget: don't await, just trigger in background
+          _pushNotificationSender.sendPushNotification(
             dataIds: [PushData(table: 12, id: subItem.oospId)],
             customUserIds: userIds,
             message: 'Order cancelled',
-          );
+          ).catchError((e) {
+            developer.log('OutOfStockProvider: Error sending push notification: $e');
+          });
 
           _setLoading(false);
           onSuccess();
@@ -753,11 +759,14 @@ class OutOfStockProvider extends ChangeNotifier {
 
       userIds.add({'user_id': subItem.supplierId, 'silent_push': 0});
 
-      await _pushNotificationSender.sendPushNotification(
+      // Fire-and-forget: don't await, just trigger in background
+      _pushNotificationSender.sendPushNotification(
         dataIds: [PushData(table: 12, id: subItem.oospId)],
         customUserIds: userIds,
         message: 'Order confirmed',
-      );
+      ).catchError((e) {
+        developer.log('OutOfStockProvider: Error sending push notification: $e');
+      });
 
       _setLoading(false);
       onSuccess();
@@ -839,11 +848,14 @@ class OutOfStockProvider extends ChangeNotifier {
 
           userIds.add({'user_id': subItem.supplierId, 'silent_push': 0});
 
-          await _pushNotificationSender.sendPushNotification(
+          // Fire-and-forget: don't await, just trigger in background
+          _pushNotificationSender.sendPushNotification(
             dataIds: [PushData(table: 12, id: subItem.oospId)],
             customUserIds: userIds,
             message: 'Order confirmed',
-          );
+          ).catchError((e) {
+            developer.log('OutOfStockProvider: Error sending push notification: $e');
+          });
 
           _setLoading(false);
           onSuccess();
@@ -922,11 +934,14 @@ class OutOfStockProvider extends ChangeNotifier {
         },
       );
 
-      await _pushNotificationSender.sendPushNotification(
+      // Fire-and-forget: don't await, just trigger in background
+      _pushNotificationSender.sendPushNotification(
         dataIds: [PushData(table: 12, id: subItem.oospId)],
         customUserIds: userIds,
         message: 'Supplier response',
-      );
+      ).catchError((e) {
+        developer.log('OutOfStockProvider: Error sending push notification: $e');
+      });
 
       _setLoading(false);
       onSuccess();
@@ -1014,7 +1029,8 @@ class OutOfStockProvider extends ChangeNotifier {
             userIds.add({'user_id': subItem.storekeeperId, 'silent_push': 0});
           }
 
-          await _pushNotificationSender.sendPushNotification(
+          // Fire-and-forget: don't await, just trigger in background
+          _pushNotificationSender.sendPushNotification(
             dataIds: [
               PushData(table: 11, id: subItem.oospMasterId),
               PushData(table: 12, id: subItem.oospId),
@@ -1193,11 +1209,14 @@ class OutOfStockProvider extends ChangeNotifier {
           await _ordersRepository.addOrderSub(orderSubApi.data);
           await _outOfStockRepository.updateCompleteFlag(master.oospMasterId);
 
-          await _pushNotificationSender.sendPushNotification(
+          // Fire-and-forget: don't await, just trigger in background
+          _pushNotificationSender.sendPushNotification(
             dataIds: [PushData(table: 9, id: orderSubApi.data.id)],
             customUserIds: userIds,
             message: 'Update from admin',
-          );
+          ).catchError((e) {
+            developer.log('OutOfStockProvider: Error sending push notification: $e');
+          });
 
           _setLoading(false);
           onSuccess();
@@ -1301,11 +1320,14 @@ class OutOfStockProvider extends ChangeNotifier {
         userIds.add({'user_id': master.storekeeperId, 'silent_push': 0});
       }
 
-      await _pushNotificationSender.sendPushNotification(
+      // Fire-and-forget: don't await, just trigger in background
+      _pushNotificationSender.sendPushNotification(
         dataIds: [PushData(table: 11, id: master.oospMasterId)],
         customUserIds: userIds,
         message: 'Order cancelled',
-      );
+      ).catchError((e) {
+        developer.log('OutOfStockProvider: Error sending push notification: $e');
+      });
 
       onSuccess();
     } on DioException catch (e) {

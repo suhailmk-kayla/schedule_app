@@ -1,14 +1,18 @@
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:either_dart/either.dart';
+import 'dart:developer' as developer;
 import '../../repositories/cars/car_brand_repository.dart';
 import '../../repositories/cars/car_name_repository.dart';
 import '../../repositories/cars/car_model_repository.dart';
 import '../../repositories/cars/car_version_repository.dart';
 import '../../models/car_api.dart';
 import '../../models/cars.dart';
+import '../../models/push_data.dart';
 import '../../helpers/errors/failures.dart';
 import '../../utils/api_endpoints.dart';
+import '../../utils/push_notification_sender.dart';
+import '../../utils/notification_id.dart';
 
 /// Cars Provider
 /// Manages cars-related state and operations
@@ -18,8 +22,8 @@ class CarsProvider extends ChangeNotifier {
   final CarNameRepository _carNameRepository;
   final CarModelRepository _carModelRepository;
   final CarVersionRepository _carVersionRepository;
-
   final Dio _dio;
+  final PushNotificationSender _pushNotificationSender;
 
   CarsProvider({
     required CarBrandRepository carBrandRepository,
@@ -27,11 +31,13 @@ class CarsProvider extends ChangeNotifier {
     required CarModelRepository carModelRepository,
     required CarVersionRepository carVersionRepository,
     required Dio dio,
+    required PushNotificationSender pushNotificationSender,
   })  : _carBrandRepository = carBrandRepository,
         _carNameRepository = carNameRepository,
         _carModelRepository = carModelRepository,
         _carVersionRepository = carVersionRepository,
-        _dio = dio;
+        _dio = dio,
+        _pushNotificationSender = pushNotificationSender;
 
   // ============================================================================
   // State Variables
@@ -366,6 +372,32 @@ class CarsProvider extends ChangeNotifier {
           }
         }
       }
+
+      // Send push notification (matches KMP lines 128-160)
+      final dataIds = <PushData>[
+        PushData(table: NotificationId.carBrand, id: carApi.carBrand.id),
+        PushData(table: NotificationId.carName, id: carApi.carName.id),
+      ];
+      
+      // Add models
+      for (final model in carApi.models) {
+        dataIds.add(PushData(table: NotificationId.carModel, id: model.id));
+        
+        // Add versions for each model
+        if (model.versions != null && model.versions!.isNotEmpty) {
+          for (final version in model.versions!) {
+            dataIds.add(PushData(table: NotificationId.carVersion, id: version.id));
+          }
+        }
+      }
+      
+      // Fire-and-forget: don't await, just trigger in background
+      _pushNotificationSender.sendPushNotification(
+        dataIds: dataIds,
+        message: 'Car updates',
+      ).catchError((e) {
+        developer.log('CarsProvider: Error sending push notification: $e');
+      });
 
       _isLoading = false;
       notifyListeners();

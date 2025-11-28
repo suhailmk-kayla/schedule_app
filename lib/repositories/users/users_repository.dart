@@ -554,11 +554,14 @@ class UsersRepository {
 
       // 7. Send push notification to other users (excluding current user)
       // Matches KMP's sentPushNotification call (line 312)
+      // Fire-and-forget: don't await, just trigger in background
       if (_pushNotificationSender != null) {
-        await _pushNotificationSender.sendPushNotification(
+        _pushNotificationSender.sendPushNotification(
           dataIds: dataIds,
           message: 'User updates',
-        );
+        ).catchError((e) {
+          developer.log('UsersRepository: Error sending push notification: $e');
+        });
       } else {
         developer.log('UsersRepository: PushNotificationSender not available, skipping push notification');
       }

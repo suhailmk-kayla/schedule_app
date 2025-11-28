@@ -350,6 +350,7 @@ Future<void> setupDependencies() async {
       carModelRepository: getIt<CarModelRepository>(),
       carVersionRepository: getIt<CarVersionRepository>(),
       dio: getIt<Dio>(),
+      pushNotificationSender: getIt<PushNotificationSender>(),
     ),
   );
 }

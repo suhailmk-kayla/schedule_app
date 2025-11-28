@@ -50,7 +50,10 @@ class OrdersProvider extends ChangeNotifier {
         _unitsRepository = unitsRepository,
         _productsRepository = productsRepository,
         _pushNotificationBuilder = pushNotificationBuilder,
-        _outOfStockRepository = outOfStockRepository;
+        _outOfStockRepository = outOfStockRepository {
+    // Default to today's date so the "Today" filter actually filters today's orders
+    _date = _getDBFormatDate();
+  }
 
   // ============================================================================
   // State Variables
@@ -95,6 +98,7 @@ class OrdersProvider extends ChangeNotifier {
   String _searchKey = '';
   String get searchKey => _searchKey;
 
+//2025-08-13 16:21:36
   String _date = '';
   String get date => _date;
 

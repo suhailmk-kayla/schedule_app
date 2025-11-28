@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:schedule_frontend_flutter/helpers/admin_registration_helper.dart';
 import 'di.dart';
 import 'utils/push_notification_helper.dart';
 import 'utils/notification_manager.dart';
@@ -24,7 +23,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // final result = await createAdminAccount();
   // Initialize OneSignal for push notifications (must be before setupDependencies)
-
   try {
     await PushNotificationHelper.initialize();
   }

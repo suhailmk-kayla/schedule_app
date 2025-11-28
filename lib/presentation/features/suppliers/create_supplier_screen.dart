@@ -200,7 +200,7 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                       labelText: 'Address',
                       border: OutlineInputBorder(),
                     ),
-                    maxLines: 3,
+                    maxLines: 1,
                   ),
                   if (widget.userId == null) ...[
                     const SizedBox(height: 16),
@@ -209,6 +209,7 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Password',
                         border: OutlineInputBorder(),
+                        
                       ),
                       obscureText: true,
                       onChanged: (value) {
@@ -229,6 +230,8 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                     ElevatedButton(
                       onPressed: _handleSave,
                       style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),

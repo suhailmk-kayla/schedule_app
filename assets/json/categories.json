@@ -1,0 +1,209 @@
+
+[
+    {
+      "category": "Headlight Bulb",
+      "subcategories": [
+        "Halogen H1",
+        "Halogen H4",
+        "LED H7",
+        "Xenon D1S",
+        "Xenon D2R",
+        "LED H11"
+      ]
+    },
+    {
+      "category": "Fog Light Bulb",
+      "subcategories": [
+        "H8",
+        "H11",
+        "9006 HB4",
+        "LED Fog Module",
+        "Yellow Beam LED"
+      ]
+    },
+    {
+      "category": "Car Camera Socket",
+      "subcategories": [
+        "Type A",
+        "Type B",
+        "Type C",
+        "Type D (Wide Pin)",
+        "Type E (Narrow Pin)"
+      ]
+    },
+    {
+      "category": "Infotainment Screen",
+      "subcategories": [
+        "7 Inch",
+        "9 Inch",
+        "10.25 Inch",
+        "12 Inch",
+        "Android Auto Unit",
+        "CarPlay Unit"
+      ]
+    },
+    {
+      "category": "Wiper Blade",
+      "subcategories": [
+        "16 Inch",
+        "18 Inch",
+        "20 Inch",
+        "22 Inch",
+        "24 Inch",
+        "Hybrid Blade"
+      ]
+    },
+    {
+      "category": "Battery",
+      "subcategories": [
+        "35Ah",
+        "45Ah",
+        "60Ah",
+        "70Ah",
+        "80Ah",
+        "AGM Type"
+      ]
+    },
+    {
+      "category": "Engine Oil",
+      "subcategories": [
+        "0W20",
+        "5W30",
+        "5W40",
+        "10W40",
+        "15W40",
+        "Synthetic Oil"
+      ]
+    },
+    {
+      "category": "Horn",
+      "subcategories": [
+        "Single Tone",
+        "Dual Tone",
+        "Trumpet Horn",
+        "Snail Horn",
+        "Electronic Horn"
+      ]
+    },
+    {
+      "category": "Air Filter",
+      "subcategories": [
+        "Paper Filter",
+        "Foam Filter",
+        "Cotton Filter",
+        "Performance Filter",
+        "Cold Air Intake Filter"
+      ]
+    },
+    {
+      "category": "Cabin Filter",
+      "subcategories": [
+        "Normal Filter",
+        "Carbon Filter",
+        "HEPA Filter",
+        "Anti-Allergen",
+        "Odor Control Filter"
+      ]
+    },
+    {
+      "category": "Spark Plug",
+      "subcategories": [
+        "Copper Plug",
+        "Platinum Plug",
+        "Iridium Plug",
+        "Double Platinum",
+        "Performance Plug"
+      ]
+    },
+    {
+      "category": "Brake Pad",
+      "subcategories": [
+        "Front Pads",
+        "Rear Pads",
+        "Ceramic Pads",
+        "Semi-Metallic Pads",
+        "Performance Pads"
+      ]
+    },
+    {
+      "category": "Brake Disc",
+      "subcategories": [
+        "Solid Disc",
+        "Ventilated Disc",
+        "Slotted Disc",
+        "Drilled Disc",
+        "Carbon Ceramic Disc"
+      ]
+    },
+    {
+      "category": "Coolant",
+      "subcategories": [
+        "Green Coolant",
+        "Red Coolant",
+        "Blue Coolant",
+        "Pre-mixed Coolant",
+        "Concentrated Coolant"
+      ]
+    },
+    {
+      "category": "Transmission Oil",
+      "subcategories": [
+        "ATF",
+        "CVT Fluid",
+        "Gear Oil 75W90",
+        "Gear Oil 80W90",
+        "Dual Clutch Fluid"
+      ]
+    },
+    {
+      "category": "Parking Sensor",
+      "subcategories": [
+        "2-Sensor Kit",
+        "4-Sensor Kit",
+        "6-Sensor Kit",
+        "Front Sensors",
+        "Rear Sensors"
+      ]
+    },
+    {
+      "category": "Camera Module",
+      "subcategories": [
+        "Rear Camera",
+        "Front Camera",
+        "360 Camera",
+        "Wide Angle Camera",
+        "Night Vision Camera"
+      ]
+    },
+    {
+      "category": "Fuse",
+      "subcategories": [
+        "Mini Blade Fuse",
+        "Micro Fuse",
+        "Standard Blade Fuse",
+        "J-Case Fuse",
+        "Mega Fuse"
+      ]
+    },
+    {
+      "category": "Relay",
+      "subcategories": [
+        "4 Pin Relay",
+        "5 Pin Relay",
+        "30A Relay",
+        "40A Relay",
+        "Waterproof Relay"
+      ]
+    },
+    {
+      "category": "Tyre Valve",
+      "subcategories": [
+        "Rubber Valve",
+        "Metal Valve",
+        "TPMS Valve",
+        "Short Valve",
+        "Long Valve"
+      ]
+    }
+  ]
+  
