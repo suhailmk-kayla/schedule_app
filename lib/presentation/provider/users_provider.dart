@@ -320,6 +320,19 @@ class UsersProvider extends ChangeNotifier {
     );
   }
 
+  /// Check if code already exists (excluding specific user ID)
+  /// Used for update operations to allow keeping the same code
+  Future<bool> checkCodeExistsWithId(String code, int userId) async {
+    final result = await _usersRepository.getUserByCodeWithId(
+      code: code,
+      userId: userId,
+    );
+    return result.fold(
+      (failure) => false,
+      (users) => users.isNotEmpty,
+    );
+  }
+
   /// Clear error message
   void clearError() {
     _errorMessage = null;

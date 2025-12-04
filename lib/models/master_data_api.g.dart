@@ -223,7 +223,7 @@ Map<String, dynamic> _$UserListApiToJson(UserListApi instance) =>
     };
 
 User _$UserFromJson(Map<String, dynamic> json) => User(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  userId: (json['id'] as num?)?.toInt() ?? -1,
   name: json['name'] as String? ?? '',
   code: json['code'] as String? ?? '',
   phoneNo: json['phone_no'] as String? ?? '',
@@ -232,7 +232,7 @@ User _$UserFromJson(Map<String, dynamic> json) => User(
 );
 
 Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.userId,
   'name': instance.name,
   'code': instance.code,
   'phone_no': instance.phoneNo,

@@ -27,6 +27,8 @@ class ProductsScreen extends StatefulWidget {
 
 class _ProductsScreenState extends State<ProductsScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _showSearchBar = false;
   static const bool isShowAddOrder = true; // Show FAB for admin
 
   @override
@@ -45,7 +47,26 @@ class _ProductsScreenState extends State<ProductsScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  void _toggleSearchBar() {
+    setState(() {
+      _showSearchBar = !_showSearchBar;
+      if (!_showSearchBar) {
+        // Clear search when closing
+        _searchController.clear();
+        final provider = Provider.of<ProductsProvider>(context, listen: false);
+        _handleSearch(provider, '');
+      }
+    });
+    // Focus search field when opened
+    if (_showSearchBar) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _searchFocusNode.requestFocus();
+      });
+    }
   }
 
   @override
@@ -63,44 +84,50 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Products'),
+            title: _showSearchBar
+                ? TextField(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    style: const TextStyle(color: Colors.black),
+                    decoration: InputDecoration(
+                      hintText: 'Search',
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[200],
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      final provider = Provider.of<ProductsProvider>(context, listen: false);
+                      _handleSearch(provider, value.trim());
+                    },
+                  )
+                : const Text('Products'),
             leading: (widget.orderId != null && widget.orderId!.isNotEmpty)
                 ? IconButton(
                     icon: const Icon(Icons.arrow_back),
                     onPressed: () => Navigator.of(context).pop(),
                   )
                 : null,
+            actions: [
+              IconButton(
+                icon: Icon(_showSearchBar ? Icons.close : Icons.search),
+                onPressed: _toggleSearchBar,
+              ),
+            ],
           ),
           body: Consumer<ProductsProvider>(
             builder: (context, provider, _) {
           return Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: const InputDecoration(
-                          hintText: 'Search by code, name, brand...',
-                          prefixIcon: Icon(Icons.search),
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        onSubmitted: (value) {
-                          _handleSearch(provider, value.trim());
-                        },
-                        onChanged: (value) {
-                          _handleSearch(provider, value.trim());
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
               // Filters: Category and SubCategory
+              SizedBox(height: 20),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12.0),
                 child: Row(
@@ -209,7 +236,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => ProductDetailsScreen(productId: p.id),
+                                builder: (_) => ProductDetailsScreen(productId: p.productId ?? -1),
                               ),
                             );
                           }
@@ -264,19 +291,20 @@ class _ProductsScreenState extends State<ProductsScreen> {
                               Expanded(
                                 flex: 1,
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
+                                    SizedBox(height: 50),
                                     const Text(
                                       'Price',
                                       style: TextStyle(fontSize: 12, color: Colors.black54),
                                     ),
                                     Text(
                                       p.price.toStringAsFixed(2),
-                                      style: const TextStyle(
-                                        fontSize: 14,
+                                      style:  TextStyle(
+                                        fontSize: 16,
                                         fontWeight: FontWeight.w600,
-                                        color: Colors.green,
+                                        color: Colors.green.shade900,
                                       ),
                                     ),
                                   ],
@@ -348,7 +376,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
         onSave: (rate, quantity, narration, unitId) async {
           final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
           final success = await ordersProvider.addProductToOrder(
-            productId: product.id,
+            productId: product.productId ?? -1,
             productPrice: product.price, // Product's base price
             rate: rate, // User-entered rate
             quantity: quantity,

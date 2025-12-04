@@ -5,11 +5,16 @@ import 'dart:typed_data';
 import '../../provider/products_provider.dart';
 import '../../../utils/toast_helper.dart';
 
-/// Create Product Screen
-/// Form for creating new products
-/// Converted from KMP's CreateProductScreen.kt
+/// Create/Edit Product Screen
+/// Form for creating new products or editing existing ones
+/// Converted from KMP's CreateProductScreen.kt and EditProductScreen.kt
 class CreateProductScreen extends StatefulWidget {
-  const CreateProductScreen({super.key});
+  final int? productId; // If provided, this is edit mode
+
+  const CreateProductScreen({
+    super.key,
+    this.productId,
+  });
 
   @override
   State<CreateProductScreen> createState() => _CreateProductScreenState();
@@ -19,13 +24,44 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _imagePicker = ImagePicker();
 
+  bool _isLoadingProduct = false;
+
   @override
   void initState() {
     super.initState();
-    // Reset form when screen opens
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider = Provider.of<ProductsProvider>(context, listen: false);
-      provider.resetForm();
+      if (widget.productId != null) {
+        // Edit mode: Load existing product data
+        await _loadProductData(widget.productId!);
+      } else {
+        // Create mode: Reset form
+        provider.resetForm();
+      }
+    });
+  }
+
+  Future<void> _loadProductData(int productId) async {
+    setState(() {
+      _isLoadingProduct = true;
+    });
+
+    final provider = Provider.of<ProductsProvider>(context, listen: false);
+    final productWithDetails = await provider.loadProductByIdWithDetails(productId);
+
+    if (!mounted) return;
+
+    if (productWithDetails == null) {
+      ToastHelper.showError('Product not found');
+      Navigator.pop(context);
+      return;
+    }
+
+    // Populate form fields from product data
+    provider.populateFormFromProduct(productWithDetails);
+
+    setState(() {
+      _isLoadingProduct = false;
     });
   }
 
@@ -49,7 +85,8 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
     final provider = Provider.of<ProductsProvider>(context, listen: false);
     if (provider.codeSt.isNotEmpty ||
         provider.nameSt.isNotEmpty ||
-        provider.imageBytes != null) {
+        provider.imageBytes != null ||
+        (widget.productId != null && provider.photoUrl != null)) {
       final shouldDiscard = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -76,14 +113,32 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+
     final provider = Provider.of<ProductsProvider>(context, listen: false);
-    final error = await provider.createProduct();
-    if (error != null) {
-      ToastHelper.showError(error);
+    
+    if (widget.productId != null) {
+      // Edit mode: Update product
+      final error = await provider.updateProduct(widget.productId!);
+      if (error != null) {
+        ToastHelper.showError(error);
+      } else {
+        ToastHelper.showSuccess('Product updated successfully');
+        if (mounted) {
+          Navigator.pop(context);
+        }
+      }
     } else {
-      ToastHelper.showSuccess('Product saved successfully');
-      if (mounted) {
-        Navigator.pop(context);
+      // Create mode: Create new product
+      final error = await provider.createProduct();
+      if (error != null) {
+        ToastHelper.showError(error);
+      } else {
+        ToastHelper.showSuccess('Product created successfully');
+        if (mounted) {
+          // Navigate to product details if we have the product ID
+          // For now, just pop back (KMP navigates to ProductDetails after create)
+          Navigator.pop(context);
+        }
       }
     }
   }
@@ -102,7 +157,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Create Product'),
+          title: Text(widget.productId == null ? 'Create Product' : 'Edit Product'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () async {
@@ -113,7 +168,9 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
             },
           ),
         ),
-        body: Consumer<ProductsProvider>(
+        body: _isLoadingProduct
+            ? const Center(child: CircularProgressIndicator())
+            : Consumer<ProductsProvider>(
           builder: (context, provider, _) {
             return GestureDetector(
               onTap: () {
@@ -147,12 +204,34 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                                       fit: BoxFit.cover,
                                     ),
                                   )
-                                : const Center(
-                                    child: Text(
-                                      'Select Image',
-                                      style: TextStyle(color: Colors.grey),
-                                    ),
-                                  ),
+                                : provider.photoUrl != null && provider.photoUrl!.isNotEmpty
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: Image.network(
+                                          provider.photoUrl!,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) {
+                                            return const Center(
+                                              child: Text(
+                                                'Failed to load image',
+                                                style: TextStyle(color: Colors.grey),
+                                              ),
+                                            );
+                                          },
+                                          loadingBuilder: (context, child, loadingProgress) {
+                                            if (loadingProgress == null) return child;
+                                            return const Center(
+                                              child: CircularProgressIndicator(),
+                                            );
+                                          },
+                                        ),
+                                      )
+                                    : const Center(
+                                        child: Text(
+                                          'Select Image',
+                                          style: TextStyle(color: Colors.grey),
+                                        ),
+                                      ),
                           ),
                         ),
                       ),

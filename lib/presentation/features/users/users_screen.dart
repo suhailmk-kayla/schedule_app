@@ -18,6 +18,8 @@ class UsersScreen extends StatefulWidget {
 
 class _UsersScreenState extends State<UsersScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _showSearchBar = false;
 
   void _handleAddNew() {
     Navigator.push(
@@ -44,7 +46,30 @@ class _UsersScreenState extends State<UsersScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  void _handleSearch(String searchKey) {
+    final provider = Provider.of<UsersProvider>(context, listen: false);
+    provider.loadUsers(searchKey: searchKey.trim());
+  }
+
+  void _toggleSearchBar() {
+    setState(() {
+      _showSearchBar = !_showSearchBar;
+      if (!_showSearchBar) {
+        // Clear search when closing
+        _searchController.clear();
+        _handleSearch('');
+      }
+    });
+    // Focus search field when opened
+    if (_showSearchBar) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _searchFocusNode.requestFocus();
+      });
+    }
   }
 
   @override
@@ -62,26 +87,39 @@ class _UsersScreenState extends State<UsersScreen> {
 
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Users'),
+            title: _showSearchBar
+                ? TextField(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    style: const TextStyle(color: Colors.black),
+                    decoration: InputDecoration(
+                      hintText: 'Search',
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[200],
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      _handleSearch(value);
+                    },
+                  )
+                : const Text('Users'),
+            actions: [
+              IconButton(
+                icon: Icon(_showSearchBar ? Icons.close : Icons.search),
+                onPressed: _toggleSearchBar,
+              ),
+            ],
           ),
           body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Search by name or code',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onChanged: (v) => Provider.of<UsersProvider>(context, listen: false)
-                  .loadUsers(searchKey: v.trim()),
-              onSubmitted: (v) => Provider.of<UsersProvider>(context, listen: false)
-                  .loadUsers(searchKey: v.trim()),
-            ),
-          ),
           Expanded(
             child: Consumer<UsersProvider>(
               builder: (context, provider, _) {

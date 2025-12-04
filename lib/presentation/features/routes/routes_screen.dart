@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/asset_images.dart';
 import '../../provider/routes_provider.dart';
 import '../../../models/master_data_api.dart';
-import '../../../models/salesman_model.dart';
 
 /// Routes Screen
 /// Displays list of routes with search, add, and edit functionality
@@ -17,6 +16,8 @@ class RoutesScreen extends StatefulWidget {
 
 class _RoutesScreenState extends State<RoutesScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _showSearchBar = false;
   bool _showAddRouteDialog = false;
   bool _showErrorAlert = false;
   String _errorMessage = '';
@@ -37,12 +38,30 @@ class _RoutesScreenState extends State<RoutesScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
   void _handleSearch(String searchKey) {
     final provider = Provider.of<RoutesProvider>(context, listen: false);
     provider.loadRoutes(searchKey: searchKey);
+  }
+
+  void _toggleSearchBar() {
+    setState(() {
+      _showSearchBar = !_showSearchBar;
+      if (!_showSearchBar) {
+        // Clear search when closing
+        _searchController.clear();
+        _handleSearch('');
+      }
+    });
+    // Focus search field when opened
+    if (_showSearchBar) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _searchFocusNode.requestFocus();
+      });
+    }
   }
 
   void _handleEditClick(RouteWithSalesman route) {
@@ -181,47 +200,38 @@ class _RoutesScreenState extends State<RoutesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Route List'),
+        title: _showSearchBar
+            ? TextField(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                style: const TextStyle(color: Colors.black),
+                decoration: InputDecoration(
+                  hintText: 'Search',
+                  hintStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[200],
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
+                onChanged: (value) {
+                  _handleSearch(value);
+                },
+              )
+            : const Text('Route List'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              // Show search dialog or expand search bar
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Search'),
-                  content: TextField(
-                    controller: _searchController,
-                    decoration: const InputDecoration(
-                      hintText: 'Enter search key',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (value) {
-                      Navigator.pop(context);
-                      _handleSearch(value);
-                    },
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _handleSearch(_searchController.text);
-                      },
-                      child: const Text('Search'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                  ],
-                ),
-              );
-            },
+            icon: Icon(_showSearchBar ? Icons.close : Icons.search),
+            onPressed: _toggleSearchBar,
           ),
         ],
       ),
@@ -261,21 +271,6 @@ class _RoutesScreenState extends State<RoutesScreen> {
 
           return Column(
             children: [
-              // Search bar
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: const InputDecoration(
-                    hintText: 'Search routes...',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onChanged: _handleSearch,
-                  onSubmitted: _handleSearch,
-                ),
-              ),
               // Routes list
               Expanded(
                 child: ListView.builder(

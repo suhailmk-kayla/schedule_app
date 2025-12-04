@@ -54,7 +54,7 @@ class PushNotificationSender {
           (users) {
             for (final user in users) {
               // Exclude current user (matches KMP line 404)
-              if (user.id == currentUserId) {
+              if (user.userId == currentUserId) {
                 continue;
               }
 
@@ -65,7 +65,7 @@ class PushNotificationSender {
              
 
               userIds.add({
-                'user_id': user.id,
+                'user_id': user.userId ?? -1,
                 'silent_push': 1,
               });
             }

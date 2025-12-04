@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../provider/users_provider.dart';
 import '../../../helpers/user_type_helper.dart';
+import 'create_user_screen.dart';
 
 /// User Details Screen
 /// Displays user details with edit, delete, change password, and logout device options
@@ -45,10 +46,19 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
   }
 
   void _handleEdit() {
-    // TODO: Navigate to EditUserScreen
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Edit user - Coming soon')),
-    );
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreateUserScreen(userId: widget.userId),
+      ),
+    ).then((_) {
+      // Reload user data after returning from edit screen
+      if (mounted) {
+        final provider = Provider.of<UsersProvider>(context, listen: false);
+        provider.loadUserById(widget.userId);
+        provider.checkUserActive(widget.userId);
+      }
+    });
   }
 
   void _handleDelete() {

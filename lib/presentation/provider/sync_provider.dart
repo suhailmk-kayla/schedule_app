@@ -98,6 +98,7 @@ class SyncProvider extends ChangeNotifier {
   bool _isRoutesDownloaded = false;
   bool _isUnitsDownloaded = false;
   bool _isProductUnitsDownloaded = false;
+  bool _isProductCarDownloaded = false;
   bool _isUserCategoryDownloaded = false;
 
   // Batch counters
@@ -120,6 +121,7 @@ class SyncProvider extends ChangeNotifier {
   int _routesPart = 0;
   int _unitsPart = 0;
   int _productUnitsPart = 0;
+  int _productCarPart = 0;
   int _userCategoryPart = 0;
 
   // Cached user data (matching KMP pattern - lines 76-77)
@@ -322,6 +324,8 @@ class SyncProvider extends ChangeNotifier {
       await _downloadUnits();
     } else if (!_isProductUnitsDownloaded) {
       await _downloadProductUnits();
+    } else if (!_isProductCarDownloaded) {
+      await _downloadProductCar();
     } else if (!_isUserCategoryDownloaded) {
       await _downloadUserCategories();
     } else {
@@ -2228,6 +2232,100 @@ class SyncProvider extends ChangeNotifier {
     );
   }
 
+  /// Download product cars (full sync or single record retry)
+  /// Matches KMP's downloadProductCar (SyncViewModel.kt lines 1012-1046)
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all product cars in batches
+  /// 2. Single record retry (id != -1): Downloads specific product car and handles FailedSync
+  Future<void> _downloadProductCar({
+    int id = -1, // -1 for full sync, specific id for retry
+    int failedId = -1, // FailedSync record id if this is a retry
+    void Function()? finished, // Callback for retry mode (doesn't continue sync chain)
+  }) async {
+    if (id == -1) {
+      // Full sync mode
+      _updateTask('Product car details downloading...');
+    }
+    
+    final updateDate = _getSyncTimeForTable('ProductCar');
+    // Use cached values (matching KMP pattern - no async storage reads)
+    final userType = _cachedUserType ?? 0;
+    final userId = _cachedUserId ?? 0;
+    
+    final result = await _productsRepository.syncProductCarsFromApi(
+      partNo: _productCarPart,
+      limit: _limit,
+      userType: userType,
+      userId: userId,
+      updateDate: updateDate,
+      id: id, // Pass id parameter
+    );
+
+    result.fold(
+      (failure) {
+        // Error handling matching KMP
+        if (id != -1 && failedId == -1) {
+          // Retry mode failed: create FailedSync entry (matches KMP line 1018-1020)
+          _failedSyncRepository.addFailedSync(
+            tableId: 20, // NotificationId.PRODUCT_CAR = 20
+            dataId: id,
+          ).then((_) {
+            if (finished != null) finished();
+          });
+        } else {
+          // Full sync mode error: update error message (matches KMP line 1022)
+          _updateError(failure.message, true);
+        }
+      },
+      (productCarListApi) async {
+        final productCars = productCarListApi.data ?? [];
+
+        if (id == -1) {
+          // Full sync mode (matches KMP lines 1029-1038)
+          if (productCars.isEmpty) {
+            _isProductCarDownloaded = true;
+            _completedTablesCount++; // Priority 4: Track completed tables
+            // Fire-and-forget sync time write (matching KMP pattern)
+            _syncTimeRepository.addSyncTime(
+              tableName: 'ProductCar',
+              updateDate: productCarListApi.updated_date,
+            ).then((result) {
+              result.fold(
+                (failure) => developer.log('SyncProvider: Failed to add sync time: ${failure.message}'),
+                (_) {},
+              );
+            });
+            _productCarPart = 0;
+            _startSyncDatabase();
+          } else {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _productsRepository.addProductCars(productCars);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add product cars: ${failure.message}'),
+              (_) {},
+            );
+            _productCarPart++;
+            _startSyncDatabase();
+          }
+        } else {
+          // Single record retry mode (matches KMP lines 1039-1043)
+          if (productCars.isNotEmpty) {
+            // CRITICAL FIX: Await database operation to prevent locks
+            final addResult = await _productsRepository.addProductCars(productCars);
+            addResult.fold(
+              (failure) => developer.log('SyncProvider: Failed to add product car: ${failure.message}'),
+              (_) {},
+            );
+          }
+          if (failedId != -1) {
+            await _failedSyncRepository.deleteFailedSync(failedId);
+          }
+          if (finished != null) finished();
+        }
+      },
+    );
+  }
+
   /// Download user categories (full sync or single record retry)
   /// Converted from KMP's downloadUserCategory function
   /// Supports two modes matching KMP exactly:
@@ -2467,6 +2565,13 @@ class SyncProvider extends ChangeNotifier {
           finished: () {},
         );
         break;
+      case 20: // NotificationId.PRODUCT_CAR = 20 (matches KMP line 1287)
+        await _downloadProductCar(
+          id: dataId,
+          failedId: failedId,
+          finished: () {},
+        );
+        break;
       default:
         // Unknown table type, just delete the failed sync
         await _failedSyncRepository.deleteFailedSync(failedId);
@@ -2601,9 +2706,9 @@ class SyncProvider extends ChangeNotifier {
   }
 
   /// Download single product car by ID
-  /// TODO: Implement _downloadProductCars method
+  /// ✅ Already implemented - _downloadProductCar supports id parameter
   Future<void> downloadProductCar({required int id}) async {
-    developer.log('SyncProvider: downloadProductCar called with id: $id (TODO: implement)');
+    await _downloadProductCar(id: id);
   }
 
   /// Update store keeper (special notification type)
@@ -2667,6 +2772,7 @@ class SyncProvider extends ChangeNotifier {
       'Routes',
       'Units',
       'ProductUnits',
+      'ProductCar',
       'UsersCategory',
     ];
 
@@ -2787,9 +2893,9 @@ class SyncProvider extends ChangeNotifier {
     int currentUserId,
   ) {
     final ids = users
-        .where((user) => user.id != currentUserId)
+        .where((user) => user.userId != currentUserId)
         .map((user) => {
-              'user_id': user.id,
+              'user_id': user.userId ?? -1,
               'silent_push': 1,
             })
         .toList();

@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../provider/users_provider.dart';
-import '../../../models/user_category_model.dart';
 
-/// Create User Screen
-/// Form for creating new users with category selection
-/// Converted from KMP's CreateUserScreen.kt
+/// Create/Edit User Screen
+/// Form for creating new users or editing existing ones
+/// Converted from KMP's CreateUserScreen.kt and EditUserScreen.kt
 class CreateUserScreen extends StatefulWidget {
-  const CreateUserScreen({super.key});
+  final int? userId; // If provided, this is edit mode
+
+  const CreateUserScreen({
+    super.key,
+    this.userId,
+  });
 
   @override
   State<CreateUserScreen> createState() => _CreateUserScreenState();
@@ -25,12 +29,63 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
   String _selectedCategoryName = 'Select User Category';
   bool _showDiscardDialog = false;
   bool _showErrorDialog = false;
+  bool _isLoadingUser = false;
+
+  // Store initial values for change detection (edit mode)
+  String _initCode = '';
+  String _initName = '';
+  String _initPhone = '';
+  String _initAddress = '';
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<UsersProvider>(context, listen: false).getAllUserCategories();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final provider = Provider.of<UsersProvider>(context, listen: false);
+      await provider.getAllUserCategories();
+      
+      if (widget.userId != null) {
+        // Edit mode: Load existing user data
+        await _loadUserData(widget.userId!);
+      }
+    });
+  }
+
+  Future<void> _loadUserData(int userId) async {
+    setState(() {
+      _isLoadingUser = true;
+    });
+
+    final provider = Provider.of<UsersProvider>(context, listen: false);
+    await provider.loadUserById(userId);
+
+    if (!mounted) return;
+
+    final userWithCategory = provider.currentUser;
+    if (userWithCategory == null) {
+      ToastHelper.showError('User not found');
+      Navigator.pop(context);
+      return;
+    }
+
+    final user = userWithCategory.user;
+    
+    // Store initial values for change detection
+    _initCode = user.code;
+    _initName = user.name;
+    _initPhone = user.phoneNo;
+    _initAddress = user.address;
+
+    // Populate form fields
+    _codeController.text = user.code;
+    _nameController.text = user.name;
+    _phoneController.text = user.phoneNo;
+    _addressController.text = user.address;
+    _selectedCategoryId = user.catId;
+    _selectedCategoryName = userWithCategory.categoryName;
+
+    setState(() {
+      _isLoadingUser = false;
     });
   }
 
@@ -55,12 +110,21 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
   }
 
   bool _hasChanges() {
-    return _codeController.text.isNotEmpty ||
-        _nameController.text.isNotEmpty ||
-        _phoneController.text.isNotEmpty ||
-        _addressController.text.isNotEmpty ||
-        _passwordController.text.isNotEmpty ||
-        _selectedCategoryId != null;
+    if (widget.userId != null) {
+      // Edit mode: Compare with initial values
+      return _codeController.text != _initCode ||
+          _nameController.text != _initName ||
+          _phoneController.text != _initPhone ||
+          _addressController.text != _initAddress;
+    } else {
+      // Create mode: Check if any field has value
+      return _codeController.text.isNotEmpty ||
+          _nameController.text.isNotEmpty ||
+          _phoneController.text.isNotEmpty ||
+          _addressController.text.isNotEmpty ||
+          _passwordController.text.isNotEmpty ||
+          _selectedCategoryId != null;
+    }
   }
 
   void _showCategoryBottomSheet() {
@@ -77,7 +141,6 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
               itemCount: categories.length,
               itemBuilder: (context, index) {
                 final category = categories[index];
-                final isSelected = _selectedCategoryId == category.id;
 
                 return RadioListTile<int>(
                   title: Text(category.name),
@@ -102,7 +165,7 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
   Future<void> _handleSave() async {
     // Validation
     if (_codeController.text.trim().isEmpty) {
-     ToastHelper.showWarning('Enter code');
+      ToastHelper.showWarning('Enter code');
       return;
     }
 
@@ -116,27 +179,63 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
       return;
     }
 
-    if (_passwordController.text.trim().isEmpty) {
-      ToastHelper.showWarning('Enter password');
-      return;
-    }
-
     final provider = Provider.of<UsersProvider>(context, listen: false);
-    final success = await provider.createUser(
-      code: _codeController.text.trim(),
-      name: _nameController.text.trim(),
-      phone: _phoneController.text.trim(),
-      categoryId: _selectedCategoryId!,
-      address: _addressController.text.trim(),
-      password: _passwordController.text.trim(),
-    );
 
-    if (success && mounted) {
-      Navigator.of(context).pop();
-    } else if (mounted) {
-      setState(() {
-        _showErrorDialog = true;
-      });
+    if (widget.userId != null) {
+      // Edit mode: Update user
+      // Check code duplicate (excluding current user)
+      final codeExists = await provider.checkCodeExistsWithId(
+        _codeController.text.trim(),
+        widget.userId!,
+      );
+      if (codeExists) {
+        ToastHelper.showError('Code already Exist');
+        return;
+      }
+
+      final success = await provider.updateUser(
+        userId: widget.userId!,
+        code: _codeController.text.trim(),
+        name: _nameController.text.trim(),
+        phone: _phoneController.text.trim().isEmpty
+            ? '0'
+            : _phoneController.text.trim(),
+        categoryId: _selectedCategoryId!,
+        address: _addressController.text.trim(),
+      );
+
+      if (success && mounted) {
+        ToastHelper.showSuccess('User updated successfully');
+        Navigator.of(context).pop();
+      } else if (mounted) {
+        setState(() {
+          _showErrorDialog = true;
+        });
+      }
+    } else {
+      // Create mode: Create new user
+      if (_passwordController.text.trim().isEmpty) {
+        ToastHelper.showWarning('Enter password');
+        return;
+      }
+
+      final success = await provider.createUser(
+        code: _codeController.text.trim(),
+        name: _nameController.text.trim(),
+        phone: _phoneController.text.trim(),
+        categoryId: _selectedCategoryId!,
+        address: _addressController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      if (success && mounted) {
+        ToastHelper.showSuccess('User created successfully');
+        Navigator.of(context).pop();
+      } else if (mounted) {
+        setState(() {
+          _showErrorDialog = true;
+        });
+      }
     }
   }
 
@@ -155,7 +254,7 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Create User'),
+          title: Text(widget.userId == null ? 'Create User' : 'Edit User'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => _onWillPop().then((shouldPop) {
@@ -165,7 +264,9 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
             }),
           ),
         ),
-        body: Stack(
+        body: _isLoadingUser
+            ? const Center(child: CircularProgressIndicator())
+            : Stack(
           children: [
             SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -212,14 +313,14 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
                     keyboardType: TextInputType.phone,
                   ),
                   const SizedBox(height: 16),
-                  // Category selection
+                  // Category selection (read-only in edit mode)
                   const Text(
                     'Category',
                     style: TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                   const SizedBox(height: 8),
                   InkWell(
-                    onTap: _showCategoryBottomSheet,
+                    onTap: widget.userId == null ? _showCategoryBottomSheet : null,
                     child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -233,7 +334,8 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
                             _selectedCategoryName,
                             style: const TextStyle(color: Colors.black),
                           ),
-                          const Icon(Icons.arrow_drop_down),
+                          if (widget.userId == null)
+                            const Icon(Icons.arrow_drop_down),
                         ],
                       ),
                     ),
@@ -250,45 +352,75 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
                       maxLines: 3,
                     ),
                   ],
-                  const SizedBox(height: 16),
-                  // Password field
-                  TextField(
-                    controller: _passwordController,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      border: OutlineInputBorder(),
+                  // Password field (only in create mode)
+                  if (widget.userId == null) ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _passwordController,
+                      decoration: const InputDecoration(
+                        labelText: 'Password',
+                        border: OutlineInputBorder(),
+                      ),
+                      obscureText: true,
+                      onChanged: (value) {
+                        // Remove spaces
+                        if (value.contains(' ')) {
+                          _passwordController.value = TextEditingValue(
+                            text: value.replaceAll(' ', ''),
+                            selection: TextSelection.collapsed(
+                              offset: value.replaceAll(' ', '').length,
+                            ),
+                          );
+                        }
+                      },
                     ),
-                    obscureText: true,
-                    onChanged: (value) {
-                      // Remove spaces
-                      if (value.contains(' ')) {
-                        _passwordController.value = TextEditingValue(
-                          text: value.replaceAll(' ', ''),
-                          selection: TextSelection.collapsed(
-                            offset: value.replaceAll(' ', '').length,
-                          ),
-                        );
+                  ],
+                  const SizedBox(height: 24),
+                  // Save button
+                  Consumer<UsersProvider>(
+                    builder: (context, provider, _) {
+                      final bool showButton;
+                      if (widget.userId != null) {
+                        // Edit mode: Show button if there are changes
+                        showButton = _hasChanges() &&
+                            _codeController.text.isNotEmpty &&
+                            _nameController.text.isNotEmpty &&
+                            _selectedCategoryId != null;
+                      } else {
+                        // Create mode: Show button when all required fields are filled
+                        showButton = _codeController.text.isNotEmpty &&
+                            _nameController.text.isNotEmpty &&
+                            _selectedCategoryId != null &&
+                            _passwordController.text.isNotEmpty;
                       }
+
+                      return showButton
+                          ? ElevatedButton(
+                              onPressed: provider.isLoading ? null : _handleSave,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Theme.of(context).primaryColor,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: provider.isLoading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                          Colors.white,
+                                        ),
+                                      ),
+                                    )
+                                  : Text(widget.userId == null ? 'Save' : 'Update'),
+                            )
+                          : const SizedBox.shrink();
                     },
                   ),
-                  const SizedBox(height: 24),
-                  // Save button (only shown when all required fields are filled)
-                  if (_codeController.text.isNotEmpty &&
-                      _nameController.text.isNotEmpty &&
-                      _selectedCategoryId != null &&
-                      _passwordController.text.isNotEmpty)
-                    ElevatedButton(
-                      onPressed: _handleSave,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).primaryColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: const Text('Save'),
-                    ),
                   const SizedBox(height: 16),
                 ],
               ),

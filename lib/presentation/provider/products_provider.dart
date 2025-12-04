@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
@@ -76,6 +78,8 @@ class ProductsProvider extends ChangeNotifier {
 
   Uint8List? _imageBytes;
   Uint8List? get imageBytes => _imageBytes;
+  String? _photoUrl; // For edit mode - stores URL of existing photo
+  String? get photoUrl => _photoUrl;
   String _codeSt = '';
   String get codeSt => _codeSt;
   String _barcodeSt = '';
@@ -296,17 +300,29 @@ class ProductsProvider extends ChangeNotifier {
 
     ProductWithDetails? product;
     result.fold(
-      (failure) => _setError(failure.message),
+      (failure) {
+        _setError(failure.message);
+        developer.log(
+          'ProductsProvider: loadProductByIdWithDetails() - Failed to load product: ${failure.message}',
+        );
+      },
       (p) {
-        product = p;
-        _currentProductWithDetails = p;
-        // Load derived units if base unit exists (matches KMP line 92-94)
-        if (p?.product.base_unit_id != -1) {
-          loadDerivedUnits(p!.product.base_unit_id);
+        if (p == null) {
+          _setError('Product not found');
+          developer.log(
+            'ProductsProvider: loadProductByIdWithDetails() - Product not found for productId: $productId',
+          );
+        } else {
+          product = p;
+          _currentProductWithDetails = p;
+          // Load derived units if base unit exists (matches KMP line 92-94)
+          if (p.product.base_unit_id != -1) {
+            loadDerivedUnits(p.product.base_unit_id);
+          }
+          // Load product cars and units (matches KMP lines 96-97)
+          loadProductCars(productId);
+          loadProductUnits(productId);
         }
-        // Load product cars and units (matches KMP lines 96-97)
-        loadProductCars(productId);
-        loadProductUnits(productId);
       },
     );
 
@@ -532,6 +548,7 @@ class ProductsProvider extends ChangeNotifier {
   /// Reset form to initial state
   void resetForm() {
     _imageBytes = null;
+    _photoUrl = null;
     _codeSt = '';
     _barcodeSt = '';
     _nameSt = '';
@@ -553,6 +570,51 @@ class ProductsProvider extends ChangeNotifier {
     _formBaseUnitId = -1;
     _formBaseUnitSt = 'Select Base unit';
     _subCategoryList = [];
+    notifyListeners();
+  }
+
+  /// Populate form fields from ProductWithDetails (for edit mode)
+  /// Matches KMP's EditProductScreen.kt lines 105-127
+  void populateFormFromProduct(ProductWithDetails productWithDetails) {
+    final product = productWithDetails.product;
+    
+    // Set photo URL (will be loaded as image if needed)
+    _photoUrl = product.photo.isNotEmpty ? product.photo : null;
+    _imageBytes = null; // Clear any existing image bytes
+    
+    // Populate text fields
+    _codeSt = product.code;
+    _barcodeSt = product.barcode;
+    _nameSt = product.name;
+    _subNameSt = product.sub_name;
+    _brandSt = product.brand;
+    _subBrandSt = product.sub_brand;
+    _priceSt = product.price.toString();
+    _mrpSt = product.mrp.toString();
+    _retailPriceSt = product.retail_price.toString();
+    _fittingChargeSt = product.fitting_charge.toString();
+    _noteSt = product.note;
+    
+    // Populate category
+    _formCategoryId = product.category_id;
+    _formCategorySt = productWithDetails.categoryName ?? 'Select Category';
+    if (product.category_id != -1) {
+      loadSubCategories(product.category_id);
+    }
+    
+    // Populate sub-category
+    _formSubCategoryId = product.sub_category_id;
+    _formSubCategorySt = productWithDetails.subCategoryName ?? 'Select Sub-Category';
+    
+    // Populate supplier
+    _formSupplierId = product.default_supp_id;
+    _formSupplierSt = productWithDetails.supplierName ?? 'Select Supplier';
+    _formAutoSentEnable = product.auto_sendto_supplier_flag;
+    
+    // Populate base unit
+    _formBaseUnitId = product.base_unit_id;
+    _formBaseUnitSt = productWithDetails.baseUnitName ?? 'Select Base unit';
+    
     notifyListeners();
   }
 
@@ -582,6 +644,46 @@ class ProductsProvider extends ChangeNotifier {
   Future<bool> checkBarcodeExists(String barcode) async {
     if (barcode.isEmpty) return false;
     final result = await _productsRepository.getProductsByBarcode(barcode);
+    return result.fold(
+      (failure) => false,
+      (products) => products.isNotEmpty,
+    );
+  }
+
+  /// Check if code already exists (excluding specific product ID)
+  /// Used for update operations to allow keeping the same code
+  Future<bool> checkCodeExistsWithId(String code, int productId) async {
+    final result = await _productsRepository.getProductsByCodeWithId(
+      code: code,
+      productId: productId,
+    );
+    return result.fold(
+      (failure) => false,
+      (products) => products.isNotEmpty,
+    );
+  }
+
+  /// Check if name already exists (excluding specific product ID)
+  /// Used for update operations to allow keeping the same name
+  Future<bool> checkNameExistsWithId(String name, int productId) async {
+    final result = await _productsRepository.getProductsByNameWithId(
+      name: name,
+      productId: productId,
+    );
+    return result.fold(
+      (failure) => false,
+      (products) => products.isNotEmpty,
+    );
+  }
+
+  /// Check if barcode already exists (excluding specific product ID)
+  /// Used for update operations to allow keeping the same barcode
+  Future<bool> checkBarcodeExistsWithId(String barcode, int productId) async {
+    if (barcode.isEmpty) return false;
+    final result = await _productsRepository.getProductsByBarcodeWithId(
+      barcode: barcode,
+      productId: productId,
+    );
     return result.fold(
       (failure) => false,
       (products) => products.isNotEmpty,
@@ -671,24 +773,87 @@ class ProductsProvider extends ChangeNotifier {
   }
 
   /// Update product via API and update local DB
-  Future<bool> updateProduct(Product product) async {
+  /// Matches KMP's EditProductScreen updateProduct (lines 635-646)
+  Future<String?> updateProduct(int productId) async {
+    // Validate required fields
+    if (_codeSt.isEmpty) {
+      return 'Enter Code';
+    }
+    if (_nameSt.isEmpty) {
+      return 'Enter Name';
+    }
+    if (_formBaseUnitId == -1) {
+      return 'Select Base Unit';
+    }
+    final priceValue = double.tryParse(_priceSt) ?? 0.0;
+    if (priceValue <= 0.0) {
+      return 'Enter Price';
+    }
+
+    // Check duplicates (excluding current product) - matches KMP lines 223-239
+    final codeExists = await checkCodeExistsWithId(_codeSt, productId);
+    if (codeExists) {
+      return 'Code already Exist';
+    }
+
+    final nameExists = await checkNameExistsWithId(_nameSt, productId);
+    if (nameExists) {
+      return 'Name already Exist';
+    }
+
+    if (_barcodeSt.isNotEmpty) {
+      final barcodeExists = await checkBarcodeExistsWithId(_barcodeSt, productId);
+      if (barcodeExists) {
+        return 'Barcode already Exist';
+      }
+    }
+
+    // Handle photo: Send base64 if new image selected, empty string otherwise
+    // Matches KMP's updateProductParams line 306
+    // Backend expects: base64 string (to update) OR empty string (to preserve)
+    // DO NOT send photo URL - backend will try to process it as base64 and fail
+    final photoBase64 = _imageBytes != null
+        ? 'data:image/jpeg;base64,${base64Encode(_imageBytes!)}'
+        : ''; // Empty string = preserve existing photo
+
+    final product = Product(
+      id: productId,
+      name: _nameSt,
+      code: _codeSt,
+      barcode: _barcodeSt,
+      sub_name: _subNameSt,
+      brand: _brandSt,
+      sub_brand: _subBrandSt,
+      category_id: _formCategoryId,
+      sub_category_id: _formSubCategoryId,
+      default_supp_id: _formSupplierId,
+      auto_sendto_supplier_flag: _formAutoSentEnable,
+      base_unit_id: _formBaseUnitId,
+      default_unit_id: _formBaseUnitId, // Use base unit as default
+      price: priceValue,
+      mrp: double.tryParse(_mrpSt) ?? 0.0,
+      retail_price: double.tryParse(_retailPriceSt) ?? 0.0,
+      fitting_charge: double.tryParse(_fittingChargeSt) ?? 0.0,
+      note: _noteSt,
+      photo: photoBase64,
+    );
+
     _setLoading(true);
     _clearError();
 
     final result = await _productsRepository.updateProduct(product);
 
-    bool success = false;
+    String? error;
     result.fold(
-      (failure) => _setError(failure.message),
+      (failure) => error = failure.message,
       (updatedProduct) {
-        success = true;
-        // Optionally reload products list
+        // Success - reload products
         loadProducts();
       },
     );
 
     _setLoading(false);
-    return success;
+    return error;
   }
 
   // ============================================================================

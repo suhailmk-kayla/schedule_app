@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/storage_helper.dart';
 import '../../provider/products_provider.dart';
-// TODO: Import create_product_screen.dart and cars details screen when implemented
+import 'create_product_screen.dart';
+// TODO: Import cars details screen when implemented
 
 class ProductDetailsScreen extends StatefulWidget {
   final int productId;
@@ -33,11 +34,18 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   }
 
   void _handleEdit() {
-    // TODO: Navigate to edit product screen when implemented
-    // For now, just show a message
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Edit product feature coming soon')),
-    );
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreateProductScreen(productId: widget.productId),
+      ),
+    ).then((_) {
+      // Reload product details after returning from edit
+      if (mounted) {
+        final provider = Provider.of<ProductsProvider>(context, listen: false);
+        provider.loadProductByIdWithDetails(widget.productId);
+      }
+    });
   }
 
   void _handleAddCar() {

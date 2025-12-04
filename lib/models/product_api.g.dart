@@ -118,7 +118,7 @@ Map<String, dynamic> _$ProductUnitApiToJson(ProductUnitApi instance) =>
     };
 
 Product _$ProductFromJson(Map<String, dynamic> json) => Product(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  productId: (json['id'] as num?)?.toInt() ?? -1,
   name: json['name'] as String? ?? '',
   code: json['code'] as String? ?? '',
   barcode: json['barcode'] as String? ?? '',
@@ -145,7 +145,7 @@ Product _$ProductFromJson(Map<String, dynamic> json) => Product(
 );
 
 Map<String, dynamic> _$ProductToJson(Product instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.productId,
   'name': instance.name,
   'code': instance.code,
   'barcode': instance.barcode,

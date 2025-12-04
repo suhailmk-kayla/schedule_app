@@ -60,7 +60,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   double _calculateTotal(OrdersProvider ordersProvider) {
     double total = 0.0;
     for (final item in ordersProvider.orderSubsWithDetails) {
-      total += item.orderSub.orderSubUpdateRate * (item.orderSub.orderSubUnitBaseQty * item.orderSub.orderSubQty);
+      // Formula matches KMP: updateRate * (unitBaseQty * quantity)
+      total += item.orderSub.orderSubUpdateRate * (item.orderSub.orderSubQty);
     }
     final freight = double.tryParse(_freightChargeController.text) ?? 0.0;
     return total + freight;
@@ -324,6 +325,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                             final index = entry.key;
                             final item = entry.value;
                             return _OrderItemCard(
+                              key: ValueKey(item.orderSub.id),
                               slNo: index + 1,
                               item: item,
                               onDelete: () async {
@@ -436,6 +438,9 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   }
 }
 
+/// Order Item Card with Swipe-to-Delete
+/// Matches KMP's CreateOrderScreen item display layout
+/// Converted from KMP's OrderItemCard composable
 class _OrderItemCard extends StatelessWidget {
   final int slNo;
   final OrderSubWithDetails item;
@@ -443,6 +448,7 @@ class _OrderItemCard extends StatelessWidget {
   final VoidCallback onTap;
 
   const _OrderItemCard({
+    super.key,
     required this.slNo,
     required this.item,
     required this.onDelete,
@@ -451,19 +457,165 @@ class _OrderItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Text('$slNo'),
-        title: Text(item.productName ?? 'Unknown Product'),
-        subtitle: Text(
-          '${item.orderSub.orderSubQty} ${item.unitDispName ?? item.unitName ?? ''} @ ${item.orderSub.orderSubUpdateRate}',
+    return Dismissible(
+      key: key!,
+      direction: DismissDirection.endToStart,
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: Colors.red,
+          borderRadius: BorderRadius.circular(12),
         ),
-        trailing: IconButton(
-          icon: const Icon(Icons.delete, color: Colors.red),
-          onPressed: onDelete,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 32),
+        child: const Icon(
+          Icons.delete,
+          color: Colors.white,
+          size: 24,
         ),
-        onTap: onTap,
+      ),
+      onDismissed: (_) => onDelete(),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        elevation: 4,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Item number and product name (bold)
+                Text(
+                  '#$slNo  ${item.productName ?? 'Unknown Product'}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+                // Narration (if not empty)
+                if (item.orderSub.orderSubNarration != null &&
+                    item.orderSub.orderSubNarration!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Text(
+                        'Narration: ',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      Text(
+                        item.orderSub.orderSubNarration!,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 4),
+                // Row 1: brand, SubBrand, Qty label
+                Row(
+                  children: [
+                    const Text(
+                      'brand: ',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        item.productBrand ?? '',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      'SubBrand: ',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        item.productSubBrand ?? '',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      'Qty',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // Row 2: unit, Rate, quantity (bold)
+                Row(
+                  children: [
+                    const Text(
+                      'unit: ',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        item.unitDispName ?? item.unitName ?? '',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      'Rate: ',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        item.orderSub.orderSubUpdateRate.toString(),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      item.orderSub.orderSubQty.toString(),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

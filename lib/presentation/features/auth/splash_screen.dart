@@ -29,7 +29,7 @@ class _SplashScreenState extends State<SplashScreen>
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: const Duration(seconds: 1),
     )..repeat();
     _initialize();
   }
@@ -46,7 +46,7 @@ class _SplashScreenState extends State<SplashScreen>
     await authProvider.initialize();
 
     // Wait 3 seconds before showing login (like KMP)
-    await Future.delayed(const Duration(seconds: 3));
+    await Future.delayed(const Duration(seconds: 1));
 
     if (!mounted) return;
 

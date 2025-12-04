@@ -275,6 +275,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
+  
   Future<void> _handleCheckerOrderTap(BuildContext context, Order order) async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
@@ -427,7 +428,7 @@ class _OrderListItem extends StatelessWidget {
                       order.orderInvNo.toString(),
                       style: TextStyle(
                         fontSize: 16,
-                        fontWeight: isPending ? FontWeight.bold : FontWeight.normal,
+                        fontWeight: isPending ? FontWeight.bold : FontWeight.bold,
                       ),
                     ),
                   ),

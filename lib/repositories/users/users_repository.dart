@@ -233,9 +233,27 @@ class UsersRepository {
   // ============================================================================
 
   /// Add single user to local DB
+  /// CRITICAL: Handles create vs update correctly:
+  /// - When creating (user doesn't exist): id = NULL (auto-increment)
+  /// - When updating (user exists): preserves existing local id
   Future<Either<Failure, void>> addUser(User user) async {
     try {
       final db = await _database;
+      
+      // Check if user already exists by userId
+      final existingMaps = await db.query(
+        'Users',
+        columns: ['id'],
+        where: 'userId = ?',
+        whereArgs: [user.userId ?? -1],
+        limit: 1,
+      );
+      
+      // If user exists, preserve its local id; otherwise use NULL for auto-increment
+      final localId = existingMaps.isNotEmpty 
+          ? existingMaps.first['id'] as int?
+          : null;
+      
       await db.rawInsert(
         '''
         INSERT OR REPLACE INTO Users (
@@ -253,11 +271,12 @@ class UsersRepository {
           multiDeviceLogin,
           flag
         ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
-          user.id,
+          localId, // id: NULL for new, existing id for update
+          user.userId ?? -1, // userId (from API)
           user.code,
           user.name,
           user.phoneNo,
@@ -491,7 +510,7 @@ class UsersRepository {
 
       // 5. Build push notification data IDs
       final dataIds = <PushData>[
-        PushData(table: NotificationId.user, id: createdUser.id),
+        PushData(table: NotificationId.user, id: createdUser.userId ?? -1),
       ];
 
       // 6. Handle SalesMan and Supplier creation if categoryId is 3 or 4
@@ -506,7 +525,7 @@ class UsersRepository {
             final newSalesMan = SalesMan(
               salesManId: userData.id,
               id: -1, // Auto-increment primary key
-              userId: createdUser.id,
+              userId: createdUser.userId ?? -1,
               code: userData.code,
               name: userData.name,
               phone: userData.phoneNo,
@@ -612,7 +631,7 @@ class UsersRepository {
 
       // 3. Store in local DB
       final updateResult = await updateUserLocal(
-        userId: userSuccessApi.user.id,
+        userId: userSuccessApi.user.userId ?? -1,
         code: userSuccessApi.user.code,
         name: userSuccessApi.user.name,
         phone: userSuccessApi.user.phoneNo,

@@ -135,8 +135,10 @@ class ProductUnitApi {
 
 @JsonSerializable(explicitToJson: true)
 class Product {
-  @JsonKey(defaultValue: -1)
+  @JsonKey(includeFromJson: false,includeToJson: false,defaultValue: -1)
   final int id;
+  @JsonKey(name: 'id',defaultValue: -1)
+  final int? productId;
   @JsonKey(defaultValue: '')
   final String name;
   @JsonKey(defaultValue: '')
@@ -175,7 +177,8 @@ class Product {
   final String photo;
 
   const Product({
-    required this.id,
+    this.id = -1,
+    this.productId,
     required this.name,
     required this.code,
     required this.barcode,
@@ -203,7 +206,8 @@ class Product {
   /// Convert from database map (camelCase column names)
   factory Product.fromMap(Map<String, dynamic> map) {
     return Product(
-      id: map['productId'] as int? ?? -1,
+      id: map['id'] as int? ?? -1,
+      productId: map['productId'] as int? ?? -1,
       name: map['name'] as String? ?? '',
       code: map['code'] as String? ?? '',
       barcode: map['barcode'] as String? ?? '',
@@ -228,7 +232,8 @@ class Product {
   /// Convert to database map (camelCase column names)
   Map<String, dynamic> toMap() {
     return {
-      'productId': id,
+      // Note: 'id' (local PK) is not included - handled separately in repository
+      'productId': productId ?? -1,
       'code': code,
       'barcode': barcode,
       'name': name,

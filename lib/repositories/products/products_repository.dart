@@ -355,10 +355,32 @@ class ProductsRepository {
   /// Add single product to local DB
   /// Converted from KMP's addProduct function (single product)
   /// Uses raw query matching KMP's insertProduct query exactly
-  /// id is set to NULL (auto-increment primary key)
+  /// 
+  /// CRITICAL: Handles create vs update correctly:
+  /// - When creating (product doesn't exist): id = NULL (auto-increment)
+  /// - When updating (product exists): preserves existing local id
+  /// 
+  /// Matches KMP pattern:
+  /// - Single product (line 21): passes productId only (id is NULL)
+  /// - List products (line 32): passes id (preserves local id)
   Future<Either<Failure, void>> addProduct(Product product) async {
     try {
       final db = await _database;
+      
+      // Check if product already exists by productId
+      final existingMaps = await db.query(
+        'Product',
+        columns: ['id'],
+        where: 'productId = ?',
+        whereArgs: [product.productId ?? -1],
+        limit: 1,
+      );
+      
+      // If product exists, preserve its local id; otherwise use NULL for auto-increment
+      final localId = existingMaps.isNotEmpty 
+          ? existingMaps.first['id'] as int?
+          : null;
+      
       // Raw query matching KMP's insertProduct query (Product.sq line 27-30)
       // Column order: id,productId,code,barcode,name,subName,brand,subBrand,categoryId,subCategoryId,defaultSuppId,autoSend,baseUnitId,defaultUnitId,photoUrl,price,mrp,retailPrice,fittingCharge,note,outtOfStockFlag,flag
       await db.rawInsert(
@@ -368,11 +390,12 @@ class ProductsRepository {
           categoryId, subCategoryId, defaultSuppId, autoSend, baseUnitId, defaultUnitId,
           photoUrl, price, mrp, retailPrice, fittingCharge, note, outtOfStockFlag, flag
         ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
-          product.id, // productId (from API)
+          localId, // id: NULL for new, existing id for update
+          product.productId ?? -1, // productId (from API)
           product.code,
           product.barcode,
           product.name,
@@ -429,7 +452,7 @@ class ProductsRepository {
             )
             ''',
             [
-              product.id, // productId (from API)
+              product.productId ?? -1, // productId (from API)
               product.code,
               product.barcode,
               product.name,
@@ -620,7 +643,7 @@ class ProductsRepository {
       // Matches KMP's sentPushNotification pattern (ProductViewModel.kt lines 206-212)
       if (_pushNotificationSender != null) {
         final dataIds = <PushData>[
-          PushData(table: NotificationId.product, id: productApi.product.id),
+          PushData(table: NotificationId.product, id: productApi.product.productId ?? -1),
         ];
         
         // Include productUnit if it exists (matches KMP line 208-211)
@@ -646,6 +669,45 @@ class ProductsRepository {
     }
   }
 
+  /// Update product in local DB (dedicated update method)
+  /// Uses SQL UPDATE instead of INSERT OR REPLACE for clarity and correctness
+  /// Preserves all fields that shouldn't be updated (like local id)
+  Future<Either<Failure, void>> updateProductLocal(Product product) async {
+    try {
+      final db = await _database;
+      await db.update(
+        'Product',
+        {
+          'code': product.code,
+          'barcode': product.barcode,
+          'name': product.name,
+          'subName': product.sub_name,
+          'brand': product.brand,
+          'subBrand': product.sub_brand,
+          'categoryId': product.category_id,
+          'subCategoryId': product.sub_category_id,
+          'defaultSuppId': product.default_supp_id,
+          'autoSend': product.auto_sendto_supplier_flag >= 0
+              ? product.auto_sendto_supplier_flag
+              : 0,
+          'baseUnitId': product.base_unit_id,
+          'defaultUnitId': product.default_unit_id,
+          'photoUrl': product.photo,
+          'price': product.price,
+          'mrp': product.mrp,
+          'retailPrice': product.retail_price,
+          'fittingCharge': product.fitting_charge,
+          'note': product.note,
+        },
+        where: 'productId = ?',
+        whereArgs: [product.productId ?? -1],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
   /// Update product via API and update local DB
   Future<Either<Failure, Product>> updateProduct(Product product) async {
     try {
@@ -663,17 +725,17 @@ class ProductsRepository {
         ));
       }
 
-      // 3. Store in local DB
-      final addResult = await addProduct(updateProductApi.product);
-      if (addResult.isLeft) {
-        return addResult.map((_) => updateProductApi.product);
+      // 3. Update in local DB using dedicated update method
+      final updateResult = await updateProductLocal(updateProductApi.product);
+      if (updateResult.isLeft) {
+        return updateResult.map((_) => updateProductApi.product);
       }
 
       // 4. Send push notification (fire-and-forget, non-blocking)
       // Matches KMP's sentPushNotification pattern (ProductViewModel.kt lines 255-257)
       if (_pushNotificationSender != null) {
         final dataIds = <PushData>[
-          PushData(table: NotificationId.product, id: updateProductApi.product.id),
+          PushData(table: NotificationId.product, id: updateProductApi.product.productId ?? -1),
         ];
         
         // Fire-and-forget: don't await, just trigger in background
@@ -789,6 +851,52 @@ class ProductsRepository {
 
       final productUnitListApi = ProductUnitListApi.fromJson(response.data);
       return Right(productUnitListApi);
+    } on DioException catch (e) {
+      return Left(NetworkFailure.fromDioError(e));
+    } catch (e) {
+      return Left(UnknownFailure.fromError(e));
+    }
+  }
+
+  /// Sync product cars from API (for initial sync and push notifications)
+  /// Matches KMP's downloadProductCar (SyncViewModel.kt lines 1012-1046)
+  /// Supports two modes matching KMP exactly:
+  /// 1. Full sync (id == -1): Downloads all product cars in batches
+  /// 2. Single record retry (id != -1): Downloads specific product car
+  Future<Either<Failure, ProductCarListApi>> syncProductCarsFromApi({
+    required int partNo,
+    required int limit,
+    required int userType,
+    required int userId,
+    required String updateDate,
+    int id = -1, // -1 for full sync, specific id for retry
+  }) async {
+    try {
+      final Map<String, String> queryParams;
+      
+      if (id == -1) {
+        // Full sync mode: send all parameters (matches KMP's params function when id == -1)
+        queryParams = {
+          'part_no': partNo.toString(),
+          'limit': limit.toString(),
+          'user_type': userType.toString(),
+          'user_id': userId.toString(),
+          'update_date': updateDate,
+        };
+      } else {
+        // Single record retry mode: send only id (matches KMP's params function when id != -1)
+        queryParams = {
+          'id': id.toString(),
+        };
+      }
+      
+      final response = await _dio.get(
+        ApiEndpoints.productCarDownload,
+        queryParameters: queryParams,
+      );
+
+      final productCarListApi = ProductCarListApi.fromJson(response.data);
+      return Right(productCarListApi);
     } on DioException catch (e) {
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {

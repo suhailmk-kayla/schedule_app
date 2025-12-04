@@ -33,9 +33,9 @@ class PushNotificationBuilder {
       },
       (users) {
         for (final user in users) {
-          if (user.id != currentUserId) {
+          if (user.userId != currentUserId) {
             userIds.add({
-              'user_id': user.id,
+              'user_id': user.userId ?? -1,
               'silent_push': 1,
             });
           }
@@ -67,7 +67,7 @@ class PushNotificationBuilder {
       (users) {
         for (final user in users) {
           // Exclude current user
-          if (user.id == currentUserId) {
+          if (user.userId == currentUserId) {
             continue;
           }
 
@@ -121,7 +121,7 @@ class PushNotificationBuilder {
       (users) {
         for (final user in users) {
           // Exclude current user
-          if (user.id == currentUserId) {
+          if (user.userId == currentUserId) {
             continue;
           }
 
@@ -157,7 +157,7 @@ class PushNotificationBuilder {
       (users) {
         for (final user in users) {
           // Exclude current user
-          if (user.id == currentUserId) {
+          if (user.userId == currentUserId) {
             continue;
           }
 
@@ -277,7 +277,7 @@ class PushNotificationBuilder {
       (users) {
         for (final user in users) {
           // Exclude current user
-          if (user.id == currentUserId) {
+          if (user.userId == currentUserId) {
             continue;
           }
 

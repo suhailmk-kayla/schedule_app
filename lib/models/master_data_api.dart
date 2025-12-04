@@ -616,10 +616,14 @@ class UserListApi {
 
 /// User Model
 /// Converted from KMP's User class
-@JsonSerializable()
+/// CRITICAL: Distinguishes between local database id (PK) and server userId
+@JsonSerializable(explicitToJson: true)
 class User {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(includeFromJson: false, includeToJson: false, defaultValue: -1)
+  final int id; // Local database primary key (not in API JSON)
+
+  @JsonKey(name: 'id', defaultValue: -1) // API 'id' maps to userId
+  final int? userId; // Server ID from API
 
   @JsonKey(defaultValue: '')
   final String name;
@@ -637,7 +641,8 @@ class User {
   final String address;
 
   const User({
-    this.id = -1,
+    this.id = -1, // Local PK, not required with default value
+    this.userId,
     this.name = '',
     this.code = '',
     this.phoneNo = '',
@@ -652,7 +657,8 @@ class User {
   /// Convert from database map (camelCase column names)
   factory User.fromMap(Map<String, dynamic> map) {
     return User(
-      id: map['userId'] as int? ?? -1,
+      id: map['id'] as int? ?? -1, // Local PK from database
+      userId: map['userId'] as int? ?? -1, // Server ID from database
       name: map['name'] as String? ?? '',
       code: map['code'] as String? ?? '',
       phoneNo: map['phone'] as String? ?? '',
@@ -664,7 +670,8 @@ class User {
   /// Convert to database map (camelCase column names)
   Map<String, dynamic> toMap() {
     return {
-      'userId': id,
+      // Note: 'id' (local PK) is not included - handled separately in repository
+      'userId': userId ?? -1, // Server ID
       'code': code,
       'name': name,
       'phone': phoneNo,
