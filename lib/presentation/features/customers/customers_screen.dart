@@ -8,6 +8,7 @@ import '../../../models/master_data_api.dart';
 import '../../../utils/storage_helper.dart';
 import 'create_customer_screen.dart';
 import 'customer_details_screen.dart';
+import '../orders/create_order_screen.dart';
 
 /// Customers Screen
 /// Displays list of customers with search, route filter, and order creation
@@ -108,11 +109,19 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   Future<void> _handleOrderClick(CustomerWithNames customer) async {
     final provider = Provider.of<CustomersProvider>(context, listen: false);
-    final order = await provider.getOrderByCustomer(customer);
-    if (order != null && mounted) {
-      // TODO: Navigate to order screen
-      // Navigator.push(context, MaterialPageRoute(builder: (_) => OrderScreen(order: order)));
-    }
+    // final order = await provider.getOrderByCustomer(customer);
+    // if (order != null && mounted) {
+      // Navigate to CreateOrderScreen with the order ID
+      // Matches KMP's orderClick behavior (BaseScreen.kt line 898-903)
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CreateOrderScreen(
+            // orderId: order.id.toString()
+            ),
+        ),
+      );
+    // }
   }
 
   void _handleAddNew() {
@@ -386,10 +395,11 @@ class _CustomerListItem extends StatelessWidget {
                           IconButton(
                             iconSize: 36,
                             padding: const EdgeInsets.all(5),
-                            icon: ImageIcon(
-                              color: Colors.black,
-                              AssetImage(AssetImages.imagesOrder
-                              )),
+                            icon: Image.asset(AssetImages.imagesOrder,
+                            width: 36,
+                            height: 36,
+                            ),
+
                             onPressed: onOrderClick,
                           ),
                       ],

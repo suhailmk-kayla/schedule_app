@@ -49,7 +49,6 @@ class _HomeDrawerState extends State<HomeDrawer> {
     
     switch (menuType) {
       case MenuType.orders:
-        // TODO: Navigate to OrdersScreen
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const OrdersScreen()),

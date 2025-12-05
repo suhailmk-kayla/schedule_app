@@ -59,8 +59,8 @@ class OrdersProvider extends ChangeNotifier {
   // State Variables
   // ============================================================================
 
-  List<Order> _orderList = [];
-  List<Order> get orderList => _orderList;
+  List<OrderWithName> _orderList = [];
+  List<OrderWithName> get orderList => _orderList;
 
   Order? _currentOrder;
   Order? get currentOrder => _currentOrder;
@@ -184,7 +184,7 @@ class OrdersProvider extends ChangeNotifier {
     final userType = await StorageHelper.getUserType();
     final userId = await StorageHelper.getUserId();
     final int? salesmanId = userType == 3 ? userId : null;
-    final result = await _ordersRepository.getAllOrders(
+    final result = await _ordersRepository.getAllOrdersWithNames(
       searchKey: _searchKey,
       routeId: _routeId == -1 ? -1 : _routeId,
       date: _date,
@@ -193,8 +193,8 @@ class OrdersProvider extends ChangeNotifier {
 
     result.fold(
       (failure) => _setError(failure.message),
-      (orders) {
-        _orderList = orders;
+      (ordersWithNames) {
+        _orderList = ordersWithNames;
         notifyListeners();
       },
     );
@@ -942,7 +942,7 @@ class OrdersProvider extends ChangeNotifier {
         (admins) {
           for (final admin in admins) {
             userIds.add({
-              'user_id': admin.id,
+              'user_id': admin.userId,
               'silent_push': 1,
             });
           }
@@ -957,7 +957,7 @@ class OrdersProvider extends ChangeNotifier {
           for (final storekeeper in storekeepers) {
             if (storekeeper.id != currentUserId) {
               userIds.add({
-                'user_id': storekeeper.id,
+                'user_id': storekeeper.userId,
                 'silent_push': 1,
               });
             }
@@ -973,7 +973,7 @@ class OrdersProvider extends ChangeNotifier {
           (billers) {
             for (final biller in billers) {
               userIds.add({
-                'user_id': biller.id,
+                'user_id': biller.userId,
                 'silent_push': 1,
               });
             }

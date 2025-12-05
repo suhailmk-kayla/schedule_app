@@ -473,9 +473,25 @@ class CustomersProvider extends ChangeNotifier {
 
     final result = await _ordersRepository.addOrder(tempOrder);
     Order? order;
-    result.fold(
-      (failure) => _setError(failure.message),
-      (_) => order = tempOrder,
+    await result.fold(
+      (failure) async {
+        _setError(failure.message);
+      },
+      (_) async {
+        // Query for the temp order we just created to get its local ID
+        final tempResult = await _ordersRepository.getTempOrders();
+        tempResult.fold(
+          (failure) => null,
+          (orders) {
+            // Find the order we just created by customer ID and invoiceNo
+            // This ensures we get the correct order even if there are multiple temp orders
+            order = orders.firstWhere(
+              (o) => o.orderCustId == customer.id && o.orderInvNo == orderId,
+              orElse: () => tempOrder, // Fallback to tempOrder if not found
+            );
+          },
+        );
+      },
     );
 
     return order;

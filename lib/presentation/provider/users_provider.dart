@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/foundation.dart';
 import '../../repositories/users/users_repository.dart';
 import '../../repositories/user_category/user_category_repository.dart';
@@ -195,11 +197,13 @@ class UsersProvider extends ChangeNotifier {
     final result = await _usersRepository.checkUserActive(userId: userId);
     result.fold(
       (_) {
+        developer.log('User is not active');
         _isUserActive = false;
         notifyListeners();
       },
       (isActive) {
         _isUserActive = isActive;
+        developer.log('User is active: $isActive');
         notifyListeners();
       },
     );

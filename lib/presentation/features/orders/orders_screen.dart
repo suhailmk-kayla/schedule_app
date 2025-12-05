@@ -61,7 +61,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
   @override
   Widget build(BuildContext context) {
     final ordersProvider = Provider.of<OrdersProvider>(context);
-    final isMenuIcon = _userType == 7 || _userType == 5 || _userType == 6;
 
     return Consumer<NotificationManager>(
       builder: (context, notificationManager, _) {
@@ -156,13 +155,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     : ListView.builder(
                         itemCount: provider.orderList.length,
                         itemBuilder: (context, index) {
-                          final order = provider.orderList[index];
-                          final orderWithName = OrderWithName.fromOrder(order);
+                          final orderWithName = provider.orderList[index];
                           return _OrderListItem(
                             orderWithName: orderWithName,
                             userType: _userType,
                             userId: _userId,
                             onTap: () {
+                              final order = orderWithName.order;
                               if (_userType == 1) {
                                 Navigator.push(
                                   context,

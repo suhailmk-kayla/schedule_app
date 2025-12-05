@@ -193,6 +193,98 @@ class OrdersRepository {
     }
   }
 
+  /// Get all orders with related names (salesman/storekeeper/biller/checker/route)
+  /// Returns OrderWithName objects with populated names from JOIN queries
+  Future<Either<Failure, List<OrderWithName>>> getAllOrdersWithNames({
+    String searchKey = '',
+    int routeId = -1,
+    String date = '',
+    int? salesmanId,
+  }) async {
+    try {
+      final db = await _database;
+      final List<Map<String, dynamic>> maps;
+
+      // Build query with JOINs to get names
+      String whereClause = 'Orders.flag > 0 AND Orders.flag != 2';
+      List<dynamic> whereArgs = [];
+
+      if (salesmanId != null) {
+        whereClause += ' AND Orders.salesmanId = ?';
+        whereArgs.add(salesmanId);
+      }
+
+      if (routeId != -1) {
+        whereClause += ' AND Routes.routeId = ?';
+        whereArgs.add(routeId);
+      }
+
+      if (date.isNotEmpty) {
+        whereClause += ' AND Orders.updatedDateTime LIKE ?';
+        whereArgs.add('%$date%');
+      }
+
+      if (searchKey.isNotEmpty) {
+        whereClause += ' AND (Orders.invoiceNo LIKE ? OR Orders.customerName LIKE ?)';
+        final searchPattern = '%$searchKey%';
+        whereArgs.addAll([searchPattern, searchPattern]);
+      }
+
+      maps = await db.rawQuery(
+        '''
+        SELECT
+          COALESCE(sl.name, SalesMan.name) AS salesManName,
+          CASE
+            WHEN Orders.storeKeeperId = -1 THEN ''
+            ELSE COALESCE(storeKeeper.name, '')
+          END AS storeKeeperName,
+          CASE
+            WHEN Customers.routId = -1 THEN ''
+            ELSE COALESCE(Routes.name, '')
+          END AS routeName,
+          CASE
+            WHEN Orders.billerId = -1 THEN ''
+            ELSE COALESCE(biller.name, '')
+          END AS billerName,
+          CASE
+            WHEN Orders.checkerId = -1 THEN ''
+            ELSE COALESCE(checker.name, '')
+          END AS checkerName,
+          Customers.name AS customerDisplayName,
+          Orders.*
+        FROM Orders
+        LEFT JOIN SalesMan ON SalesMan.userId = Orders.salesmanId
+        LEFT JOIN Users sl ON sl.userId = Orders.salesmanId
+        LEFT JOIN Users storeKeeper ON storeKeeper.userId = Orders.storeKeeperId
+        LEFT JOIN Users biller ON biller.userId = Orders.billerId
+        LEFT JOIN Users checker ON checker.userId = Orders.checkerId
+        LEFT JOIN Customers ON Customers.customerId = Orders.customerId
+        LEFT JOIN Routes ON Routes.routeId = Customers.routId
+        WHERE $whereClause
+        ORDER BY Orders.updatedDateTime DESC
+        ''',
+        whereArgs,
+      );
+
+      final ordersWithNames = maps.map((map) {
+        final order = Order.fromMap(map);
+        return OrderWithName(
+          order: order,
+          salesManName: (map['salesManName'] as String?) ?? '',
+          storeKeeperName: (map['storeKeeperName'] as String?) ?? '',
+          customerName: (map['customerDisplayName'] as String?) ?? order.orderCustName,
+          billerName: (map['billerName'] as String?) ?? '',
+          checkerName: (map['checkerName'] as String?) ?? '',
+          route: (map['routeName'] as String?) ?? '',
+        );
+      }).toList();
+
+      return Right(ordersWithNames);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
   /// Get orders by customer ID and date
   Future<Either<Failure, List<Order>>> getOrdersByCustomer({
     required int customerId,
@@ -1180,7 +1272,7 @@ class OrdersRepository {
         ApiEndpoints.addOrder,
         data: params,
       );
-
+      
       // Parse response
       final orderApi = OrderApi.fromJson(response.data);
       if (orderApi.status != 1) {

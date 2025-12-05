@@ -575,15 +575,15 @@ class ProductsRepository {
         requestData['sub_brand'] = product.sub_brand;
       }
       // Integer fields - always send (matching KMP behavior)
-      // KMP always sends these fields even if -1
-      // For optional fields, send null if -1 (API expects null, not empty string)
-      requestData['category_id'] = product.category_id != -1 ? product.category_id : null;
-      requestData['sub_category_id'] = product.sub_category_id != -1 ? product.sub_category_id : null;
+      // KMP always sends these fields even if -1 (see ProductViewModel.kt line 274-275)
+      // KMP sends -1 directly, not null, so we match that behavior
+      requestData['category_id'] = product.category_id != -1 ? product.category_id : -1;
+      requestData['sub_category_id'] = product.sub_category_id != -1 ? product.sub_category_id : -1;
       requestData['default_supp_id'] = product.default_supp_id != -1 ? product.default_supp_id : -1;
       requestData['auto_sendto_supplier_flag'] = product.auto_sendto_supplier_flag >= 0 
           ? product.auto_sendto_supplier_flag 
           : 0;
-      requestData['base_unit_id'] = product.base_unit_id != -1 ? product.base_unit_id : null;
+      requestData['base_unit_id'] = product.base_unit_id != -1 ? product.base_unit_id : -1;
       // Price is required by our validation, so always send it
       requestData['price'] = product.price.toString();
       // Optional price fields - send if > 0

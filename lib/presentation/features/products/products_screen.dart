@@ -134,11 +134,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<int>(
-                        value: provider.filterCategoryId == -1
-                            ? null
-                            : provider.filterCategoryId,
-                        hint: const Text('Category'),
+                        value: provider.filterCategoryId,
                         items: [
+                          // "All Category" option (matches KMP)
+                          const DropdownMenuItem<int>(
+                            value: -1,
+                            child: Text('All Category'),
+                          ),
                           ...provider.categoryList.map(
                             (c) => DropdownMenuItem<int>(
                               value: c.id,
@@ -149,12 +151,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         decoration: const InputDecoration(
                           labelText: 'Category',
                           border: OutlineInputBorder(),
-                          isDense: true,
+                          // isDense: true,
                           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
-                        icon: const Icon(Icons.arrow_drop_down),
+                        // icon: const Icon(Icons.arrow_drop_down),
                         onChanged: (val) {
-                          final categoryId = val ?? -1;
+                          if (val == null) return;
+                          final categoryId = val;
                           final categoryName = categoryId == -1
                               ? 'All Category'
                               : provider.categoryList
@@ -182,12 +185,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           ),
                         ],
                         decoration: const InputDecoration(
+                         
                           labelText: 'Sub Category',
                           border: OutlineInputBorder(),
-                          isDense: true,
+                          // isDense: true,
                           contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
-                        icon: const Icon(Icons.arrow_drop_down),
+                        // icon: const Icon(Icons.arrow_drop_down),
                         onChanged: (val) {
                           final subId = val ?? -1;
                           final subName = subId == -1

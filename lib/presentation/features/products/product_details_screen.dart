@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/storage_helper.dart';
 import '../../provider/products_provider.dart';
+import '../../../models/product_api.dart';
+import '../../../models/master_data_api.dart';
 import 'create_product_screen.dart';
-// TODO: Import cars details screen when implemented
+import '../product_settings/cars/cars_list_screen.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
   final int productId;
@@ -24,6 +26,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       final provider = Provider.of<ProductsProvider>(context, listen: false);
       await provider.loadProductByIdWithDetails(widget.productId);
     });
+  }
+
+  void _showFullImageDialog(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => _FullImageDialog(
+        imageUrl: imageUrl,
+        onDismiss: () => Navigator.of(context).pop(),
+      ),
+    );
   }
 
   Future<void> _loadUserData() async {
@@ -49,21 +62,20 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   }
 
   void _handleAddCar() {
-    // TODO: Navigate to cars details screen for adding cars
-    // Navigator.push(
-    //   context,
-    //   MaterialPageRoute(
-    //     builder: (_) => CarsDetailsScreen(productId: widget.productId),
-    //   ),
-    // ).then((result) {
-    //   if (result == true && mounted) {
-    //     final provider = Provider.of<ProductsProvider>(context, listen: false);
-    //     provider.loadProductCars(widget.productId);
-    //   }
-    // });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Add Car feature coming soon')),
-    );
+    // Navigate to cars list screen with productId
+    // Matches KMP's addCarClick behavior (BaseScreen.kt line 610-611)
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CarsListScreen(productId: widget.productId),
+      ),
+    ).then((result) {
+      // Reload product cars after returning
+      if (mounted) {
+        final provider = Provider.of<ProductsProvider>(context, listen: false);
+        provider.loadProductCars(widget.productId);
+      }
+    });
   }
 
   Future<void> _handleAddUnit() async {
@@ -77,11 +89,27 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       return;
     }
 
+    // Load derived units first
+    await provider.loadDerivedUnits(product.base_unit_id);
+    
+    if (provider.unitList.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No units available')),
+      );
+      return;
+    }
+
     // Show unit selection dialog
-    // TODO: Implement unit selection dialog similar to KMP's AddDerivedUnitDialog
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Add unit dialog coming soon')),
-    );
+    // Matches KMP's AddDerivedUnitDialog (ProductDetails.kt lines 528-613)
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => _AddDerivedUnitDialog(
+          product: product,
+          provider: provider,
+        ),
+      );
+    }
   }
 
   @override
@@ -131,7 +159,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   child: GestureDetector(
                     onTap: product.photo.isNotEmpty
                         ? () {
-                            // TODO: Show full image dialog
+                            _showFullImageDialog(context, product.photo);
                           }
                         : null,
                     child: Container(
@@ -402,5 +430,232 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       });
     });
     return widgets;
+  }
+}
+
+/// Add Derived Unit Dialog
+/// Matches KMP's AddDerivedUnitDialog (ProductDetails.kt lines 528-613)
+class _AddDerivedUnitDialog extends StatefulWidget {
+  final Product product;
+  final ProductsProvider provider;
+
+  const _AddDerivedUnitDialog({
+    required this.product,
+    required this.provider,
+  });
+
+  @override
+  State<_AddDerivedUnitDialog> createState() => _AddDerivedUnitDialogState();
+}
+
+class _AddDerivedUnitDialogState extends State<_AddDerivedUnitDialog> {
+  int _selectedUnitId = -1;
+  String _selectedUnitName = '';
+  bool _isLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add Unit'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Unit selection field
+          InkWell(
+            onTap: () {
+              if (widget.provider.unitList.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('No units available')),
+                );
+                return;
+              }
+              // Show unit selection dialog
+              showDialog(
+                context: context,
+                builder: (context) => _UnitSelectionDialog(
+                  units: widget.provider.unitList,
+                  selectedUnitId: _selectedUnitId,
+                  onUnitSelected: (unitId, unitName) {
+                    setState(() {
+                      _selectedUnitId = unitId;
+                      _selectedUnitName = unitName;
+                    });
+                  },
+                ),
+              );
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                _selectedUnitName.isEmpty ? 'Select Unit' : _selectedUnitName,
+                style: TextStyle(
+                  color: _selectedUnitName.isEmpty ? Colors.grey : Colors.black,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: _isLoading ? null : () async {
+            if (_selectedUnitId == -1) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Select unit')),
+              );
+              return;
+            }
+
+            setState(() {
+              _isLoading = true;
+            });
+
+            final error = await widget.provider.addUnitToProduct(
+              productId: widget.product.productId ?? -1,
+              baseUnitId: widget.product.base_unit_id,
+              derivedUnitId: _selectedUnitId,
+            );
+
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+              });
+
+              if (error != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(error)),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Unit added')),
+                );
+                Navigator.of(context).pop();
+              }
+            }
+          },
+          child: _isLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Add'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Unit Selection Dialog
+/// Shows list of units to select from
+class _UnitSelectionDialog extends StatelessWidget {
+  final List<Units> units;
+  final int selectedUnitId;
+  final Function(int unitId, String unitName) onUnitSelected;
+
+  const _UnitSelectionDialog({
+    required this.units,
+    required this.selectedUnitId,
+    required this.onUnitSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Select Unit'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: units.length,
+          itemBuilder: (context, index) {
+            final unit = units[index];
+            final unitId = unit.id;
+            final unitName = unit.name;
+
+            return ListTile(
+              title: Text(unitName),
+              leading: Radio<int>(
+                value: unitId,
+                groupValue: selectedUnitId,
+                onChanged: (value) {
+                  if (value != null) {
+                    onUnitSelected(value, unitName);
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
+              onTap: () {
+                onUnitSelected(unitId, unitName);
+                Navigator.of(context).pop();
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Full Image Dialog
+/// Shows full-size product image in a dialog
+/// Matches KMP's FullImageDialog (FullImageDialog.kt lines 21-43)
+class _FullImageDialog extends StatelessWidget {
+  final String imageUrl;
+  final VoidCallback onDismiss;
+
+  const _FullImageDialog({
+    required this.imageUrl,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: GestureDetector(
+        onTap: onDismiss,
+        child: Container(
+          constraints: const BoxConstraints(
+            maxWidth: 400,
+            maxHeight: 400,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                return const Center(
+                  child: Text(
+                    'Failed to load image',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                );
+              },
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return const Center(
+                  child: CircularProgressIndicator(),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

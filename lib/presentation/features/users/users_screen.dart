@@ -157,7 +157,7 @@ class _UsersScreenState extends State<UsersScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => UserDetailsScreen(userId: u.id),
+                            builder: (_) => UserDetailsScreen(userId: u.userId ?? -1),
                           ),
                         );
                       },
