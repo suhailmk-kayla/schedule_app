@@ -82,263 +82,277 @@ class _ProductsScreenState extends State<ProductsScreen> {
           });
         }
 
-        return Scaffold(
-          appBar: AppBar(
-            title: _showSearchBar
-                ? TextField(
-                    controller: _searchController,
-                    focusNode: _searchFocusNode,
-                    style: const TextStyle(color: Colors.black),
-                    decoration: InputDecoration(
-                      hintText: 'Search',
-                      hintStyle: const TextStyle(color: Colors.grey),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(30),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey[200],
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                    ),
-                    onChanged: (value) {
-                      final provider = Provider.of<ProductsProvider>(context, listen: false);
-                      _handleSearch(provider, value.trim());
-                    },
-                  )
-                : const Text('Products'),
-            leading: (widget.orderId != null && widget.orderId!.isNotEmpty)
-                ? IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () => Navigator.of(context).pop(),
-                  )
-                : null,
-            actions: [
-              IconButton(
-                icon: Icon(_showSearchBar ? Icons.close : Icons.search),
-                onPressed: _toggleSearchBar,
-              ),
-            ],
-          ),
-          body: Consumer<ProductsProvider>(
-            builder: (context, provider, _) {
-          return Column(
-            children: [
-              // Filters: Category and SubCategory
-              SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<int>(
-                        value: provider.filterCategoryId,
-                        items: [
-                          // "All Category" option (matches KMP)
-                          const DropdownMenuItem<int>(
-                            value: -1,
-                            child: Text('All Category'),
-                          ),
-                          ...provider.categoryList.map(
-                            (c) => DropdownMenuItem<int>(
-                              value: c.id,
-                              child: Text(c.name),
-                            ),
-                          ),
-                        ],
-                        decoration: const InputDecoration(
-                          labelText: 'Category',
-                          border: OutlineInputBorder(),
-                          // isDense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        return PopScope(
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop && mounted) {
+              final provider = Provider.of<ProductsProvider>(context, listen: false);
+              provider.clearFilters();
+            }
+          },
+          child: Scaffold(
+            
+            appBar: AppBar(
+              
+              title: _showSearchBar
+                  ? TextField(
+                      controller: _searchController,
+                      focusNode: _searchFocusNode,
+                      style: const TextStyle(color: Colors.black),
+                      decoration: InputDecoration(
+                        hintText: 'Search',
+                        hintStyle: const TextStyle(color: Colors.grey),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide.none,
                         ),
-                        // icon: const Icon(Icons.arrow_drop_down),
-                        onChanged: (val) {
-                          if (val == null) return;
-                          final categoryId = val;
-                          final categoryName = categoryId == -1
-                              ? 'All Category'
-                              : provider.categoryList
-                                  .firstWhere((c) => c.id == categoryId)
-                                  .name;
-                          provider.setCategoryFilter(categoryId, categoryName);
-                          provider.loadSubCategories(categoryId);
-                          provider.loadProducts(searchKey: _searchController.text.trim());
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: DropdownButtonFormField<int>(
-                        value: provider.filterSubCategoryId == -1
-                            ? null
-                            : provider.filterSubCategoryId,
-                        hint: const Text('Sub Category'),
-                        items: [
-                          ...provider.subCategoryList.map(
-                            (s) => DropdownMenuItem<int>(
-                              value: s.id,
-                              child: Text(s.name),
-                            ),
-                          ),
-                        ],
-                        decoration: const InputDecoration(
-                         
-                          labelText: 'Sub Category',
-                          border: OutlineInputBorder(),
-                          // isDense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        filled: true,
+                        fillColor: Colors.grey[200],
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
                         ),
-                        // icon: const Icon(Icons.arrow_drop_down),
-                        onChanged: (val) {
-                          final subId = val ?? -1;
-                          final subName = subId == -1
-                              ? 'Sub Category'
-                              : provider.subCategoryList
-                                  .firstWhere((s) => s.id == subId)
-                                  .name;
-                          provider.setSubCategoryFilter(subId, subName);
-                          provider.loadProducts(searchKey: _searchController.text.trim());
-                        },
                       ),
-                    ),
-                  ],
+                      onChanged: (value) {
+                        final provider = Provider.of<ProductsProvider>(context, listen: false);
+                        _handleSearch(provider, value.trim());
+                      },
+                    )
+                  : const Text('Products'),
+              leading: (widget.orderId != null && widget.orderId!.isNotEmpty)
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => Navigator.of(context).pop(),
+                    )
+                  : null,
+              actions: [
+                IconButton(
+                  icon: Icon(_showSearchBar ? Icons.close : Icons.search),
+                  onPressed: _toggleSearchBar,
                 ),
-              ),
-
-              const SizedBox(height: 8),
-
-              if (provider.isLoading)
-                const Expanded(
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (provider.errorMessage != null)
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      provider.errorMessage!,
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  ),
-                )
-              else
-                Expanded(
-                  child: ListView.separated(
-                    itemCount: provider.productList.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final p = provider.productList[index];
-                      return InkWell(
-                        onTap: () {
-                          if (widget.orderId != null && widget.orderId!.isNotEmpty) {
-                            // Selection mode - show bottom sheet to add product to order
-                            _showAddProductDialog(context, p);
-                          } else {
-                            // Normal mode - navigate to product details
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ProductDetailsScreen(productId: p.productId ?? -1),
+              ],
+            ),
+            body: Consumer<ProductsProvider>(
+              builder: (context, provider, _) {
+            return Column(
+              children: [
+                // Filters: Category and SubCategory
+                SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          icon: SizedBox.shrink(),
+                          // icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                          value: provider.filterCategoryId,
+                          items: [
+                            // "All Category" option (matches KMP)
+                            const DropdownMenuItem<int>(
+                              value: -1,
+                              child: Text('All Category'),
+                            ),
+                            ...provider.categoryList.map(
+                              (c) => DropdownMenuItem<int>(
+                                value: c.id,
+                                child: Text(c.name),
                               ),
-                            );
-                          }
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Image (flex: 1)
-                              Expanded(
-                                flex: 1,
-                                child: AspectRatio(
-                                  aspectRatio: 1,
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: ProductImage(url: p.photo),
+                            ),
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Category',
+                            border: OutlineInputBorder(),
+                            // isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                          // icon: const Icon(Icons.arrow_drop_down),
+                          onChanged: (val) {
+                            if (val == null) return;
+                            final categoryId = val;
+                            final categoryName = categoryId == -1
+                                ? 'All Category'
+                                : provider.categoryList
+                                    .firstWhere((c) => c.id == categoryId)
+                                    .name;
+                            provider.setCategoryFilter(categoryId, categoryName);
+                            provider.loadSubCategories(categoryId);
+                            provider.loadProducts(searchKey: _searchController.text.trim());
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          icon: SizedBox.shrink(),
+                          // icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                          value: provider.filterSubCategoryId == -1
+                              ? null
+                              : provider.filterSubCategoryId,
+                          hint: const Text('Sub Category'),
+                          items: [
+                            ...provider.subCategoryList.map(
+                              (s) => DropdownMenuItem<int>(
+                                value: s.id,
+                                child: Text(s.name),
+                              ),
+                            ),
+                          ],
+                          decoration: const InputDecoration(
+                           
+                            labelText: 'Sub Category',
+                            border: OutlineInputBorder(),
+                            // isDense: true,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                          // icon: const Icon(Icons.arrow_drop_down),
+                          onChanged: (val) {
+                            final subId = val ?? -1;
+                            final subName = subId == -1
+                                ? 'Sub Category'
+                                : provider.subCategoryList
+                                    .firstWhere((s) => s.id == subId)
+                                    .name;
+                            provider.setSubCategoryFilter(subId, subName);
+                            provider.loadProducts(searchKey: _searchController.text.trim());
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+          
+                const SizedBox(height: 8),
+          
+                if (provider.isLoading)
+                  const Expanded(
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (provider.errorMessage != null)
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        provider.errorMessage!,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: provider.productList.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final p = provider.productList[index];
+                        return InkWell(
+                          onTap: () {
+                            if (widget.orderId != null && widget.orderId!.isNotEmpty) {
+                              // Selection mode - show bottom sheet to add product to order
+                              _showAddProductDialog(context, p);
+                            } else {
+                              // Normal mode - navigate to product details
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ProductDetailsScreen(productId: p.productId ?? -1),
+                                ),
+                              );
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Image (flex: 1)
+                                Expanded(
+                                  flex: 1,
+                                  child: AspectRatio(
+                                    aspectRatio: 1,
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: ProductImage(url: p.photo),
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              // Center content (flex: 3)
-                              Expanded(
-                                flex: 3,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      p.name,
-                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text('Brand: ${p.brand}',
+                                const SizedBox(width: 12),
+                                // Center content (flex: 3)
+                                Expanded(
+                                  flex: 3,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        p.name,
+                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                                         maxLines: 1,
-                                        overflow: TextOverflow.ellipsis),
-                                   
-                                      const SizedBox(height: 2),
-                                      Text('Sub Brand: ${p.sub_brand}',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text('Brand: ${p.brand}',
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis),
-                                   
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'MRP: ${p.mrp.toStringAsFixed(2)}',
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              // Right price (flex: 1)
-                              Expanded(
-                                flex: 1,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    SizedBox(height: 50),
-                                    const Text(
-                                      'Price',
-                                      style: TextStyle(fontSize: 12, color: Colors.black54),
-                                    ),
-                                    Text(
-                                      p.price.toStringAsFixed(2),
-                                      style:  TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.green.shade900,
+                                     
+                                        const SizedBox(height: 2),
+                                        Text('Sub Brand: ${p.sub_brand}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis),
+                                     
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'MRP: ${p.mrp.toStringAsFixed(2)}',
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 12),
+                                // Right price (flex: 1)
+                                Expanded(
+                                  flex: 1,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      SizedBox(height: 50),
+                                      const Text(
+                                        'Price',
+                                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                                      ),
+                                      Text(
+                                        p.price.toStringAsFixed(2),
+                                        style:  TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.green.shade900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
-                ),
-            ],
-          );
-        },
-      ),
-      floatingActionButton: FutureBuilder<int>(
-        future: StorageHelper.getUserType(),
-        builder: (context, snapshot) {
-          final isAdmin = snapshot.data == 1;
-          if (isShowAddOrder && isAdmin) {
-            return FloatingActionButton(
-              onPressed: _handleAddNew,
-              backgroundColor: Colors.black,
-              child: const Icon(Icons.add, color: Colors.white),
+              ],
             );
-          }
-          return const SizedBox.shrink();
-        },
-      ),
+          },
+                ),
+                floatingActionButton: FutureBuilder<int>(
+          future: StorageHelper.getUserType(),
+          builder: (context, snapshot) {
+            final isAdmin = snapshot.data == 1;
+            if (isShowAddOrder && isAdmin) {
+              return FloatingActionButton(
+                onPressed: _handleAddNew,
+                backgroundColor: Colors.black,
+                child: const Icon(Icons.add, color: Colors.white),
+              );
+            }
+            return const SizedBox.shrink();
+          },
+                ),
+          ),
         );
       },
     );

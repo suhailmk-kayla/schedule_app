@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../provider/customers_provider.dart';
 import '../../../utils/storage_helper.dart';
+import '../../../utils/toast_helper.dart';
 
 /// Create/Edit Customer Screen
 /// Screen for adding new customers or editing existing ones
@@ -154,7 +156,7 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
 
     final provider = Provider.of<CustomersProvider>(context, listen: false);
     if (provider.salesmanList.isEmpty) {
-      _showError('Salesman not found');
+      ToastHelper.showError('Salesman not found');
       return;
     }
 
@@ -183,7 +185,7 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
 
   void _showRouteBottomSheet() {
     if (_salesmanId == -1) {
-      _showError('Select salesman first.');
+      ToastHelper.showError('Select salesman first.');
       return;
     }
 
@@ -195,7 +197,7 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
         .toList();
 
     if (routesForSalesman.isEmpty) {
-      _showError('Routes not found');
+      ToastHelper.showError('Routes not found');
       return;
     }
 
@@ -248,7 +250,7 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
             onPressed: () async {
               final name = _newRouteNameController.text.trim();
               if (name.isEmpty) {
-                _showError('Enter name');
+                ToastHelper.showError('Enter name');
                 return;
               }
 
@@ -272,7 +274,7 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
     );
 
     if (result && mounted) {
-      _showSuccess('Route saved successfully');
+      ToastHelper.showSuccess('Route saved successfully');
       // Reload routes to include the new one
       await provider.loadRoutes();
     }
@@ -284,17 +286,17 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
     }
 
     if (_codeController.text.trim().isEmpty) {
-      _showError('Enter code');
+      ToastHelper.showError('Enter code');
       return;
     }
 
     if (_nameController.text.trim().isEmpty) {
-      _showError('Enter name');
+      ToastHelper.showError('Enter name');
       return;
     }
 
     if (_routeId == -1) {
-      _showError('Select Route');
+      ToastHelper.showError('Select Route');
       return;
     }
 
@@ -326,31 +328,21 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
           );
 
     if (success && mounted) {
+      ToastHelper.showSuccess(
+        widget.customerId == null 
+            ? 'Customer created successfully' 
+            : 'Customer updated successfully',
+      );
       Navigator.of(context).pop(true); // Return true to indicate success
-    } else if (mounted && provider.errorMessage != null) {
-      _showError(provider.errorMessage!);
+    } else if (mounted) {
+      final errorMessage = provider.errorMessage ?? 
+          (widget.customerId == null 
+              ? 'Failed to create customer' 
+              : 'Failed to update customer');
+      ToastHelper.showError(errorMessage);
     }
   }
 
-  void _showError(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
-    );
-  }
-
-  void _showSuccess(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -387,8 +379,10 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
                 const SizedBox(height: 16),
                 // Code field
                 TextFormField(
+                  maxLength: 20,
                   controller: _codeController,
                   decoration: const InputDecoration(
+                    counterText: '',
                     labelText: 'Code',
                     border: OutlineInputBorder(),
                   ),
@@ -412,8 +406,10 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
                 const SizedBox(height: 16),
                 // Name field
                 TextFormField(
+                  maxLength: 50,
                   controller: _nameController,
                   decoration: const InputDecoration(
+                    counterText: '',
                     labelText: 'Name',
                     border: OutlineInputBorder(),
                   ),
@@ -428,22 +424,27 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
                 const SizedBox(height: 16),
                 // Phone Number field
                 TextFormField(
+                  maxLength: 10,
+                 
+                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+]'))],
                   controller: _phoneController,
                   decoration: const InputDecoration(
+                    counterText: '',
                     labelText: 'Phone Number',
                     border: OutlineInputBorder(),
                   ),
                   keyboardType: TextInputType.phone,
+                  validator: (value) {
+                    if (value != null && value.trim().isNotEmpty) {
+                      if (value.trim().length < 10) {
+                        return 'Phone number must be 10 digits';
+                      }
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 16),
                 // Salesman selector
-                const Text(
-                  'Salesman',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
-                  ),
-                ),
                 const SizedBox(height: 4),
                 InkWell(
                   onTap: _userType == 1 ? _showSalesmanBottomSheet : null,
@@ -472,13 +473,6 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
                 ),
                 const SizedBox(height: 16),
                 // Route selector
-                const Text(
-                  'Route',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
-                  ),
-                ),
                 const SizedBox(height: 4),
                 InkWell(
                   onTap: _showRouteBottomSheet,
@@ -504,7 +498,7 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
                             icon: const Icon(Icons.add),
                             onPressed: () {
                               if (_salesmanId == -1) {
-                                _showError('Select salesman first.');
+                                ToastHelper.showError('Select salesman first.');
                               } else {
                                 _showAddRouteDialog();
                               }
@@ -520,12 +514,14 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
                 const SizedBox(height: 16),
                 // Address field
                 TextFormField(
+                  maxLength: 100,
                   controller: _addressController,
                   decoration: const InputDecoration(
+                    counterText: '',
                     labelText: 'Address',
                     border: OutlineInputBorder(),
                   ),
-                  maxLines: 3,
+                  maxLines: 2,
                 ),
                 const SizedBox(height: 24),
                 // Rating slider
@@ -556,40 +552,37 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
                   ],
                 ),
                 const SizedBox(height: 24),
-                // Save button (only show when required fields are filled)
-                if (_codeController.text.trim().isNotEmpty &&
-                    _nameController.text.trim().isNotEmpty &&
-                    _routeId != -1)
-                  Consumer<CustomersProvider>(
-                    builder: (context, provider, _) {
-                      return ElevatedButton(
-                        onPressed: provider.isLoading ? null : _saveCustomer,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                // Save button
+                Consumer<CustomersProvider>(
+                  builder: (context, provider, _) {
+                    return ElevatedButton(
+                      onPressed: provider.isLoading ? null : _saveCustomer,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        child: provider.isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.white,
-                                  ),
+                      ),
+                      child: provider.isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
                                 ),
-                              )
-                            : const Text(
-                                'Save',
-                                style: TextStyle(fontSize: 16),
                               ),
-                      );
-                    },
-                  ),
+                            )
+                          : const Text(
+                              'Save',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                    );
+                  },
+                ),
                 const SizedBox(height: 16),
               ],
             ),

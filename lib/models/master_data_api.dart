@@ -338,7 +338,39 @@ class CustomerSuccessApi {
   factory CustomerSuccessApi.fromJson(Map<String, dynamic> json) =>
       _$CustomerSuccessApiFromJson(json);
 
+  /// Custom fromJson with merge support for partial API responses
+  /// Merges partial API response with existing customer data during deserialization
+  /// This prevents default values from overwriting unchanged fields
+  factory CustomerSuccessApi.fromJsonWithMerge(
+    Map<String, dynamic> json, {
+    Customer? existingCustomer,
+  }) {
+    final status = (json['status'] as num?)?.toInt() ?? 2;
+    final message = json['message'] as String? ?? '';
+    
+    // Parse the data object manually to avoid default values
+    final dataJson = json['data'] as Map<String, dynamic>?;
+    if (dataJson == null) {
+      throw FormatException('Missing data field in CustomerSuccessApi response');
+    }
+    
+    // Create Customer from partial JSON without defaults
+    final partialCustomer = Customer._fromJsonPartial(dataJson);
+    
+    // Merge with existing customer if provided
+    final mergedCustomer = existingCustomer != null
+        ? partialCustomer.mergeWith(existingCustomer)
+        : partialCustomer;
+    
+    return CustomerSuccessApi(
+      status: status,
+      message: message,
+      data: mergedCustomer,
+    );
+  }
+
   Map<String, dynamic> toJson() => _$CustomerSuccessApiToJson(this);
+
 }
 
 /// Customer List API Response
@@ -365,8 +397,13 @@ class CustomerListApi {
 /// Converted from KMP's Customer class
 @JsonSerializable()
 class Customer {
-  @JsonKey(defaultValue: -1)
-  final int id;
+    // ❌ this should not participate in JSON mapping
+  @JsonKey(includeToJson: false, includeFromJson: false)
+  final int? id;
+
+  // ✔ API id should map to customerId
+  @JsonKey(name: 'id', defaultValue: -1)
+  final int? customerId;
 
   @JsonKey(defaultValue: '')
   final String name;
@@ -398,6 +435,7 @@ class Customer {
   final String? updatedAt;
 
   const Customer({
+    this.customerId,
     this.id = -1,
     this.name = '',
     this.code = '',
@@ -411,15 +449,53 @@ class Customer {
     this.updatedAt,
   });
 
+
   factory Customer.fromJson(Map<String, dynamic> json) =>
       _$CustomerFromJson(json);
+
+  /// Private factory for parsing partial JSON responses without applying defaults
+  /// Used internally by CustomerSuccessApi.fromJsonWithMerge
+  /// Creates Customer with only fields present in JSON
+  /// Fields not present will use sentinel values that mergeWith can detect
+  factory Customer._fromJsonPartial(Map<String, dynamic> json) {
+    // Check which fields are actually present in JSON
+    final hasId = json.containsKey('id');
+    final hasName = json.containsKey('name');
+    final hasCode = json.containsKey('code');
+    final hasPhoneNo = json.containsKey('phone_no');
+    final hasAddress = json.containsKey('address');
+    final hasRoutId = json.containsKey('rout_id');
+    final hasSalesManId = json.containsKey('sales_man_id');
+    final hasRating = json.containsKey('rating');
+    final hasFlag = json.containsKey('flag');
+    final hasCreatedAt = json.containsKey('created_at');
+    final hasUpdatedAt = json.containsKey('updated_at');
+    
+    return Customer(
+      // Only set values for fields that were present in JSON
+      // Use sentinel values (-2 for ints, null for nullable) for missing fields
+      // mergeWith will detect these and preserve existing values
+      customerId: hasId ? (json['id'] as num?)?.toInt() : null,
+      name: hasName ? (json['name'] as String? ?? '') : '',
+      code: hasCode ? (json['code'] as String? ?? '') : '',
+      phoneNo: hasPhoneNo ? (json['phone_no'] as String? ?? '') : '',
+      address: hasAddress ? (json['address'] as String? ?? '') : '',
+      routId: hasRoutId ? ((json['rout_id'] as num?)?.toInt() ?? -1) : -2, // -2 is sentinel for "not present"
+      salesManId: hasSalesManId ? ((json['sales_man_id'] as num?)?.toInt() ?? -1) : -2, // -2 is sentinel
+      rating: hasRating ? _toIntFlexible(json['rating']) : -2, // -2 is sentinel
+      flag: hasFlag ? (json['flag'] as num?)?.toInt() : null,
+      createdAt: hasCreatedAt ? (json['created_at'] as String?) : null,
+      updatedAt: hasUpdatedAt ? (json['updated_at'] as String?) : null,
+    );
+  }
 
   Map<String, dynamic> toJson() => _$CustomerToJson(this);
 
   /// Convert from database map (camelCase column names)
   factory Customer.fromMap(Map<String, dynamic> map) {
     return Customer(
-      id: map['customerId'] as int? ?? -1,
+      id: map['id'] as int? ?? -1, // Local DB primary key (AUTOINCREMENT)
+      customerId: map['customerId'] as int? ?? -1, // Server ID
       name: map['name'] as String? ?? '',
       code: map['code'] as String? ?? '',
       phoneNo: map['phone'] as String? ?? '',
@@ -434,9 +510,10 @@ class Customer {
   }
 
   /// Convert to database map (camelCase column names)
+  /// Note: id (local PK) is not included as it's AUTOINCREMENT
   Map<String, dynamic> toMap() {
     return {
-      'customerId': id,
+      'customerId': customerId ?? -1, // Use server ID, not local id
       'code': code,
       'name': name,
       'phone': phoneNo,
@@ -476,6 +553,29 @@ class Customer {
       flag: flag ?? this.flag,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  /// Merge partial API response with existing customer data
+  /// Only uses API response values if they were present in the response
+  /// Uses sentinel values (-2 for ints) to detect missing fields
+  /// This handles cases where API returns only changed fields
+  Customer mergeWith(Customer existing) {
+    return Customer(
+      id: existing.id, // Always preserve local DB primary key
+      customerId: customerId ?? existing.customerId,
+      // For strings: use API value if not empty, otherwise preserve existing
+      // For ints: use API value if not sentinel (-2), otherwise preserve existing
+      code: code.isNotEmpty ? code : existing.code,
+      name: name.isNotEmpty ? name : existing.name,
+      phoneNo: phoneNo.isNotEmpty ? phoneNo : existing.phoneNo,
+      address: address.isNotEmpty ? address : existing.address,
+      routId: routId != -2 ? routId : existing.routId, // -2 means field was not in JSON
+      salesManId: salesManId != -2 ? salesManId : existing.salesManId, // -2 means field was not in JSON
+      rating: rating != -2 ? rating : existing.rating, // -2 means field was not in JSON
+      flag: flag ?? existing.flag, // null means field was not in JSON
+      createdAt: createdAt ?? existing.createdAt, // null means field was not in JSON
+      updatedAt: updatedAt ?? existing.updatedAt, // null means field was not in JSON
     );
   }
 }
@@ -547,7 +647,8 @@ class CustomerWithNames {
   /// Convert to Customer model (for compatibility)
   Customer toCustomer() {
     return Customer(
-      id: customerId,
+      id: id, // Local DB primary key
+      customerId: customerId, // Server ID
       name: name,
       code: code,
       phoneNo: phone,
@@ -590,6 +691,59 @@ class UserSuccessApi {
 
   factory UserSuccessApi.fromJson(Map<String, dynamic> json) =>
       _$UserSuccessApiFromJson(json);
+
+  /// Custom fromJson with merge support for partial API responses
+  /// Handles cases where API returns partial data in 'data' field instead of 'user' field
+  /// Merges partial API response with existing user data during deserialization
+  /// This prevents default values from overwriting unchanged fields
+  factory UserSuccessApi.fromJsonWithMerge(
+    Map<String, dynamic> json, {
+    User? existingUser,
+  }) {
+    final status = (json['status'] as num?)?.toInt() ?? 2;
+    final message = json['message'] as String? ?? '';
+    
+    // Check if response has 'data' field (partial update) or 'user' field (full user object)
+    final dataJson = json['data'] as Map<String, dynamic>?;
+    final userJson = json['user'] as Map<String, dynamic>?;
+    
+    User mergedUser;
+    
+    if (dataJson != null && userJson == null) {
+      // Partial update response: data field contains partial user data
+      // Parse the data object manually to avoid default values
+      final partialUser = User._fromJsonPartial(dataJson);
+      
+      // Merge with existing user if provided
+      mergedUser = existingUser != null
+          ? partialUser.mergeWith(existingUser)
+          : partialUser;
+    } else if (userJson != null) {
+      // Full user response: use standard parsing
+      final user = User.fromJson(userJson);
+      
+      // Merge with existing user if provided (for consistency)
+      mergedUser = existingUser != null
+          ? user.mergeWith(existingUser)
+          : user;
+    } else {
+      throw FormatException('Missing both data and user fields in UserSuccessApi response');
+    }
+    
+    // Parse userData if present (for supplier/salesman creation)
+    UserData? userData;
+    final userDataJson = json['userData'] as Map<String, dynamic>?;
+    if (userDataJson != null) {
+      userData = UserData.fromJson(userDataJson);
+    }
+    
+    return UserSuccessApi(
+      status: status,
+      message: message,
+      user: mergedUser,
+      userData: userData,
+    );
+  }
 
   Map<String, dynamic> toJson() => _$UserSuccessApiToJson(this);
 }
@@ -652,6 +806,32 @@ class User {
 
   factory User.fromJson(Map<String, dynamic> json) => _$UserFromJson(json);
 
+  /// Private factory for parsing partial JSON responses without applying defaults
+  /// Used internally by UserSuccessApi.fromJsonWithMerge
+  /// Creates User with only fields present in JSON
+  /// Fields not present will use sentinel values that mergeWith can detect
+  factory User._fromJsonPartial(Map<String, dynamic> json) {
+    // Check which fields are actually present in JSON
+    final hasId = json.containsKey('id');
+    final hasName = json.containsKey('name');
+    final hasCode = json.containsKey('code');
+    final hasPhoneNo = json.containsKey('phone_no');
+    final hasCatId = json.containsKey('cat_id');
+    final hasAddress = json.containsKey('address');
+    
+    return User(
+      // Only set values for fields that were present in JSON
+      // Use sentinel values (-2 for ints, null for nullable) for missing fields
+      // mergeWith will detect these and preserve existing values
+      userId: hasId ? (json['id'] as num?)?.toInt() : null,
+      name: hasName ? (json['name'] as String? ?? '') : '',
+      code: hasCode ? (json['code'] as String? ?? '') : '',
+      phoneNo: hasPhoneNo ? (json['phone_no'] as String? ?? '') : '',
+      catId: hasCatId ? ((json['cat_id'] as num?)?.toInt() ?? -1) : -2, // -2 is sentinel for "not present"
+      address: hasAddress ? (json['address'] as String? ?? '') : '',
+    );
+  }
+
   Map<String, dynamic> toJson() => _$UserToJson(this);
 
   /// Convert from database map (camelCase column names)
@@ -685,14 +865,36 @@ class User {
       'flag': 1,
     };
   }
+
+  /// Merge partial API response with existing user data
+  /// Only uses API response values if they were present in the response
+  /// Uses sentinel values (-2 for ints) to detect missing fields
+  /// This handles cases where API returns only changed fields
+  User mergeWith(User existing) {
+    return User(
+      id: existing.id, // Always preserve local DB primary key
+      userId: userId ?? existing.userId,
+      // For strings: use API value if not empty, otherwise preserve existing
+      // For ints: use API value if not sentinel (-2), otherwise preserve existing
+      code: code.isNotEmpty ? code : existing.code,
+      name: name.isNotEmpty ? name : existing.name,
+      phoneNo: phoneNo.isNotEmpty ? phoneNo : existing.phoneNo,
+      address: address.isNotEmpty ? address : existing.address,
+      catId: catId != -2 ? catId : existing.catId, // -2 means field was not in JSON
+    );
+  }
 }
 
 /// User Down Model (for download/sync)
 /// Converted from KMP's UserDown class
 @JsonSerializable()
 class UserDown {
-  @JsonKey(defaultValue: -1)
-  final int id;
+
+  @JsonKey(defaultValue: -1,includeToJson: false,includeFromJson: false)
+  final int? id;
+
+  @JsonKey(name: 'id', defaultValue: -1)
+  final int? userId;
 
   @JsonKey(defaultValue: '')
   final String name;
@@ -718,7 +920,8 @@ class UserDown {
   final String? updatedAt;
 
   const UserDown({
-    this.id = -1,
+    this.userId,
+    this.id,
     this.name = '',
     this.code = '',
     this.phoneNo = '',

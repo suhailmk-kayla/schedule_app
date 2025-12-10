@@ -130,6 +130,9 @@ class _SalesmanDetailsScreenState extends State<SalesmanDetailsScreen> {
             categoryId: 3, // Salesman category ID
           );
           if (success && mounted) {
+            // Reload salesmen list before popping
+            final salesmanProvider = Provider.of<SalesmanProvider>(context, listen: false);
+            await salesmanProvider.loadSalesmen();
             Navigator.of(context).pop();
           }
         }

@@ -8,7 +8,7 @@ import 'dart:developer' as developer;
 /// Converted from KMP's SQLDelight implementation
 class DatabaseHelper {
   static const String _databaseName = 'Database.db';
-  static const int _databaseVersion = 22; // 22 migrations in KMP project
+  static const int _databaseVersion = 1; 
 
   Database? _database;
 
@@ -16,6 +16,7 @@ class DatabaseHelper {
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await initDatabase();
+    developer.log('<--------------------Database initialized successfully-------------------->',name: 'DatabaseHelper');
     return _database!;
   }
 
@@ -27,13 +28,14 @@ class DatabaseHelper {
       path,
       version: _databaseVersion,
       onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
+      // onUpgrade: _onUpgrade,
       onDowngrade: _onDowngrade,
     );
   }
 
   /// Create database schema (for new installations)
   Future<void> _onCreate(Database db, int version) async {
+    developer.log('<--------------------Database schema creation started,oncreate method-------------------->',name: 'DatabaseHelper');
     await _createAllTables(db);
   }
 
@@ -157,6 +159,7 @@ class DatabaseHelper {
     await db.execute(_createOutOfStockMasterTable);
     await db.execute(_createOutOfStockProductsTable);
     await db.execute(_createPackedSubsTable);
+    developer.log('<--------------------Database schema created successfully-------------------->');
   }
 
   // ============================================================================

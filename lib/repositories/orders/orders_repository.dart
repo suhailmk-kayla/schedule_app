@@ -1283,8 +1283,10 @@ class OrdersRepository {
 
       return Right(orderApi);
     } on DioException catch (e) {
+      developer.log('Failed to send order: ${e.response?.data}');
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
+      developer.log('Failed to send order: $e');
       return Left(UnknownFailure.fromError(e));
     }
   }

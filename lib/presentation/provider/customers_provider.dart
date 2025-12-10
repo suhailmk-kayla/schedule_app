@@ -232,7 +232,7 @@ class CustomersProvider extends ChangeNotifier {
         
         // Send push notification (matches KMP lines 146-152)
         final dataIds = [
-          PushData(table: NotificationId.customer, id: createdCustomer.id),
+          PushData(table: NotificationId.customer, id: createdCustomer.customerId!),
         ];
         _pushNotificationSender.sendPushNotification(
           dataIds: dataIds,
@@ -302,7 +302,7 @@ class CustomersProvider extends ChangeNotifier {
 
     // Create customer object with updated data
     final customer = Customer(
-      id: customerId,
+      customerId: customerId, // Use server ID, not local id (id is AUTOINCREMENT)
       code: code,
       name: name,
       phoneNo: phone,
@@ -455,7 +455,7 @@ class CustomersProvider extends ChangeNotifier {
       id: 0,
       uuid: '',
       orderInvNo: orderId,
-      orderCustId: customer.id,
+      orderCustId: customer.customerId!,
       orderCustName: customer.name,
       orderSalesmanId: userId,
       orderStockKeeperId: -1,
@@ -486,7 +486,7 @@ class CustomersProvider extends ChangeNotifier {
             // Find the order we just created by customer ID and invoiceNo
             // This ensures we get the correct order even if there are multiple temp orders
             order = orders.firstWhere(
-              (o) => o.orderCustId == customer.id && o.orderInvNo == orderId,
+              (o) => o.orderCustId == customer.customerId! && o.orderInvNo == orderId,
               orElse: () => tempOrder, // Fallback to tempOrder if not found
             );
           },

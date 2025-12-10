@@ -24,9 +24,9 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_)async{
       final provider = Provider.of<SuppliersProvider>(context, listen: false);
-      provider.getSuppliers();
+      await provider.getSuppliers();
     });
   }
 

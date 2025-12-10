@@ -34,6 +34,19 @@ import 'auth_provider.dart';
 /// Sync Provider
 /// Handles batch downloading and syncing all master data
 /// Converted from KMP's SyncViewModel.kt
+/// 
+/// TODO: Handle app termination during sync
+/// - Add app lifecycle observer to gracefully stop sync on termination (AppLifecycleState.paused/detached)
+/// - Persist sync state (current table, progress) to database/secure storage to survive app restart
+/// - Add _isStopped checks during sync operations (between batches, during API calls), not just at start
+/// - Implement recovery mechanism on app restart to detect incomplete sync and resume/restart appropriately
+/// - Ensure atomic database transactions with proper rollback handling
+/// 
+/// Current issues:
+/// - Sync state flags are in-memory only (lost on termination)
+/// - No way to detect incomplete sync on app restart
+/// - Sync times may not be saved if app terminates mid-sync
+/// - Partial data sync possible (some batches saved, sync time not updated)
 class SyncProvider extends ChangeNotifier {
   // Repositories
   final ProductsRepository _productsRepository;
@@ -2826,6 +2839,7 @@ class SyncProvider extends ChangeNotifier {
   Future<void> clearAllTable() async {
     developer.log('SyncProvider: clearAllTable() - Clearing all tables');
     try {
+   
       await _productsRepository.clearAll();
       await _unitsRepository.clearAll();
       await _categoriesRepository.clearAll();

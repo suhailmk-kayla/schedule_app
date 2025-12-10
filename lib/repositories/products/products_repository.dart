@@ -271,6 +271,7 @@ class ProductsRepository {
     required String code,
     required int productId,
   }) async {
+    developer.log('getProductsByCodeWithId: $code, $productId');
     try {
       final db = await _database;
       final maps = await db.query(
@@ -385,16 +386,15 @@ class ProductsRepository {
       // Column order: id,productId,code,barcode,name,subName,brand,subBrand,categoryId,subCategoryId,defaultSuppId,autoSend,baseUnitId,defaultUnitId,photoUrl,price,mrp,retailPrice,fittingCharge,note,outtOfStockFlag,flag
       await db.rawInsert(
         '''
-        INSERT OR REPLACE INTO Product(
-          id, productId, code, barcode, name, subName, brand, subBrand, 
+        INSERT INTO Product(
+          productId, code, barcode, name, subName, brand, subBrand, 
           categoryId, subCategoryId, defaultSuppId, autoSend, baseUnitId, defaultUnitId,
           photoUrl, price, mrp, retailPrice, fittingCharge, note, outtOfStockFlag, flag
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
-          localId, // id: NULL for new, existing id for update
           product.productId ?? -1, // productId (from API)
           product.code,
           product.barcode,
@@ -443,12 +443,12 @@ class ProductsRepository {
           // CRITICAL: Use batch.rawInsert() instead of await txn.rawInsert() - 100x faster!
           batch.rawInsert(
             '''
-            INSERT OR REPLACE INTO Product(
-              id, productId, code, barcode, name, subName, brand, subBrand, 
+            INSERT INTO Product(
+              productId, code, barcode, name, subName, brand, subBrand, 
               categoryId, subCategoryId, defaultSuppId, autoSend, baseUnitId, defaultUnitId,
               photoUrl, price, mrp, retailPrice, fittingCharge, note, outtOfStockFlag, flag
             ) VALUES (
-              NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             ''',
             [
@@ -720,8 +720,22 @@ class ProductsRepository {
       // 2. Parse response
       final updateProductApi = UpdateProductApi.fromJson(response.data);
       if (updateProductApi.status != 1) {
+        // Handle validation errors: API returns validation errors in 'data' array
+        String errorMessage = updateProductApi.message;
+        if (response.data is Map<String, dynamic>) {
+          final responseData = response.data as Map<String, dynamic>;
+          if (responseData.containsKey('data') && responseData['data'] is List) {
+            final validationErrors = (responseData['data'] as List)
+                .map((e) => e.toString())
+                .where((e) => e.isNotEmpty)
+                .toList();
+            if (validationErrors.isNotEmpty) {
+              errorMessage = validationErrors.join('\n');
+            }
+          }
+        }
         return Left(ServerFailure.fromError(
-          'Failed to update product: ${updateProductApi.message}',
+          errorMessage,
         ));
       }
 

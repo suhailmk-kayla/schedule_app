@@ -131,171 +131,174 @@ class _SyncScreenState extends State<SyncScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Theme.of(context).colorScheme.primary,
-              Theme.of(context).colorScheme.primaryContainer,
-            ],
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.primaryContainer,
+              ],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Consumer<SyncProvider>(
-            builder: (context, syncProvider, _) {
-              // Log only on significant state changes (not every rebuild)
-              if (syncProvider.progress > 0 || syncProvider.showError) {
-                developer.log('SyncScreen: UI update - isSyncing=${syncProvider.isSyncing}, progress=${(syncProvider.progress * 100).toStringAsFixed(1)}%, task=${syncProvider.currentTask}');
-              }
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Logo with animated border
-                      SizedBox(
-                        width: 110,
-                        height: 110,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // Animated rotating border
-                            AnimatedBuilder(
-                              animation: _animationController,
-                              builder: (context, child) {
-                                return Transform.rotate(
-                                  angle: _animationController.value * 2 * 3.14159,
-                                  child: SizedBox(
-                                    width: 110,
-                                    height: 110,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 3,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white.withValues(alpha: 0.8),
-                                      ),
-                                      backgroundColor: Colors.transparent,
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                            // Logo container
-                            Container(
-                              width: 100,
-                              height: 100,
-                              decoration: BoxDecoration(
-                                image: const DecorationImage(
-                                  image: AssetImage(AssetImages.imagesLogo),
-                                  fit: BoxFit.cover,
-                                ),
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.2),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 5),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-
-                      // Current Task
-                      Text(
-                        syncProvider.currentTask,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Progress Indicator
-                      // SizedBox(
-                      //   width: 200,
-                      //   height: 200,
-                      //   child: Stack(
-                      //     alignment: Alignment.center,
-                      //     children: [
-                      //       // Circular Progress
-                      //       CircularProgressIndicator(
-                      //         value: syncProvider.progress,
-                      //         strokeWidth: 8,
-                      //         backgroundColor: Colors.white.withValues(alpha: 0.3),
-                      //         valueColor: const AlwaysStoppedAnimation<Color>(
-                      //           Colors.white,
-                      //         ),
-                      //       ),
-                      //       // Progress Text
-                      //       Text(
-                      //         '${(syncProvider.progress * 100).toInt()}%',
-                      //         style: const TextStyle(
-                      //           color: Colors.white,
-                      //           fontSize: 24,
-                      //           fontWeight: FontWeight.bold,
-                      //         ),
-                      //       ),
-                      //     ],
-                      //   ),
-                      // ),
-                      const SizedBox(height: 32),
-
-                      // Error Message
-                      if (syncProvider.showError && 
-                          syncProvider.errorMessage != null && 
-                          syncProvider.errorMessage!.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          margin: const EdgeInsets.only(bottom: 16),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade100,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.red),
-                          ),
-                          child: Row(
+          child: SafeArea(
+            child: Consumer<SyncProvider>(
+              builder: (context, syncProvider, _) {
+                // Log only on significant state changes (not every rebuild)
+                if (syncProvider.progress > 0 || syncProvider.showError) {
+                  developer.log('SyncScreen: UI update - isSyncing=${syncProvider.isSyncing}, progress=${(syncProvider.progress * 100).toStringAsFixed(1)}%, task=${syncProvider.currentTask}');
+                }
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Logo with animated border
+                        SizedBox(
+                          width: 110,
+                          height: 110,
+                          child: Stack(
+                            alignment: Alignment.center,
                             children: [
-                              const Icon(Icons.error, color: Colors.red),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  syncProvider.errorMessage ?? 'An error occurred',
-                                  style: const TextStyle(color: Colors.red),
+                              // Animated rotating border
+                              AnimatedBuilder(
+                                animation: _animationController,
+                                builder: (context, child) {
+                                  return Transform.rotate(
+                                    angle: _animationController.value * 2 * 3.14159,
+                                    child: SizedBox(
+                                      width: 110,
+                                      height: 110,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 3,
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                          Colors.white.withValues(alpha: 0.8),
+                                        ),
+                                        backgroundColor: Colors.transparent,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              // Logo container
+                              Container(
+                                width: 100,
+                                height: 100,
+                                decoration: BoxDecoration(
+                                  image: const DecorationImage(
+                                    image: AssetImage(AssetImages.imagesLogo),
+                                    fit: BoxFit.cover,
+                                  ),
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.2),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 5),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
                           ),
                         ),
-
-                      // Stop Button
-                      // if (syncProvider.isSyncing)
-                        // ElevatedButton(
-                        //   onPressed: () {
-                        //     final syncProvider = Provider.of<SyncProvider>(
-                        //       context,
-                        //       listen: false,
-                        //     );
-                        //     syncProvider.stopSync();
-                        //   },
-                        //   style: ElevatedButton.styleFrom(
-                        //     backgroundColor: Colors.red,
-                        //     foregroundColor: Colors.white,
+                        const SizedBox(height: 32),
+      
+                        // Current Task
+                        Text(
+                          syncProvider.currentTask,
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+      
+                        // Progress Indicator
+                        // SizedBox(
+                        //   width: 200,
+                        //   height: 200,
+                        //   child: Stack(
+                        //     alignment: Alignment.center,
+                        //     children: [
+                        //       // Circular Progress
+                        //       CircularProgressIndicator(
+                        //         value: syncProvider.progress,
+                        //         strokeWidth: 8,
+                        //         backgroundColor: Colors.white.withValues(alpha: 0.3),
+                        //         valueColor: const AlwaysStoppedAnimation<Color>(
+                        //           Colors.white,
+                        //         ),
+                        //       ),
+                        //       // Progress Text
+                        //       Text(
+                        //         '${(syncProvider.progress * 100).toInt()}%',
+                        //         style: const TextStyle(
+                        //           color: Colors.white,
+                        //           fontSize: 24,
+                        //           fontWeight: FontWeight.bold,
+                        //         ),
+                        //       ),
+                        //     ],
                         //   ),
-                        //   child: const Text('Stop Sync'),
                         // ),
-                    ],
+                        const SizedBox(height: 32),
+      
+                        // Error Message
+                        if (syncProvider.showError && 
+                            syncProvider.errorMessage != null && 
+                            syncProvider.errorMessage!.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.red),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.error, color: Colors.red),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    syncProvider.errorMessage ?? 'An error occurred',
+                                    style: const TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+      
+                        // Stop Button
+                        // if (syncProvider.isSyncing)
+                          // ElevatedButton(
+                          //   onPressed: () {
+                          //     final syncProvider = Provider.of<SyncProvider>(
+                          //       context,
+                          //       listen: false,
+                          //     );
+                          //     syncProvider.stopSync();
+                          //   },
+                          //   style: ElevatedButton.styleFrom(
+                          //     backgroundColor: Colors.red,
+                          //     foregroundColor: Colors.white,
+                          //   ),
+                          //   child: const Text('Stop Sync'),
+                          // ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),

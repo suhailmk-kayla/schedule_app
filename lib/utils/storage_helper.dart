@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:schedule_frontend_flutter/helpers/user_type_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Storage Helper

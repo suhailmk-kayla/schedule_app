@@ -126,11 +126,11 @@ class SuppliersRepository {
       final map = supplier.toMap();
       await db.rawInsert(
         '''
-        INSERT OR REPLACE INTO Suppliers(
-          id, supplierId, userId, code, name, phone, address,
+        INSERT INTO Suppliers(
+          supplierId, userId, code, name, phone, address,
           deviceToken, createdDateTime, updatedDateTime, flag
         ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
@@ -165,11 +165,11 @@ class SuppliersRepository {
           // CRITICAL: Use batch.rawInsert() instead of await txn.rawInsert() - 100x faster!
           batch.rawInsert(
             '''
-            INSERT OR REPLACE INTO Suppliers(
-              id, supplierId, userId, code, name, phone, address,
+            INSERT INTO Suppliers(
+              supplierId, userId, code, name, phone, address,
               deviceToken, createdDateTime, updatedDateTime, flag
             ) VALUES (
-              NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             ''',
             [
@@ -236,6 +236,7 @@ class SuppliersRepository {
         where: 'supplierId = ?',
         whereArgs: [supplierId],
       );
+      developer.log('SuppliersRepository: supplier flag updated successfully');
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));

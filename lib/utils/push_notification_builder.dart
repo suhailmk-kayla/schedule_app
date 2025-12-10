@@ -78,7 +78,7 @@ class PushNotificationBuilder {
           }
 
           userIds.add({
-            'user_id': user.id,
+            'user_id': user.userId,
             'silent_push': 1,
           });
         }

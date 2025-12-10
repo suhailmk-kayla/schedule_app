@@ -164,7 +164,7 @@ Map<String, dynamic> _$CustomerListApiToJson(CustomerListApi instance) =>
     };
 
 Customer _$CustomerFromJson(Map<String, dynamic> json) => Customer(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  customerId: (json['id'] as num?)?.toInt() ?? -1,
   name: json['name'] as String? ?? '',
   code: json['code'] as String? ?? '',
   phoneNo: json['phone_no'] as String? ?? '',
@@ -178,7 +178,7 @@ Customer _$CustomerFromJson(Map<String, dynamic> json) => Customer(
 );
 
 Map<String, dynamic> _$CustomerToJson(Customer instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.customerId,
   'name': instance.name,
   'code': instance.code,
   'phone_no': instance.phoneNo,
@@ -241,7 +241,7 @@ Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
 };
 
 UserDown _$UserDownFromJson(Map<String, dynamic> json) => UserDown(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  userId: (json['id'] as num?)?.toInt() ?? -1,
   name: json['name'] as String? ?? '',
   code: json['code'] as String? ?? '',
   phoneNo: json['phone_no'] as String? ?? '',
@@ -253,7 +253,7 @@ UserDown _$UserDownFromJson(Map<String, dynamic> json) => UserDown(
 );
 
 Map<String, dynamic> _$UserDownToJson(UserDown instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.userId,
   'name': instance.name,
   'code': instance.code,
   'phone_no': instance.phoneNo,

@@ -14,7 +14,7 @@ import '../../../utils/push_notification_helper.dart';
 /// - If user is not logged in: Show LoginScreen after 3 seconds
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
-
+  
   @override
   State<SplashScreen> createState() => _SplashScreenState();
 }

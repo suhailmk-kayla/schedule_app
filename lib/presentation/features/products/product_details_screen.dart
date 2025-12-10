@@ -114,249 +114,255 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Product Details'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
+    return PopScope(
+      onPopInvokedWithResult: (didPop, result) {
+        if(didPop){
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Product Details'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
         ),
-      ),
-      body: Consumer<ProductsProvider>(
-        builder: (context, provider, child) {
-          if (provider.isLoading && provider.currentProductWithDetails == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final productWithDetails = provider.currentProductWithDetails;
-          if (productWithDetails == null) {
-            return Center(
+        body: Consumer<ProductsProvider>(
+          builder: (context, provider, child) {
+            if (provider.isLoading && provider.currentProductWithDetails == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
+      
+            final productWithDetails = provider.currentProductWithDetails;
+            if (productWithDetails == null) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('Product not found'),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        provider.loadProductByIdWithDetails(widget.productId);
+                      },
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              );
+            }
+      
+            final product = productWithDetails.product;
+      
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Product not found'),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      provider.loadProductByIdWithDetails(widget.productId);
-                    },
-                    child: const Text('Retry'),
+                  // Image on top (matches KMP lines 118-158)
+                  Center(
+                    child: GestureDetector(
+                      onTap: product.photo.isNotEmpty
+                          ? () {
+                              _showFullImageDialog(context, product.photo);
+                            }
+                          : null,
+                      child: Container(
+                        width: 200,
+                        height: 200,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: product.photo.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(
+                                  product.photo,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return const Center(
+                                      child: Text('No Image', style: TextStyle(color: Colors.grey)),
+                                    );
+                                  },
+                                ),
+                              )
+                            : const Center(
+                                child: Text('No Image', style: TextStyle(color: Colors.grey)),
+                              ),
+                      ),
+                    ),
                   ),
+      
+                  const SizedBox(height: 16),
+      
+                  // Product details card (matches KMP lines 159-356)
+                  Card(
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Stack(
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Item Name (centered, matches KMP lines 168-173)
+                              Center(
+                                child: Text(
+                                  product.name.toUpperCase(),
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              // Details list (label + value in single row)
+                              _buildFieldRow('code:', product.code),
+                              _buildFieldRow('Sub Name:', product.sub_name),
+                              _buildFieldRow('Brand:', product.brand),
+                              _buildFieldRow('Sub Brand:', product.sub_brand),
+                              _buildFieldRow('Category:', productWithDetails.categoryName ?? ''),
+                              _buildFieldRow('Sub-Category:', productWithDetails.subCategoryName ?? ''),
+                              _buildFieldRow('Default supplier:', productWithDetails.supplierName ?? ''),
+                              _buildFieldRow(
+                                'Supplier Auto Send:',
+                                product.auto_sendto_supplier_flag == 1 ? 'Enabled' : 'Disabled',
+                                valueColor: product.auto_sendto_supplier_flag == 1
+                                    ? Colors.green.shade700
+                                    : Colors.orange.shade700,
+                              ),
+                              _buildFieldRow('Base Unit:', productWithDetails.baseUnitName ?? ''),
+                              _buildFieldRow('Price:', product.price.toStringAsFixed(2)),
+                              _buildFieldRow('MRP:', product.mrp.toStringAsFixed(2)),
+                              _buildFieldRow('Fitting Charge:', product.fitting_charge.toStringAsFixed(2)),
+                              _buildFieldRow('Note:', product.note),
+                            ],
+                          ),
+                          // Edit button (admin only, bottom right, matches KMP lines 342-353)
+                          if (_userType == 1)
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: IconButton(
+                                icon: const Icon(Icons.edit),
+                                onPressed: _handleEdit,
+                                tooltip: 'Edit',
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+      
+                  const SizedBox(height: 16),
+      
+                  // Compatible cars section (matches KMP lines 358-403)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Compatible cars',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                      if (_userType == 1)
+                        TextButton.icon(
+                          onPressed: _handleAddCar,
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Add Car'),
+                        ),
+                    ],
+                  ),
+                  Card(
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: provider.productCars.isEmpty
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Text(
+                                  'All Cars Compatible',
+                                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                                ),
+                              ),
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: _buildCarList(provider.productCars),
+                            ),
+                    ),
+                  ),
+      
+                  const SizedBox(height: 16),
+      
+                  // Units section (matches KMP lines 404-480)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Units',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                      if (_userType == 1)
+                        TextButton.icon(
+                          onPressed: _handleAddUnit,
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Add unit'),
+                        ),
+                    ],
+                  ),
+                  Card(
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: provider.productUnits.isEmpty
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Text(
+                                  'No derived units',
+                                  style: TextStyle(color: Colors.grey, fontSize: 14),
+                                ),
+                              ),
+                            )
+                          : Wrap(
+                              spacing: 4,
+                              runSpacing: 4,
+                              children: provider.productUnits.map((unit) {
+                                return Container(
+                                  padding: const EdgeInsets.all(5),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.grey),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    unit.derivenName ?? 'Not found',
+                                    style: const TextStyle(color: Colors.black),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                    ),
+                  ),
+      
+                  const SizedBox(height: 36),
                 ],
               ),
             );
-          }
-
-          final product = productWithDetails.product;
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Image on top (matches KMP lines 118-158)
-                Center(
-                  child: GestureDetector(
-                    onTap: product.photo.isNotEmpty
-                        ? () {
-                            _showFullImageDialog(context, product.photo);
-                          }
-                        : null,
-                    child: Container(
-                      width: 200,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: product.photo.isNotEmpty
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                product.photo,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return const Center(
-                                    child: Text('No Image', style: TextStyle(color: Colors.grey)),
-                                  );
-                                },
-                              ),
-                            )
-                          : const Center(
-                              child: Text('No Image', style: TextStyle(color: Colors.grey)),
-                            ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Product details card (matches KMP lines 159-356)
-                Card(
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Stack(
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Item Name (centered, matches KMP lines 168-173)
-                            Center(
-                              child: Text(
-                                product.name.toUpperCase(),
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            // Details list (label + value in single row)
-                            _buildFieldRow('code:', product.code),
-                            _buildFieldRow('Sub Name:', product.sub_name),
-                            _buildFieldRow('Brand:', product.brand),
-                            _buildFieldRow('Sub Brand:', product.sub_brand),
-                            _buildFieldRow('Category:', productWithDetails.categoryName ?? ''),
-                            _buildFieldRow('Sub-Category:', productWithDetails.subCategoryName ?? ''),
-                            _buildFieldRow('Default supplier:', productWithDetails.supplierName ?? ''),
-                            _buildFieldRow(
-                              'Supplier Auto Send:',
-                              product.auto_sendto_supplier_flag == 1 ? 'Enabled' : 'Disabled',
-                              valueColor: product.auto_sendto_supplier_flag == 1
-                                  ? Colors.green.shade700
-                                  : Colors.orange.shade700,
-                            ),
-                            _buildFieldRow('Base Unit:', productWithDetails.baseUnitName ?? ''),
-                            _buildFieldRow('Price:', product.price.toStringAsFixed(2)),
-                            _buildFieldRow('MRP:', product.mrp.toStringAsFixed(2)),
-                            _buildFieldRow('Fitting Charge:', product.fitting_charge.toStringAsFixed(2)),
-                            _buildFieldRow('Note:', product.note),
-                          ],
-                        ),
-                        // Edit button (admin only, bottom right, matches KMP lines 342-353)
-                        if (_userType == 1)
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: IconButton(
-                              icon: const Icon(Icons.edit),
-                              onPressed: _handleEdit,
-                              tooltip: 'Edit',
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Compatible cars section (matches KMP lines 358-403)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Compatible cars',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                    if (_userType == 1)
-                      TextButton.icon(
-                        onPressed: _handleAddCar,
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Add Car'),
-                      ),
-                  ],
-                ),
-                Card(
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: provider.productCars.isEmpty
-                        ? const Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              child: Text(
-                                'All Cars Compatible',
-                                style: TextStyle(color: Colors.grey, fontSize: 14),
-                              ),
-                            ),
-                          )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: _buildCarList(provider.productCars),
-                          ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Units section (matches KMP lines 404-480)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Units',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                    if (_userType == 1)
-                      TextButton.icon(
-                        onPressed: _handleAddUnit,
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Add unit'),
-                      ),
-                  ],
-                ),
-                Card(
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: provider.productUnits.isEmpty
-                        ? const Center(
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              child: Text(
-                                'No derived units',
-                                style: TextStyle(color: Colors.grey, fontSize: 14),
-                              ),
-                            ),
-                          )
-                        : Wrap(
-                            spacing: 4,
-                            runSpacing: 4,
-                            children: provider.productUnits.map((unit) {
-                              return Container(
-                                padding: const EdgeInsets.all(5),
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  unit.derivenName ?? 'Not found',
-                                  style: const TextStyle(color: Colors.black),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                  ),
-                ),
-
-                const SizedBox(height: 36),
-              ],
-            ),
-          );
-        },
+          },
+        ),
       ),
     );
   }

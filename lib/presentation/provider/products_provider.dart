@@ -290,6 +290,11 @@ class ProductsProvider extends ChangeNotifier {
     );
   }
 
+  void clearSelectedProduct() {
+    _currentProductWithDetails = null;
+    notifyListeners();
+  }
+
   /// Load product by ID with details (includes joined names)
   /// Matches KMP's getProductsById and getProductByProductId
   Future<ProductWithDetails?> loadProductByIdWithDetails(int productId) async {
@@ -315,6 +320,7 @@ class ProductsProvider extends ChangeNotifier {
         } else {
           product = p;
           _currentProductWithDetails = p;
+          notifyListeners();
           // Load derived units if base unit exists (matches KMP line 92-94)
           if (p.product.base_unit_id != -1) {
             loadDerivedUnits(p.product.base_unit_id);
@@ -322,6 +328,7 @@ class ProductsProvider extends ChangeNotifier {
           // Load product cars and units (matches KMP lines 96-97)
           loadProductCars(productId);
           loadProductUnits(productId);
+
         }
       },
     );
@@ -725,14 +732,12 @@ class ProductsProvider extends ChangeNotifier {
         return 'Barcode already Exist';
       }
     }
-
     // Create product object
     final photoBase64 = _imageBytes != null
         ? 'data:image/jpeg;base64,${base64Encode(_imageBytes!)}'
         : '';
-
+        
     final product = Product(
-      id: -1,
       name: _nameSt,
       code: _codeSt,
       barcode: _barcodeSt,

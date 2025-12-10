@@ -19,14 +19,14 @@ import 'presentation/provider/units_provider.dart';
 import 'presentation/provider/categories_provider.dart';
 import 'presentation/provider/sub_categories_provider.dart';
 import 'presentation/provider/cars_provider.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // final result = await createAdminAccount();
   // Initialize OneSignal for push notifications (must be before setupDependencies)
   try {
     await PushNotificationHelper.initialize();
-  }
-   catch (e) {
+  } catch (e) {
     // Log error but don't block app startup
     debugPrint('OneSignal initialization failed: $e');
   }
@@ -34,6 +34,7 @@ void main() async {
   await setupDependencies();
   runApp(const MyApp());
 }
+
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
   @override
@@ -58,7 +59,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    
+
     if (state == AppLifecycleState.resumed) {
       // App came to foreground from background
       // Process any stored notifications that were received while app was in background
@@ -71,54 +72,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return MultiProvider(
       providers: [
         // NotificationManager must be registered first so other providers can listen to it
-        ChangeNotifierProvider(
-          create: (_) => NotificationManager(),
-        ),
+        ChangeNotifierProvider(create: (_) => NotificationManager()),
         ChangeNotifierProvider(
           create: (_) => getIt<AuthProvider>()..initialize(),
         ),
-        ChangeNotifierProvider(
-          create: (_) => getIt<ProductsProvider>(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => getIt<CustomersProvider>(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => getIt<OrdersProvider>(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => getIt<SyncProvider>(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => getIt<HomeProvider>(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => getIt<UsersProvider>(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => getIt<RoutesProvider>(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => getIt<SalesmanProvider>(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => getIt<OutOfStockProvider>(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => getIt<SuppliersProvider>(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => getIt<UnitsProvider>(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => getIt<CategoriesProvider>(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => getIt<SubCategoriesProvider>(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => getIt<CarsProvider>(),
-        ),
+        ChangeNotifierProvider(create: (_) => getIt<ProductsProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<CustomersProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<OrdersProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<SyncProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<HomeProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<UsersProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<RoutesProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<SalesmanProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<OutOfStockProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<SuppliersProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<UnitsProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<CategoriesProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<SubCategoriesProvider>()),
+        ChangeNotifierProvider(create: (_) => getIt<CarsProvider>()),
       ],
       child: Consumer<NotificationManager>(
         builder: (context, notificationManager, _) {

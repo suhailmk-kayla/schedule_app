@@ -253,11 +253,13 @@ class UsersRepository {
       final localId = existingMaps.isNotEmpty 
           ? existingMaps.first['id'] as int?
           : null;
+      if(localId != null){
+        return const Right(null);
+      }
       
       await db.rawInsert(
         '''
-        INSERT OR REPLACE INTO Users (
-          id,
+        INSERT INTO Users (
           userId,
           code,
           name,
@@ -271,11 +273,10 @@ class UsersRepository {
           multiDeviceLogin,
           flag
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
-          localId, // id: NULL for new, existing id for update
           user.userId ?? -1, // userId (from API)
           user.code,
           user.name,
@@ -302,8 +303,7 @@ class UsersRepository {
       final db = await _database;
       await db.transaction((txn) async {
         const sql = '''
-        INSERT OR REPLACE INTO Users (
-          id,
+        INSERT INTO Users (
           userId,
           code,
           name,
@@ -317,7 +317,7 @@ class UsersRepository {
           multiDeviceLogin,
           flag
         ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''';
         for (final userDown in users) {
@@ -326,7 +326,7 @@ class UsersRepository {
           await txn.rawInsert(
             sql,
             [
-              userDown.id,
+              userDown.userId,
               userDown.code,
               userDown.name,
               userDown.phoneNo,
@@ -344,6 +344,7 @@ class UsersRepository {
       });
       return const Right(null);
     } catch (e) {
+      developer.log('addUsers error: $e');
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -371,6 +372,7 @@ class UsersRepository {
       );
       return const Right(null);
     } catch (e) {
+      developer.log('updateUserLocal error: $e');
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -545,11 +547,11 @@ class UsersRepository {
             dataIds.add(PushData(table: NotificationId.salesman, id: userData.id));
           } else if (categoryId == 4) {
             // Create Supplier
-            // Note: Supplier model uses 'id' field which maps to 'supplierId' in DB
-            // The 'id' from userData is the supplierId (business ID)
+            // userData.id is the supplierId (business ID from server)
+            // createdUser.userId is the userId (links to Users table)
             final newSupplier = Supplier(
-              // id: userData.id, // This is supplierId (business ID, not auto-increment PK)
-              // userId: createdUser.id,
+              id: userData.id, // supplierId from server (e.g., 29)
+              userId: createdUser.userId, // userId from server (e.g., 134)
               code: userData.code,
               name: userData.name,
               phone: userData.phoneNo,
@@ -600,6 +602,9 @@ class UsersRepository {
   }
 
   /// Update user via API and update local DB
+  /// for every update the backend updates two tables:users table and the paricular table according to their role
+  /// so we need to update the local db for both the tables
+  /// Uses custom deserialization to merge partial API response with existing data
   Future<Either<Failure, User>> updateUser({
     required int userId,
     required String code,
@@ -609,7 +614,15 @@ class UsersRepository {
     required int categoryId,
   }) async {
     try {
-      // 1. Call API
+      // 1. Get existing user from local DB to preserve unchanged fields
+      final existingUserResult = await getUserById(userId);
+      User? existingUser;
+      existingUserResult.fold(
+        (failure) => null,
+        (user) => existingUser = user,
+      );
+
+      // 2. Call API
       final response = await _dio.post(
         ApiEndpoints.updateUser,
         data: {
@@ -621,15 +634,23 @@ class UsersRepository {
         },
       );
 
-      // 2. Parse response
-      final userSuccessApi = UserSuccessApi.fromJson(response.data);
+      // 3. Parse response with merge support for partial updates
+      final userSuccessApi = UserSuccessApi.fromJsonWithMerge(
+        response.data,
+        existingUser: existingUser,
+      );
       if (userSuccessApi.status != 1) {
         return Left(ServerFailure.fromError(
           'Failed to update user: ${userSuccessApi.message}',
         ));
       }
 
-      // 3. Store in local DB
+      // 4. Build push notification data IDs
+      final dataIds = <PushData>[
+        PushData(table: NotificationId.user, id: userId),
+      ];
+
+      // 5. Store in local DB with merged data
       final updateResult = await updateUserLocal(
         userId: userSuccessApi.user.userId ?? -1,
         code: userSuccessApi.user.code,
@@ -641,44 +662,62 @@ class UsersRepository {
         return updateResult.map((_) => userSuccessApi.user);
       }
 
-      // 4. If salesman (categoryId == 3), update salesman table
+      // 6. If salesman (categoryId == 3), update salesman table
       // Check response.data for second_id (salesManId)
+      // Use merged values from API response
       if (categoryId == 3 && response.data is Map<String, dynamic>) {
         final responseData = response.data as Map<String, dynamic>;
         final data = responseData['data'] as Map<String, dynamic>?;
         if (data != null) {
           final salesManId = data['second_id'] as int?;
           if (salesManId != null && salesManId != -1 && _salesManRepository != null) {
-            // Update salesman table
+            // Update salesman table with merged values from API response
             await _salesManRepository.updateSalesManLocal(
               salesManId: salesManId,
-              code: code,
-              name: name,
-              phone: phone,
-              address: address,
+              code: userSuccessApi.user.code,
+              name: userSuccessApi.user.name,
+              phone: userSuccessApi.user.phoneNo,
+              address: userSuccessApi.user.address,
             );
+            // Add SalesMan to push notification
+            dataIds.add(PushData(table: NotificationId.salesman, id: salesManId));
           }
         }
       }
 
-      // 5. If supplier (categoryId == 4), update supplier table
+      // 7. If supplier (categoryId == 4), update supplier table
       // Check response.data for second_id (supplierId)
+      // Use merged values from API response
       if (categoryId == 4 && response.data is Map<String, dynamic>) {
         final responseData = response.data as Map<String, dynamic>;
         final data = responseData['data'] as Map<String, dynamic>?;
         if (data != null) {
           final supplierId = data['second_id'] as int?;
           if (supplierId != null && supplierId != -1 && _suppliersRepository != null) {
-            // Update supplier table
+            // Update supplier table with merged values from API response
             await _suppliersRepository.updateSupplierLocal(
               supplierId: supplierId,
-              code: code,
-              name: name,
-              phone: phone,
-              address: address,
+              code: userSuccessApi.user.code,
+              name: userSuccessApi.user.name,
+              phone: userSuccessApi.user.phoneNo,
+              address: userSuccessApi.user.address,
             );
+            // Add Supplier to push notification
+            dataIds.add(PushData(table: NotificationId.supplier, id: supplierId));
           }
         }
+      }
+
+      // 8. Send push notification to other users
+      // Matches KMP's sentPushNotification call (line 360 in UsersViewModel.kt)
+      // Fire-and-forget: don't await, just trigger in background
+      if (_pushNotificationSender != null) {
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'User updates',
+        ).catchError((e) {
+          developer.log('UsersRepository: Error sending push notification: $e');
+        });
       }
 
       return Right(userSuccessApi.user);
@@ -804,6 +843,8 @@ class UsersRepository {
   }
 
   /// Delete user via API and update local DB
+  /// Matches KMP's deleteUser method (lines 188-220)
+  /// Updates Users table flag and role-specific table flags (SalesMan/Supplier)
   Future<Either<Failure, void>> deleteUser({
     required int userId,
     required int categoryId,
@@ -823,12 +864,63 @@ class UsersRepository {
         return Left(ServerFailure.fromError(message));
       }
 
-      // 2. Update local DB flag
+      // 2. Build push notification data IDs
+      final dataIds = <PushData>[
+        PushData(table: NotificationId.user, id: userId),
+      ];
+
+      // 3. Update Users table flag
       await updateUserFlag(userId: userId, flag: 0);
 
-      // 3. If categoryId is 3 (SalesMan) or 4 (Supplier), update their flags too
-      // TODO: Handle SalesMan and Supplier flag updates if needed
-      // This would require access to SalesManRepository and SuppliersRepository
+      // 4. If SalesMan (categoryId == 3), update SalesMan table flag
+      // Check response.data for second_id (salesManId)
+      if (categoryId == 3 && response.data is Map<String, dynamic>) {
+        final responseData = response.data as Map<String, dynamic>;
+        final data = responseData['data'] as Map<String, dynamic>?;
+        if (data != null) {
+          final salesManId = data['second_id'] as int?;
+          if (salesManId != null && salesManId != -1 && _salesManRepository != null) {
+            // Update SalesMan flag to 0 (deleted)
+            await _salesManRepository.updateSalesManFlag(
+              salesManId: salesManId,
+              flag: 0,
+            );
+            // Add SalesMan to push notification
+            dataIds.add(PushData(table: NotificationId.salesman, id: salesManId));
+          }
+        }
+      }
+
+      // 5. If Supplier (categoryId == 4), update Supplier table flag
+      // Check response.data for second_id (supplierId)
+      if (categoryId == 4 && response.data is Map<String, dynamic>) {
+        final responseData = response.data as Map<String, dynamic>;
+        final data = responseData['data'] as Map<String, dynamic>?;
+        if (data != null) {
+          final supplierId = data['second_id'] as int?;
+          if (supplierId != null && supplierId != -1 && _suppliersRepository != null) {
+            // Update Supplier flag to 0 (deleted)
+            await _suppliersRepository.updateSupplierFlag(
+              supplierId: supplierId,
+              flag: 0,
+            );
+            // Add Supplier to push notification
+            dataIds.add(PushData(table: NotificationId.supplier, id: supplierId));
+          }
+        }
+      }
+
+      // 6. Send push notification to other users
+      // Matches KMP's sentPushNotification call (line 216)
+      // Fire-and-forget: don't await, just trigger in background
+      if (_pushNotificationSender != null) {
+        _pushNotificationSender.sendPushNotification(
+          dataIds: dataIds,
+          message: 'User deleted',
+        ).catchError((e) {
+          developer.log('UsersRepository: Error sending push notification: $e');
+        });
+      }
 
       return const Right(null);
     } on DioException catch (e) {

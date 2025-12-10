@@ -72,7 +72,8 @@ class ApiEndpoints {
   static const String updateOutOfStockMasterFlag = 'api/out_of_stock/update_compleated_flag';
 
   // PushNotification
-  static const String pushNotification = 'api/push_notification/add';
+  // static const String pushNotification = 'api/push_notification/add';
+    static const String pushNotification = 'api/push_notification/send_batched';
 
   // Downloads
   static const String usersDownload = 'api/users/download';

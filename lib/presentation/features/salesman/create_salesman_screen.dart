@@ -195,50 +195,99 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildTextField(
+                  // Code field
+                  TextFormField(
+                    maxLength: 20,
                     controller: _codeController,
-                    label: 'Code',
                     textInputAction: TextInputAction.next,
+                    textCapitalization: TextCapitalization.none,
+                    decoration: InputDecoration(
+                      counterText: '',
+                      labelText: 'Code',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'Code is required';
+                        return 'Code cannot be empty';
                       }
                       return null;
                     },
                   ),
                   const SizedBox(height: 12),
-                  _buildTextField(
+                  // Name field
+                  TextFormField(
+                    maxLength: 50,
                     controller: _nameController,
-                    label: 'Name',
                     textInputAction: TextInputAction.next,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: InputDecoration(
+                      counterText: '',
+                      labelText: 'Name',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'Name is required';
+                        return 'Name cannot be empty';
                       }
                       return null;
                     },
                   ),
                   const SizedBox(height: 12),
-                  _buildTextField(
+                  // Phone field
+                  TextFormField(
+                    maxLength: 10,
                     controller: _phoneController,
-                    label: 'Phone Number',
                     keyboardType: TextInputType.phone,
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+]'))],
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9]'))],
                     textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      counterText: '',
+                      labelText: 'Phone Number',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value != null && value.trim().isNotEmpty) {
+                        if (value.trim().length < 10) {
+                          return 'Phone number must be at least 10 digits';
+                        }
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 12),
-                  _buildTextField(
+                  // Address field
+                  TextFormField(
+                    maxLength: 100,
                     controller: _addressController,
-                    label: 'Address',
-                    maxLines: 3,
+                    maxLines: 2,
                     textInputAction: TextInputAction.newline,
+                    decoration: InputDecoration(
+                      counterText: '',
+                      labelText: 'Address',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    // Address can be empty, no validation needed
                   ),
                   if (widget.userId == null) ...[
                     const SizedBox(height: 12),
+                    // Password field (create mode only)
                     TextFormField(
+                      maxLength: 50,
                       controller: _passwordController,
                       obscureText: _obscurePassword,
                       decoration: InputDecoration(
+                        counterText: '',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                         labelText: 'Password',
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -251,10 +300,7 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
                       ),
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
-                          return 'Password is required';
-                        }
-                        if (value.length < 4) {
-                          return 'Password must be at least 4 characters';
+                          return 'Password cannot be empty';
                         }
                         return null;
                       },
@@ -264,6 +310,8 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
                   ElevatedButton(
                     onPressed: _isSaving ? null : _handleSave,
                     style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: theme.colorScheme.onPrimary,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       textStyle: theme.textTheme.titleMedium?.copyWith(
                         color: theme.colorScheme.onPrimary,
@@ -286,26 +334,5 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    int maxLines = 1,
-    List<TextInputFormatter>? inputFormatters,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-    TextInputAction? textInputAction,
-  }) {
-    return TextFormField(
-      controller: controller,
-      maxLines: maxLines,
-      inputFormatters: inputFormatters,
-      keyboardType: keyboardType,
-      validator: validator,
-      textInputAction: textInputAction,
-      decoration: InputDecoration(
-        labelText: label,
-      ),
-    );
-  }
 }
 
