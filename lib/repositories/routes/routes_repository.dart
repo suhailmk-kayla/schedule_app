@@ -197,34 +197,54 @@ class RoutesRepository {
   // ============================================================================
 
   /// Add single route to local DB
+  /// CRITICAL: Handles create vs update correctly:
+  /// - When creating (route doesn't exist): id = NULL (auto-increment)
+  /// - When updating (route exists): preserves existing local id
   Future<Either<Failure, void>> addRoute(Route route) async {
     try {
       final db = await _database;
-      await db.rawInsert(
-        '''
-        INSERT OR REPLACE INTO Routes (
-          id,
-          routeId,
-          code,
-          name,
-          salesmanId,
-          createdDateTime,
-          updatedDateTime,
-          flag
-        ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?
-        )
-        ''',
-        [
-          route.id,
-          route.code,
-          route.name,
-          route.salesmanId,
-          route.createdAt ?? '',
-          route.updatedAt ?? '',
-          1,
-        ],
+      
+      // Check if route already exists by routeId
+      final existingMaps = await db.query(
+        'Routes',
+        columns: ['id'],
+        where: 'routeId = ?',
+        whereArgs: [route.routeId ?? -1],
+        limit: 1,
       );
+      
+      if (existingMaps.isNotEmpty) {
+        // Update existing route
+        final existingId = existingMaps.first['id'] as int;
+        await db.update(
+          'Routes',
+          {
+            'code': route.code,
+            'name': route.name,
+            'salesmanId': route.salesmanId,
+            'createdDateTime': route.createdAt ?? '',
+            'updatedDateTime': route.updatedAt ?? '',
+            'flag': 1,
+          },
+          where: 'id = ?',
+          whereArgs: [existingId],
+        );
+      } else {
+        // Insert new route
+        await db.insert(
+          'Routes',
+          {
+            'routeId': route.routeId ?? -1, // Server ID
+            'code': route.code,
+            'name': route.name,
+            'salesmanId': route.salesmanId,
+            'createdDateTime': route.createdAt ?? '',
+            'updatedDateTime': route.updatedAt ?? '',
+            'flag': 1,
+          },
+        );
+      }
+      
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -232,37 +252,52 @@ class RoutesRepository {
   }
 
   /// Add multiple routes to local DB (transaction)
+  /// Uses INSERT INTO for new routes, UPDATE for existing ones
   Future<Either<Failure, void>> addRoutes(List<Route> routes) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT OR REPLACE INTO Routes (
-          id,
-          routeId,
-          code,
-          name,
-          salesmanId,
-          createdDateTime,
-          updatedDateTime,
-          flag
-        ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?
-        )
-        ''';
         for (final route in routes) {
-          await txn.rawInsert(
-            sql,
-            [
-              route.id,
-              route.code,
-              route.name,
-              route.salesmanId,
-              route.createdAt ?? '',
-              route.updatedAt ?? '',
-              1,
-            ],
+          // Check if route already exists by routeId
+          final existingMaps = await txn.query(
+            'Routes',
+            columns: ['id'],
+            where: 'routeId = ?',
+            whereArgs: [route.routeId ?? -1],
+            limit: 1,
           );
+          
+          if (existingMaps.isNotEmpty) {
+            // Update existing route
+            final existingId = existingMaps.first['id'] as int;
+            await txn.update(
+              'Routes',
+              {
+                'code': route.code,
+                'name': route.name,
+                'salesmanId': route.salesmanId,
+                'createdDateTime': route.createdAt ?? '',
+                'updatedDateTime': route.updatedAt ?? '',
+                'flag': 1,
+              },
+              where: 'id = ?',
+              whereArgs: [existingId],
+            );
+          } else {
+            // Insert new route
+            await txn.insert(
+              'Routes',
+              {
+                'routeId': route.routeId ?? -1, // Server ID
+                'code': route.code,
+                'name': route.name,
+                'salesmanId': route.salesmanId,
+                'createdDateTime': route.createdAt ?? '',
+                'updatedDateTime': route.updatedAt ?? '',
+                'flag': 1,
+              },
+            );
+          }
         }
       });
       return const Right(null);
@@ -277,9 +312,14 @@ class RoutesRepository {
       final db = await _database;
       await db.update(
         'Routes',
-        {'name': route.name},
+        {
+          'name': route.name,
+          'code': route.code,
+          'salesmanId': route.salesmanId,
+          'updatedDateTime': route.updatedAt ?? '',
+        },
         where: 'routeId = ?',
-        whereArgs: [route.id],
+        whereArgs: [route.routeId ?? -1], // Use server ID, not local id
       );
       return const Right(null);
     } catch (e) {

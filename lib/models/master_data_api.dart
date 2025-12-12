@@ -1056,10 +1056,14 @@ class RouteListApi {
 
 /// Route Model
 /// Converted from KMP's Route class
+/// CRITICAL: Distinguishes between local database id (PK) and server routeId
 @JsonSerializable()
 class Route {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(defaultValue: -1, includeToJson: false, includeFromJson: false)
+  final int? id; // Local DB primary key (AUTOINCREMENT)
+
+  @JsonKey(name: 'id', defaultValue: -1) // API 'id' maps to routeId
+  final int? routeId; // Server ID from API
 
   @JsonKey(defaultValue: '')
   final String name;
@@ -1077,7 +1081,8 @@ class Route {
   final String? updatedAt;
 
   const Route({
-    this.id = -1,
+    this.id,
+    this.routeId,
     this.name = '',
     this.code = '',
     this.salesmanId = -1,
@@ -1092,7 +1097,8 @@ class Route {
   /// Convert from database map (camelCase column names)
   factory Route.fromMap(Map<String, dynamic> map) {
     return Route(
-      id: map['routeId'] as int? ?? -1,
+      id: map['id'] as int? ?? -1, // Local DB primary key (AUTOINCREMENT)
+      routeId: map['routeId'] as int? ?? -1, // Server ID from database
       name: map['name'] as String? ?? '',
       code: map['code'] as String? ?? '',
       salesmanId: map['salesmanId'] as int? ?? -1,
@@ -1102,9 +1108,10 @@ class Route {
   }
 
   /// Convert to database map (camelCase column names)
+  /// Note: id (local PK) is not included as it's AUTOINCREMENT
   Map<String, dynamic> toMap() {
     return {
-      'routeId': id,
+      'routeId': routeId ?? -1, // Use server ID, not local id
       'code': code,
       'name': name,
       'salesmanId': salesmanId,
@@ -1136,7 +1143,7 @@ class RouteWithSalesman {
   }
 
   /// Get route ID (for compatibility)
-  int get routeId => route.id;
+  int get routeId => route.routeId ?? -1;
   
   /// Get route name (for compatibility)
   String get name => route.name;

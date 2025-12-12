@@ -206,7 +206,7 @@ class _CreateCustomerScreenState extends State<CreateCustomerScreen> {
       builder: (context) => _SelectionBottomSheet(
         title: 'Select Route',
         items: routesForSalesman.map((r) => _SelectionItem(
-          id: r.id,
+          id: r.routeId ?? -1, // Use server ID, not local DB id
           name: r.name,
         )).toList(),
         selectedId: _routeId,

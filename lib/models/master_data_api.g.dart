@@ -329,7 +329,7 @@ Map<String, dynamic> _$RouteListApiToJson(RouteListApi instance) =>
     };
 
 Route _$RouteFromJson(Map<String, dynamic> json) => Route(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  routeId: (json['id'] as num?)?.toInt() ?? -1,
   name: json['name'] as String? ?? '',
   code: json['code'] as String? ?? '',
   salesmanId: (json['salesman_id'] as num?)?.toInt() ?? -1,
@@ -338,7 +338,7 @@ Route _$RouteFromJson(Map<String, dynamic> json) => Route(
 );
 
 Map<String, dynamic> _$RouteToJson(Route instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.routeId,
   'name': instance.name,
   'code': instance.code,
   'salesman_id': instance.salesmanId,

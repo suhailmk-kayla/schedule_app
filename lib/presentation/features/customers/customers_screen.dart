@@ -573,13 +573,13 @@ class _RouteBottomSheet extends StatelessWidget {
                 const Divider(),
                 // Route list
                 ...provider.routeList.map((route) {
-                  final isSelected = currentRouteId == route.id;
+                  final isSelected = currentRouteId == route.routeId;
                   return ListTile(
                     title: Text(route.name),
                     selected: isSelected,
                     selectedTileColor: Colors.blue.shade50,
                     onTap: () {
-                      onRouteSelected(route.id, route.name);
+                      onRouteSelected(route.routeId ?? -1, route.name);
                       Navigator.pop(context);
                     },
                   );

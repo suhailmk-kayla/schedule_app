@@ -660,7 +660,7 @@ class _RouteFilterBottomSheet extends StatelessWidget {
             onTap: () => onRouteSelected(-1, 'All Routes'),
           ),
           ...routeList.map((route) {
-            final routeId = route.id;
+            final routeId = route.routeId ?? -1;
             final routeName = route.name;
             return ListTile(
               title: Text(routeName),
