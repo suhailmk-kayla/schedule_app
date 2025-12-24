@@ -106,6 +106,8 @@ class _OrderDetailsSalesmanScreenState
         const SnackBar(content: Text('Order sent to biller and checker')),
       );
       await _refresh();
+      // Refresh the order list so the status updates in orders_screen
+      ordersProvider.loadOrders();
     } else {
       // Show error message for failed operations
       final errorMessages = <String>[];

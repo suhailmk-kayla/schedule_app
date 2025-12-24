@@ -317,10 +317,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
       MaterialPageRoute(
         builder: (_) => OrderDetailsCheckerScreen(orderId: order.id),
       ),
-    );
-
-    if (!mounted) return;
-    ordersProvider.loadOrders();
+    ).then((_) {
+      // Refresh order list when returning from checker screen
+      // This ensures the status is updated if the order was completed
+      if (mounted) {
+        ordersProvider.loadOrders();
+      }
+    });
   }
 }
 

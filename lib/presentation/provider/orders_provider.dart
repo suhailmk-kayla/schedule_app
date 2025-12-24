@@ -1154,7 +1154,7 @@ class OrdersProvider extends ChangeNotifier {
         (admins) {
           for (final admin in admins) {
             userIds.add({
-              'user_id': admin.id,
+              'user_id': admin.userId,
               'silent_push': 1,
             });
           }
@@ -1166,7 +1166,7 @@ class OrdersProvider extends ChangeNotifier {
         (storekeepers) {
           for (final storekeeper in storekeepers) {
             userIds.add({
-              'user_id': storekeeper.id,
+              'user_id': storekeeper.userId,
               'silent_push': 0,
             });
           }
@@ -1213,7 +1213,6 @@ class OrdersProvider extends ChangeNotifier {
       // The Order model's 'id' field maps to 'orderId' column (stores API response id)
       // KMP: id = 0 (primary key, auto-generated), orderId = API response id
       final newOrder = Order(
-        id: order.id, // This maps to 'orderId' column, NOT the primary key - matches KMP line 760: orderId = id
         uuid: order.uuid,
         orderInvNo: order.orderInvNo,
         orderCustId: order.orderCustId,
@@ -1604,11 +1603,27 @@ class OrdersProvider extends ChangeNotifier {
         (failure) => _setError(failure.message),
         (_) {
           success = true;
-          // Update local DB if needed
+          // Always update local DB when sending to biller or checker
+          if (isBiller) {
+            // Update biller ID in local DB
+            _ordersRepository.updateOrderBillerOrCheckerId(
+              orderId: order.id,
+              isBiller: true,
+              userId: userId,
+            );
+          } else {
+            // Update checker ID in local DB
+            _ordersRepository.updateOrderBillerOrCheckerId(
+              orderId: order.id,
+              isBiller: false,
+              userId: userId,
+            );
+          }
+          // Update approval flag if provided
           if (approvalFlag != null) {
             _ordersRepository.updateOrderApproveFlag(
               orderId: order.id,
-              approveFlag: OrderApprovalFlag.checkerIsChecking,
+              approveFlag: approvalFlag,
               notification: null,
             );
           }
@@ -1687,7 +1702,13 @@ class OrdersProvider extends ChangeNotifier {
         (failure) => _setError(failure.message),
         (_) {
           success = true;
-          // Local DB is already updated by the repository method
+          // Update checker ID in local DB (set to 0 since no specific checker is assigned yet)
+          _ordersRepository.updateOrderBillerOrCheckerId(
+            orderId: order.id,
+            isBiller: false,
+            userId: 0, // 0 means available for any checker to claim
+          );
+          // Approval flag is already updated by updateOrderApproveFlag in repository
         },
       );
 
@@ -2221,6 +2242,9 @@ class OrdersProvider extends ChangeNotifier {
       _setLoading(false);
       if (success) {
         await loadOrderDetails(order.id);
+        // Refresh the order list so the status updates in orders_screen
+        // This ensures the "Order Completed" status is reflected immediately
+        loadOrders();
       }
       return success;
     } catch (e) {
