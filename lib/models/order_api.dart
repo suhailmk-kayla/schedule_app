@@ -113,6 +113,8 @@ class OrderSubApi {
 /// Order Model
 /// Converted from KMP's Order class
 @JsonSerializable()
+
+/// Order Model
 class Order {
   @JsonKey(defaultValue: -1, includeFromJson: false, includeToJson: false)
   final int id; // Local DB primary key (AUTOINCREMENT)
