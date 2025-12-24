@@ -110,3 +110,36 @@ Push Notification Payload Structure:
 read out this doc for onesignal silent(data) notification handling
 
 https://documentation.onesignal.com/docs/en/data-notifications
+
+
+reloading data from push 
+
+1. OneSignal receives notification
+   ↓
+2. PushNotificationHelper._processNotification()
+   ↓
+3. PushNotificationHandler.handleNotification()
+   ↓
+4. PushNotificationHandler._downloadItem() → routes by table ID
+   ↓
+5. SyncProvider.downloadOrder(id: 310)
+   ↓
+6. SyncProvider._downloadOrders(id: 310)
+   ↓
+7. OrdersRepository.syncOrdersFromApi(id: 310) → API call
+   ↓
+8. OrdersRepository.addOrders() → Save to local DB
+   ↓
+9. NotificationManager().triggerRefresh() → Sets flag + notifyListeners()
+   ↓
+10. Consumer<NotificationManager> detects change
+   ↓
+11. OrdersProvider.loadOrders() → Query local DB
+   ↓
+12. OrdersProvider.notifyListeners() → Update UI state
+   ↓
+13. UI rebuilds with new data
+
+
+0->visible notification
+1->silent notification

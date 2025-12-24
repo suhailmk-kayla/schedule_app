@@ -28,6 +28,37 @@ class CategoryApi {
   factory CategoryApi.fromJson(Map<String, dynamic> json) =>
       _$CategoryApiFromJson(json);
 
+  /// Custom fromJson with merge support for partial API responses
+  /// Merges partial API response with existing category data during deserialization
+  /// This prevents default values from overwriting unchanged fields
+  factory CategoryApi.fromJsonWithMerge(
+    Map<String, dynamic> json, {
+    Category? existingCategory,
+  }) {
+    final status = (json['status'] as num?)?.toInt() ?? 2;
+    final message = json['message'] as String? ?? '';
+    
+    // Parse the data object manually to avoid default values
+    final dataJson = json['data'] as Map<String, dynamic>?;
+    if (dataJson == null) {
+      throw FormatException('Missing data field in CategoryApi response');
+    }
+    
+    // Create Category from partial JSON without defaults
+    final partialCategory = Category._fromJsonPartial(dataJson);
+    
+    // Merge with existing category if provided
+    final mergedCategory = existingCategory != null
+        ? partialCategory.mergeWith(existingCategory)
+        : partialCategory;
+    
+    return CategoryApi(
+      status: status,
+      message: message,
+      data: mergedCategory,
+    );
+  }
+
   Map<String, dynamic> toJson() => _$CategoryApiToJson(this);
 }
 
@@ -55,8 +86,11 @@ class CategoryListApi {
 /// Converted from KMP's Category class
 @JsonSerializable()
 class Category {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(defaultValue: -1, includeFromJson: false, includeToJson: false)
+  final int id; // Local DB primary key (AUTOINCREMENT)
+
+  @JsonKey(name: 'id', defaultValue: -1) // API 'id' maps to categoryId
+  final int categoryId; // Server ID
 
   @JsonKey(defaultValue: '')
   final String name;
@@ -66,6 +100,7 @@ class Category {
 
   const Category({
     this.id = -1,
+    this.categoryId = -1,
     this.name = '',
     this.remark = '',
   });
@@ -73,21 +108,57 @@ class Category {
   factory Category.fromJson(Map<String, dynamic> json) =>
       _$CategoryFromJson(json);
 
+  /// Private factory for parsing partial JSON responses without applying defaults
+  /// Used internally by CategoryApi.fromJsonWithMerge
+  /// Creates Category with only fields present in JSON
+  /// Fields not present will use sentinel values that mergeWith can detect
+  factory Category._fromJsonPartial(Map<String, dynamic> json) {
+    // Check which fields are actually present in JSON
+    final hasId = json.containsKey('id');
+    final hasName = json.containsKey('name');
+    final hasRemark = json.containsKey('remark');
+    
+    return Category(
+      // Only set values for fields that were present in JSON
+      // Use sentinel values (-2 for ints, empty string for strings) for missing fields
+      // mergeWith will detect these and preserve existing values
+      categoryId: hasId ? (json['id'] as num?)?.toInt() ?? -1 : -2, // -2 is sentinel for "not present"
+      name: hasName ? (json['name'] as String? ?? '') : '',
+      remark: hasRemark ? (json['remark'] as String? ?? '') : '',
+    );
+  }
+
   Map<String, dynamic> toJson() => _$CategoryToJson(this);
+
+  /// Merge partial API response with existing category data
+  /// Only uses API response values if they were present in the response
+  /// Uses sentinel values (-2 for ints) to detect missing fields
+  /// This handles cases where API returns only changed fields
+  Category mergeWith(Category existing) {
+    return Category(
+      id: existing.id, // Always preserve local DB primary key
+      categoryId: categoryId != -2 ? categoryId : existing.categoryId, // -2 means field was not in JSON
+      // For strings: use API value if not empty, otherwise preserve existing
+      name: name.isNotEmpty ? name : existing.name,
+      remark: remark.isNotEmpty ? remark : existing.remark,
+    );
+  }
 
   /// Convert from database map (camelCase column names)
   factory Category.fromMap(Map<String, dynamic> map) {
     return Category(
-      id: map['categoryId'] as int? ?? -1,
+      id: map['id'] as int? ?? -1, // Local DB PK
+      categoryId: map['categoryId'] as int? ?? -1, // Server ID
       name: map['name'] as String? ?? '',
       remark: map['remark'] as String? ?? '',
     );
   }
 
   /// Convert to database map (camelCase column names)
+  /// Note: 'id' column is omitted - SQLite will auto-increment
   Map<String, dynamic> toMap() {
     return {
-      'categoryId': id,
+      'categoryId': categoryId,
       'name': name,
       'remark': remark,
       'flag': 1,
@@ -120,6 +191,37 @@ class SubCategoryApi {
   factory SubCategoryApi.fromJson(Map<String, dynamic> json) =>
       _$SubCategoryApiFromJson(json);
 
+  /// Custom fromJson with merge support for partial API responses
+  /// Merges partial API response with existing subcategory data during deserialization
+  /// This prevents default values from overwriting unchanged fields
+  factory SubCategoryApi.fromJsonWithMerge(
+    Map<String, dynamic> json, {
+    SubCategory? existingSubCategory,
+  }) {
+    final status = (json['status'] as num?)?.toInt() ?? 2;
+    final message = json['message'] as String? ?? '';
+    
+    // Parse the data object manually to avoid default values
+    final dataJson = json['data'] as Map<String, dynamic>?;
+    if (dataJson == null) {
+      throw FormatException('Missing data field in SubCategoryApi response');
+    }
+    
+    // Create SubCategory from partial JSON without defaults
+    final partialSubCategory = SubCategory._fromJsonPartial(dataJson);
+    
+    // Merge with existing subcategory if provided
+    final mergedSubCategory = existingSubCategory != null
+        ? partialSubCategory.mergeWith(existingSubCategory)
+        : partialSubCategory;
+    
+    return SubCategoryApi(
+      status: status,
+      message: message,
+      data: mergedSubCategory,
+    );
+  }
+
   Map<String, dynamic> toJson() => _$SubCategoryApiToJson(this);
 }
 
@@ -147,8 +249,11 @@ class SubCategoryListApi {
 /// Converted from KMP's SubCategory class
 @JsonSerializable()
 class SubCategory {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(defaultValue: -1, includeFromJson: false, includeToJson: false)
+  final int id; // Local DB primary key (AUTOINCREMENT)
+
+  @JsonKey(name: 'id', defaultValue: -1) // API 'id' maps to subCategoryId
+  final int subCategoryId; // Server ID
 
   @JsonKey(defaultValue: '')
   final String name;
@@ -161,6 +266,7 @@ class SubCategory {
 
   const SubCategory({
     this.id = -1,
+    this.subCategoryId = -1,
     this.name = '',
     this.catId = -1,
     this.remark = '',
@@ -169,12 +275,50 @@ class SubCategory {
   factory SubCategory.fromJson(Map<String, dynamic> json) =>
       _$SubCategoryFromJson(json);
 
+  /// Private factory for parsing partial JSON responses without applying defaults
+  /// Used internally by SubCategoryApi.fromJsonWithMerge
+  /// Creates SubCategory with only fields present in JSON
+  /// Fields not present will use sentinel values that mergeWith can detect
+  factory SubCategory._fromJsonPartial(Map<String, dynamic> json) {
+    // Check which fields are actually present in JSON
+    final hasId = json.containsKey('id');
+    final hasName = json.containsKey('name');
+    final hasCatId = json.containsKey('cat_id');
+    final hasRemark = json.containsKey('remark');
+    
+    return SubCategory(
+      // Only set values for fields that were present in JSON
+      // Use sentinel values (-2 for ints, empty string for strings) for missing fields
+      // mergeWith will detect these and preserve existing values
+      subCategoryId: hasId ? (json['id'] as num?)?.toInt() ?? -1 : -2, // -2 is sentinel for "not present"
+      name: hasName ? (json['name'] as String? ?? '') : '',
+      catId: hasCatId ? ((json['cat_id'] as num?)?.toInt() ?? -1) : -2, // -2 is sentinel
+      remark: hasRemark ? (json['remark'] as String? ?? '') : '',
+    );
+  }
+
   Map<String, dynamic> toJson() => _$SubCategoryToJson(this);
+
+  /// Merge partial API response with existing subcategory data
+  /// Only uses API response values if they were present in the response
+  /// Uses sentinel values (-2 for ints) to detect missing fields
+  /// This handles cases where API returns only changed fields
+  SubCategory mergeWith(SubCategory existing) {
+    return SubCategory(
+      id: existing.id, // Always preserve local DB primary key
+      subCategoryId: subCategoryId != -2 ? subCategoryId : existing.subCategoryId, // -2 means field was not in JSON
+      // For strings: use API value if not empty, otherwise preserve existing
+      name: name.isNotEmpty ? name : existing.name,
+      catId: catId != -2 ? catId : existing.catId, // -2 means field was not in JSON
+      remark: remark.isNotEmpty ? remark : existing.remark,
+    );
+  }
 
   /// Convert from database map (camelCase column names)
   factory SubCategory.fromMap(Map<String, dynamic> map) {
     return SubCategory(
-      id: map['subCategoryId'] as int? ?? -1,
+      id: map['id'] as int? ?? -1, // Local DB PK
+      subCategoryId: map['subCategoryId'] as int? ?? -1, // Server ID
       name: map['name'] as String? ?? '',
       catId: map['parentId'] as int? ?? -1,
       remark: map['remark'] as String? ?? '',
@@ -182,9 +326,10 @@ class SubCategory {
   }
 
   /// Convert to database map (camelCase column names)
+  /// Note: 'id' column is omitted - SQLite will auto-increment
   Map<String, dynamic> toMap() {
     return {
-      'subCategoryId': id,
+      'subCategoryId': subCategoryId,
       'parentId': catId,
       'name': name,
       'remark': remark,
@@ -217,6 +362,37 @@ class UnitApi {
 
   factory UnitApi.fromJson(Map<String, dynamic> json) => _$UnitApiFromJson(json);
 
+  /// Custom fromJson with merge support for partial API responses
+  /// Merges partial API response with existing unit data during deserialization
+  /// This prevents default values from overwriting unchanged fields
+  factory UnitApi.fromJsonWithMerge(
+    Map<String, dynamic> json, {
+    Units? existingUnit,
+  }) {
+    final status = (json['status'] as num?)?.toInt() ?? 2;
+    final message = json['message'] as String? ?? '';
+    
+    // Parse the data object manually to avoid default values
+    final dataJson = json['data'] as Map<String, dynamic>?;
+    if (dataJson == null) {
+      throw FormatException('Missing data field in UnitApi response');
+    }
+    
+    // Create Units from partial JSON without defaults
+    final partialUnit = Units._fromJsonPartial(dataJson);
+    
+    // Merge with existing unit if provided
+    final mergedUnit = existingUnit != null
+        ? partialUnit.mergeWith(existingUnit)
+        : partialUnit;
+    
+    return UnitApi(
+      status: status,
+      message: message,
+      data: mergedUnit,
+    );
+  }
+
   Map<String, dynamic> toJson() => _$UnitApiToJson(this);
 }
 
@@ -244,8 +420,11 @@ class UnitListApi {
 /// Converted from KMP's Units class
 @JsonSerializable()
 class Units {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(defaultValue: -1, includeFromJson: false, includeToJson: false)
+  final int id; // Local DB primary key (AUTOINCREMENT)
+
+  @JsonKey(name: 'id', defaultValue: -1) // API 'id' maps to unitId
+  final int unitId; // Server ID
 
   @JsonKey(defaultValue: '')
   final String name;
@@ -270,6 +449,7 @@ class Units {
 
   const Units({
     this.id = -1,
+    this.unitId = -1,
     this.name = '',
     this.code = '',
     this.displayName = '',
@@ -281,12 +461,62 @@ class Units {
 
   factory Units.fromJson(Map<String, dynamic> json) => _$UnitsFromJson(json);
 
+  /// Private factory for parsing partial JSON responses without applying defaults
+  /// Used internally by UnitApi.fromJsonWithMerge
+  /// Creates Units with only fields present in JSON
+  /// Fields not present will use sentinel values that mergeWith can detect
+  factory Units._fromJsonPartial(Map<String, dynamic> json) {
+    // Check which fields are actually present in JSON
+    final hasId = json.containsKey('id');
+    final hasName = json.containsKey('name');
+    final hasCode = json.containsKey('code');
+    final hasDisplayName = json.containsKey('display_name');
+    final hasType = json.containsKey('type');
+    final hasBaseId = json.containsKey('base_id');
+    final hasBaseQty = json.containsKey('base_qty');
+    final hasComment = json.containsKey('comment');
+    
+    return Units(
+      // Only set values for fields that were present in JSON
+      // Use sentinel values (-2 for ints, -2.0 for doubles, empty string for strings) for missing fields
+      // mergeWith will detect these and preserve existing values
+      unitId: hasId ? (json['id'] as num?)?.toInt() ?? -1 : -2, // -2 is sentinel for "not present"
+      name: hasName ? (json['name'] as String? ?? '') : '',
+      code: hasCode ? (json['code'] as String? ?? '') : '',
+      displayName: hasDisplayName ? (json['display_name'] as String? ?? '') : '',
+      type: hasType ? ((json['type'] as num?)?.toInt() ?? 0) : -2, // -2 is sentinel
+      baseId: hasBaseId ? ((json['base_id'] as num?)?.toInt() ?? -1) : -2, // -2 is sentinel
+      baseQty: hasBaseQty ? ((json['base_qty'] as num?)?.toDouble() ?? 0.0) : -2.0, // -2.0 is sentinel
+      comment: hasComment ? (json['comment'] as String? ?? '') : '',
+    );
+  }
+
   Map<String, dynamic> toJson() => _$UnitsToJson(this);
+
+  /// Merge partial API response with existing unit data
+  /// Only uses API response values if they were present in the response
+  /// Uses sentinel values (-2 for ints, -2.0 for doubles) to detect missing fields
+  /// This handles cases where API returns only changed fields
+  Units mergeWith(Units existing) {
+    return Units(
+      id: existing.id, // Always preserve local DB primary key
+      unitId: unitId != -2 ? unitId : existing.unitId, // -2 means field was not in JSON
+      // For strings: use API value if not empty, otherwise preserve existing
+      name: name.isNotEmpty ? name : existing.name,
+      code: code.isNotEmpty ? code : existing.code,
+      displayName: displayName.isNotEmpty ? displayName : existing.displayName,
+      type: type != -2 ? type : existing.type, // -2 means field was not in JSON
+      baseId: baseId != -2 ? baseId : existing.baseId, // -2 means field was not in JSON
+      baseQty: baseQty != -2.0 ? baseQty : existing.baseQty, // -2.0 means field was not in JSON
+      comment: comment.isNotEmpty ? comment : existing.comment,
+    );
+  }
 
   /// Convert from database map (camelCase column names)
   factory Units.fromMap(Map<String, dynamic> map) {
     return Units(
-      id: map['unitId'] as int? ?? -1,
+      id: map['id'] as int? ?? -1, // Local DB PK
+      unitId: map['unitId'] as int? ?? -1, // Server ID
       name: map['name'] as String? ?? '',
       code: map['code'] as String? ?? '',
       displayName: map['displayName'] as String? ?? '',
@@ -298,9 +528,10 @@ class Units {
   }
 
   /// Convert to database map (camelCase column names)
+  /// Note: 'id' column is omitted - SQLite will auto-increment
   Map<String, dynamic> toMap() {
     return {
-      'unitId': id,
+      'unitId': unitId,
       'code': code,
       'name': name,
       'displayName': displayName,
@@ -530,6 +761,7 @@ class Customer {
 
   Customer copyWith({
     int? id,
+    int? customerId,
     String? name,
     String? code,
     String? phoneNo,
@@ -543,6 +775,7 @@ class Customer {
   }) {
     return Customer(
       id: id ?? this.id,
+      customerId: customerId ?? this.customerId,
       name: name ?? this.name,
       code: code ?? this.code,
       phoneNo: phoneNo ?? this.phoneNo,
@@ -1031,6 +1264,33 @@ class AddRouteApi {
   factory AddRouteApi.fromJson(Map<String, dynamic> json) =>
       _$AddRouteApiFromJson(json);
 
+  /// Custom fromJson with merge support for partial API responses
+  /// Merges partial API response with existing route data during deserialization
+  /// This prevents default values from overwriting unchanged fields
+  factory AddRouteApi.fromJsonWithMerge(
+    Map<String, dynamic> json, {
+    Route? existingRoute,
+  }) {
+    final status = (json['status'] as num?)?.toInt() ?? 2;
+    final message = json['message'] as String? ?? '';
+
+    final dataJson = json['data'] as Map<String, dynamic>?;
+    if (dataJson == null) {
+      throw const FormatException('Missing data field in AddRouteApi response');
+    }
+
+    final partialRoute = Route._fromJsonPartial(dataJson);
+    final mergedRoute = existingRoute != null
+        ? partialRoute.mergeWith(existingRoute)
+        : partialRoute;
+
+    return AddRouteApi(
+      status: status,
+      message: message,
+      data: mergedRoute,
+    );
+  }
+
   Map<String, dynamic> toJson() => _$AddRouteApiToJson(this);
 }
 
@@ -1092,7 +1352,50 @@ class Route {
 
   factory Route.fromJson(Map<String, dynamic> json) => _$RouteFromJson(json);
 
+  /// Private factory for parsing partial JSON responses without applying defaults
+  /// Used internally by AddRouteApi.fromJsonWithMerge
+  /// Creates Route with only fields present in JSON
+  /// Fields not present will use sentinel values that mergeWith can detect
+  factory Route._fromJsonPartial(Map<String, dynamic> json) {
+    // Check which fields are actually present in JSON
+    final hasId = json.containsKey('id');
+    final hasName = json.containsKey('name');
+    final hasCode = json.containsKey('code');
+    final hasSalesmanId = json.containsKey('salesman_id');
+    final hasCreatedAt = json.containsKey('created_at');
+    final hasUpdatedAt = json.containsKey('updated_at');
+    
+    return Route(
+      // Only set values for fields that were present in JSON
+      // Use sentinel values (-2 for ints, null for nullable) for missing fields
+      // mergeWith will detect these and preserve existing values
+      routeId: hasId ? (json['id'] as num?)?.toInt() : null,
+      name: hasName ? (json['name'] as String? ?? '') : '',
+      code: hasCode ? (json['code'] as String? ?? '') : '',
+      salesmanId: hasSalesmanId ? ((json['salesman_id'] as num?)?.toInt() ?? -1) : -2, // -2 is sentinel
+      createdAt: hasCreatedAt ? (json['created_at'] as String?) : null,
+      updatedAt: hasUpdatedAt ? (json['updated_at'] as String?) : null,
+    );
+  }
+
   Map<String, dynamic> toJson() => _$RouteToJson(this);
+
+  /// Merge partial API response with existing route data
+  /// Only uses API response values if they were present in the response
+  /// Uses sentinel values (-2 for ints) to detect missing fields
+  /// This handles cases where API returns only changed fields
+  Route mergeWith(Route existing) {
+    return Route(
+      id: existing.id, // Always preserve local DB primary key
+      routeId: routeId ?? existing.routeId,
+      // For strings: use API value if not empty, otherwise preserve existing
+      name: name.isNotEmpty ? name : existing.name,
+      code: code.isNotEmpty ? code : existing.code,
+      salesmanId: salesmanId != -2 ? salesmanId : existing.salesmanId, // -2 means field was not in JSON
+      createdAt: createdAt ?? existing.createdAt, // null means field was not in JSON
+      updatedAt: updatedAt ?? existing.updatedAt, // null means field was not in JSON
+    );
+  }
 
   /// Convert from database map (camelCase column names)
   factory Route.fromMap(Map<String, dynamic> map) {
@@ -1174,6 +1477,37 @@ class OutOfStockApi {
   factory OutOfStockApi.fromJson(Map<String, dynamic> json) =>
       _$OutOfStockApiFromJson(json);
 
+  /// Custom fromJson with merge support for partial API responses
+  /// Merges partial API response with existing out of stock data during deserialization
+  /// This prevents default values from overwriting unchanged fields
+  factory OutOfStockApi.fromJsonWithMerge(
+    Map<String, dynamic> json, {
+    OutOfStock? existingOutOfStock,
+  }) {
+    final status = (json['status'] as num?)?.toInt() ?? 2;
+    final message = json['message'] as String? ?? '';
+    
+    // Parse the data object manually to avoid default values
+    final dataJson = json['data'] as Map<String, dynamic>?;
+    if (dataJson == null) {
+      throw FormatException('Missing data field in OutOfStockApi response');
+    }
+    
+    // Create OutOfStock from partial JSON without defaults
+    final partialOutOfStock = OutOfStock._fromJsonPartial(dataJson);
+    
+    // Merge with existing out of stock if provided
+    final mergedOutOfStock = existingOutOfStock != null
+        ? partialOutOfStock.mergeWith(existingOutOfStock)
+        : partialOutOfStock;
+    
+    return OutOfStockApi(
+      status: status,
+      message: message,
+      data: mergedOutOfStock,
+    );
+  }
+
   Map<String, dynamic> toJson() => _$OutOfStockApiToJson(this);
 }
 
@@ -1245,40 +1579,43 @@ class OutOfStockSubListApi {
 /// Converted from KMP's OutOfStock class
 @JsonSerializable()
 class OutOfStock {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(defaultValue: -1, includeFromJson: false, includeToJson: false)
+  final int? id; // Local DB primary key (AUTOINCREMENT)
 
-  @JsonKey(name: 'outos_order_sub_id', defaultValue: -1)
+  @JsonKey(name: 'id', defaultValue: -1,fromJson: parseInt) // API 'id' maps to outOfStockId
+  final int outOfStockId; // Server ID
+
+  @JsonKey(name: 'outos_order_sub_id', defaultValue: -1,fromJson: parseInt)
   final int outosOrderSubId;
 
-  @JsonKey(name: 'outos_cust_id', defaultValue: -1)
+  @JsonKey(name: 'outos_cust_id', defaultValue: -1,fromJson: parseInt)
   final int outosCustId;
 
-  @JsonKey(name: 'outos_sales_man_id', defaultValue: -1)
+  @JsonKey(name: 'outos_sales_man_id', defaultValue: -1,fromJson: parseInt)
   final int outosSalesManId;
 
-  @JsonKey(name: 'outos_stock_keeper_id', defaultValue: -1)
+  @JsonKey(name: 'outos_stock_keeper_id', defaultValue: -1,fromJson: parseInt)
   final int outosStockKeeperId;
 
-  @JsonKey(name: 'outos_date_and_time', defaultValue: '')
+  @JsonKey(name: 'outos_date_and_time', defaultValue: '',fromJson: parseString)
   final String outosDateAndTime;
 
-  @JsonKey(name: 'outos_prod_id', defaultValue: -1)
+  @JsonKey(name: 'outos_prod_id', defaultValue: -1,fromJson: parseInt)
   final int outosProdId;
 
-  @JsonKey(name: 'outos_unit_id', defaultValue: -1)
+  @JsonKey(name: 'outos_unit_id', defaultValue: -1,fromJson: parseInt)
   final int outosUnitId;
 
-  @JsonKey(name: 'outos_car_id', defaultValue: -1)
-  final int outosCarId;
+  @JsonKey(name: 'outos_car_id', defaultValue: -1,fromJson: parseInt)
+  final int outosCarId; 
 
-  @JsonKey(name: 'outos_qty', defaultValue: 0.0)
+  @JsonKey(name: 'outos_qty', defaultValue: 0.0,fromJson: parseDouble)
   final double outosQty;
 
-  @JsonKey(name: 'outos_available_qty', defaultValue: 0.0)
+  @JsonKey(name: 'outos_available_qty', defaultValue: 0.0,fromJson: parseDouble)
   final double outosAvailableQty;
 
-  @JsonKey(name: 'outos_unit_base_qty', defaultValue: 0.0)
+  @JsonKey(name: 'outos_unit_base_qty', defaultValue: 0.0,fromJson: parseDouble)
   final double outosUnitBaseQty;
 
   @JsonKey(name: 'outos_note')
@@ -1287,10 +1624,10 @@ class OutOfStock {
   @JsonKey(name: 'outos_narration')
   final String? outosNarration;
 
-  @JsonKey(name: 'outos_is_compleated_flag', defaultValue: -1)
+  @JsonKey(name: 'outos_is_compleated_flag', defaultValue: -1,fromJson: parseInt)
   final int outosIsCompleatedFlag;
 
-  @JsonKey(name: 'outos_flag')
+  @JsonKey(name: 'outos_flag',fromJson: parseInt)
   final int? outosFlag;
 
   @JsonKey(defaultValue: '')
@@ -1305,7 +1642,8 @@ class OutOfStock {
   final List<OutOfStockSub>? items;
 
   const OutOfStock({
-    this.id = -1,
+    this.id,
+    this.outOfStockId = -1,
     this.outosOrderSubId = -1,
     this.outosCustId = -1,
     this.outosSalesManId = -1,
@@ -1330,12 +1668,97 @@ class OutOfStock {
   factory OutOfStock.fromJson(Map<String, dynamic> json) =>
       _$OutOfStockFromJson(json);
 
+  /// Private factory for parsing partial JSON responses without applying defaults
+  /// Used internally by OutOfStockApi.fromJsonWithMerge
+  /// Creates OutOfStock with only fields present in JSON
+  /// Fields not present will use sentinel values that mergeWith can detect
+  factory OutOfStock._fromJsonPartial(Map<String, dynamic> json) {
+    // Check which fields are actually present in JSON
+    final hasId = json.containsKey('id');
+    final hasOrderSubId = json.containsKey('outos_order_sub_id');
+    final hasCustId = json.containsKey('outos_cust_id');
+    final hasSalesManId = json.containsKey('outos_sales_man_id');
+    final hasStockKeeperId = json.containsKey('outos_stock_keeper_id');
+    final hasDateAndTime = json.containsKey('outos_date_and_time');
+    final hasProdId = json.containsKey('outos_prod_id');
+    final hasUnitId = json.containsKey('outos_unit_id');
+    final hasCarId = json.containsKey('outos_car_id');
+    final hasQty = json.containsKey('outos_qty');
+    final hasAvailableQty = json.containsKey('outos_available_qty');
+    final hasUnitBaseQty = json.containsKey('outos_unit_base_qty');
+    final hasNote = json.containsKey('outos_note');
+    final hasNarration = json.containsKey('outos_narration');
+    final hasIsCompleatedFlag = json.containsKey('outos_is_compleated_flag');
+    final hasFlag = json.containsKey('outos_flag');
+    final hasUuid = json.containsKey('uuid');
+    final hasCreatedAt = json.containsKey('created_at');
+    final hasUpdatedAt = json.containsKey('updated_at');
+    final hasItems = json.containsKey('items');
+    
+    return OutOfStock(
+      // Only set values for fields that were present in JSON
+      // Use sentinel values (-2 for ints, -2.0 for doubles, empty string for strings, null for nullable) for missing fields
+      // mergeWith will detect these and preserve existing values
+      outOfStockId: hasId ? (json['id'] as num?)?.toInt() ?? -1 : -2, // -2 is sentinel
+      outosOrderSubId: hasOrderSubId ? ((json['outos_order_sub_id'] as num?)?.toInt() ?? -1) : -2,
+      outosCustId: hasCustId ? ((json['outos_cust_id'] as num?)?.toInt() ?? -1) : -2,
+      outosSalesManId: hasSalesManId ? ((json['outos_sales_man_id'] as num?)?.toInt() ?? -1) : -2,
+      outosStockKeeperId: hasStockKeeperId ? ((json['outos_stock_keeper_id'] as num?)?.toInt() ?? -1) : -2,
+      outosDateAndTime: hasDateAndTime ? (json['outos_date_and_time'] as String? ?? '') : '',
+      outosProdId: hasProdId ? ((json['outos_prod_id'] as num?)?.toInt() ?? -1) : -2,
+      outosUnitId: hasUnitId ? ((json['outos_unit_id'] as num?)?.toInt() ?? -1) : -2,
+      outosCarId: hasCarId ? ((json['outos_car_id'] as num?)?.toInt() ?? -1) : -2,
+      outosQty: hasQty ? ((json['outos_qty'] as num?)?.toDouble() ?? 0.0) : -2.0,
+      outosAvailableQty: hasAvailableQty ? ((json['outos_available_qty'] as num?)?.toDouble() ?? 0.0) : -2.0,
+      outosUnitBaseQty: hasUnitBaseQty ? ((json['outos_unit_base_qty'] as num?)?.toDouble() ?? 0.0) : -2.0,
+      outosNote: hasNote ? (json['outos_note'] as String?) : null,
+      outosNarration: hasNarration ? (json['outos_narration'] as String?) : null,
+      outosIsCompleatedFlag: hasIsCompleatedFlag ? ((json['outos_is_compleated_flag'] as num?)?.toInt() ?? -1) : -2,
+      outosFlag: hasFlag ? (json['outos_flag'] as num?)?.toInt() : null,
+      uuid: hasUuid ? (json['uuid'] as String? ?? '') : '',
+      createdAt: hasCreatedAt ? (json['created_at'] as String?) : null,
+      updatedAt: hasUpdatedAt ? (json['updated_at'] as String?) : null,
+      items: hasItems ? (json['items'] as List<dynamic>?)?.map((e) => OutOfStockSub.fromJson(e as Map<String, dynamic>)).toList() : null,
+    );
+  }
+
   Map<String, dynamic> toJson() => _$OutOfStockToJson(this);
+
+  /// Merge partial API response with existing out of stock data
+  /// Only uses API response values if they were present in the response
+  /// Uses sentinel values (-2 for ints, -2.0 for doubles) to detect missing fields
+  /// This handles cases where API returns only changed fields
+  OutOfStock mergeWith(OutOfStock existing) {
+    return OutOfStock(
+      id: existing.id, // Always preserve local DB primary key
+      outOfStockId: outOfStockId != -2 ? outOfStockId : existing.outOfStockId,
+      outosOrderSubId: outosOrderSubId != -2 ? outosOrderSubId : existing.outosOrderSubId,
+      outosCustId: outosCustId != -2 ? outosCustId : existing.outosCustId,
+      outosSalesManId: outosSalesManId != -2 ? outosSalesManId : existing.outosSalesManId,
+      outosStockKeeperId: outosStockKeeperId != -2 ? outosStockKeeperId : existing.outosStockKeeperId,
+      outosDateAndTime: outosDateAndTime.isNotEmpty ? outosDateAndTime : existing.outosDateAndTime,
+      outosProdId: outosProdId != -2 ? outosProdId : existing.outosProdId,
+      outosUnitId: outosUnitId != -2 ? outosUnitId : existing.outosUnitId,
+      outosCarId: outosCarId != -2 ? outosCarId : existing.outosCarId,
+      outosQty: outosQty != -2.0 ? outosQty : existing.outosQty,
+      outosAvailableQty: outosAvailableQty != -2.0 ? outosAvailableQty : existing.outosAvailableQty,
+      outosUnitBaseQty: outosUnitBaseQty != -2.0 ? outosUnitBaseQty : existing.outosUnitBaseQty,
+      outosNote: outosNote ?? existing.outosNote,
+      outosNarration: outosNarration ?? existing.outosNarration,
+      outosIsCompleatedFlag: outosIsCompleatedFlag != -2 ? outosIsCompleatedFlag : existing.outosIsCompleatedFlag,
+      outosFlag: outosFlag ?? existing.outosFlag,
+      uuid: uuid.isNotEmpty ? uuid : existing.uuid,
+      createdAt: createdAt ?? existing.createdAt,
+      updatedAt: updatedAt ?? existing.updatedAt,
+      items: items ?? existing.items,
+    );
+  }
 
   /// Convert from database map (camelCase column names) - OutOfStockMaster table
   factory OutOfStock.fromMap(Map<String, dynamic> map) {
     return OutOfStock(
-      id: map['oospMasterId'] as int? ?? -1,
+      id: map['id'] as int?, // Local DB PK
+      outOfStockId: map['oospMasterId'] as int? ?? -1, // Server ID
       outosOrderSubId: map['orderSubId'] as int? ?? -1,
       outosCustId: map['custId'] as int? ?? -1,
       outosSalesManId: map['salesmanId'] as int? ?? -1,
@@ -1358,9 +1781,10 @@ class OutOfStock {
   }
 
   /// Convert to database map (camelCase column names) - OutOfStockMaster table
+  /// Note: 'id' column is omitted - SQLite will auto-increment
   Map<String, dynamic> toMap() {
     return {
-      'oospMasterId': id,
+      'oospMasterId': outOfStockId, // Server ID
       'orderSubId': outosOrderSubId,
       'custId': outosCustId,
       'salesmanId': outosSalesManId,
@@ -1388,8 +1812,11 @@ class OutOfStock {
 /// Converted from KMP's OutOfStockSub class
 @JsonSerializable()
 class OutOfStockSub {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(defaultValue: -1, includeFromJson: false, includeToJson: false)
+  final int? id; // Local DB primary key (AUTOINCREMENT)
+
+  @JsonKey(name: 'id', defaultValue: -1) // API 'id' maps to outOfStockSubId
+  final int outOfStockSubId; // Server ID
 
   @JsonKey(name: 'outos_sub_outos_id', defaultValue: -1)
   final int outosSubOutosId;
@@ -1461,7 +1888,8 @@ class OutOfStockSub {
   final String updatedAt;
 
   const OutOfStockSub({
-    this.id = -1,
+    this.id,
+    this.outOfStockSubId = -1,
     this.outosSubOutosId = -1,
     this.outosSubOrderSubId = -1,
     this.outosSubCustId = -1,
@@ -1490,12 +1918,109 @@ class OutOfStockSub {
   factory OutOfStockSub.fromJson(Map<String, dynamic> json) =>
       _$OutOfStockSubFromJson(json);
 
+  /// Private factory for parsing partial JSON responses without applying defaults
+  /// Used internally by OutOfStockSubApi.fromJsonWithMerge
+  /// Creates OutOfStockSub with only fields present in JSON
+  /// Fields not present will use sentinel values that mergeWith can detect
+  factory OutOfStockSub._fromJsonPartial(Map<String, dynamic> json) {
+    // Check which fields are actually present in JSON
+    final hasId = json.containsKey('id');
+    final hasOutosId = json.containsKey('outos_sub_outos_id');
+    final hasOrderSubId = json.containsKey('outos_sub_order_sub_id');
+    final hasCustId = json.containsKey('outos_sub_cust_id');
+    final hasSalesManId = json.containsKey('outos_sub_sales_man_id');
+    final hasStockKeeperId = json.containsKey('outos_sub_stock_keeper_id');
+    final hasDateAndTime = json.containsKey('outos_sub_date_and_time');
+    final hasSuppId = json.containsKey('outos_sub_supp_id');
+    final hasProdId = json.containsKey('outos_sub_prod_id');
+    final hasUnitId = json.containsKey('outos_sub_unit_id');
+    final hasCarId = json.containsKey('outos_sub_car_id');
+    final hasRate = json.containsKey('outos_sub_rate');
+    final hasUpdatedRate = json.containsKey('outos_sub_updated_rate');
+    final hasQty = json.containsKey('outos_sub_qty');
+    final hasAvailableQty = json.containsKey('outos_sub_available_qty');
+    final hasUnitBaseQty = json.containsKey('outos_sub_unit_base_qty');
+    final hasStatusFlag = json.containsKey('outos_sub_status_flag');
+    final hasIsCheckedFlag = json.containsKey('outos_sub_is_checked_flag');
+    final hasNote = json.containsKey('outos_sub_note');
+    final hasNarration = json.containsKey('outos_sub_narration');
+    final hasFlag = json.containsKey('outos_sub_flag');
+    final hasUuid = json.containsKey('uuid');
+    final hasCreatedAt = json.containsKey('created_at');
+    final hasUpdatedAt = json.containsKey('updated_at');
+    
+    return OutOfStockSub(
+      // Only set values for fields that were present in JSON
+      // Use sentinel values (-2 for ints, -2.0 for doubles, empty string for strings, null for nullable) for missing fields
+      // mergeWith will detect these and preserve existing values
+      outOfStockSubId: hasId ? (json['id'] as num?)?.toInt() ?? -1 : -2, // -2 is sentinel
+      outosSubOutosId: hasOutosId ? ((json['outos_sub_outos_id'] as num?)?.toInt() ?? -1) : -2,
+      outosSubOrderSubId: hasOrderSubId ? ((json['outos_sub_order_sub_id'] as num?)?.toInt() ?? -1) : -2,
+      outosSubCustId: hasCustId ? ((json['outos_sub_cust_id'] as num?)?.toInt() ?? -1) : -2,
+      outosSubSalesManId: hasSalesManId ? ((json['outos_sub_sales_man_id'] as num?)?.toInt() ?? -1) : -2,
+      outosSubStockKeeperId: hasStockKeeperId ? ((json['outos_sub_stock_keeper_id'] as num?)?.toInt() ?? -1) : -2,
+      outosSubDateAndTime: hasDateAndTime ? (json['outos_sub_date_and_time'] as String? ?? '') : '',
+      outosSubSuppId: hasSuppId ? ((json['outos_sub_supp_id'] as num?)?.toInt() ?? -1) : -2,
+      outosSubProdId: hasProdId ? ((json['outos_sub_prod_id'] as num?)?.toInt() ?? -1) : -2,
+      outosSubUnitId: hasUnitId ? ((json['outos_sub_unit_id'] as num?)?.toInt() ?? -1) : -2,
+      outosSubCarId: hasCarId ? ((json['outos_sub_car_id'] as num?)?.toInt() ?? -1) : -2,
+      outosSubRate: hasRate ? ((json['outos_sub_rate'] as num?)?.toDouble() ?? 0.0) : -2.0,
+      outosSubUpdatedRate: hasUpdatedRate ? ((json['outos_sub_updated_rate'] as num?)?.toDouble() ?? 0.0) : -2.0,
+      outosSubQty: hasQty ? ((json['outos_sub_qty'] as num?)?.toDouble() ?? 0.0) : -2.0,
+      outosSubAvailableQty: hasAvailableQty ? ((json['outos_sub_available_qty'] as num?)?.toDouble() ?? 0.0) : -2.0,
+      outosSubUnitBaseQty: hasUnitBaseQty ? ((json['outos_sub_unit_base_qty'] as num?)?.toDouble() ?? 0.0) : -2.0,
+      outosSubStatusFlag: hasStatusFlag ? ((json['outos_sub_status_flag'] as num?)?.toInt() ?? 1) : -2,
+      outosSubIsCheckedFlag: hasIsCheckedFlag ? ((json['outos_sub_is_checked_flag'] as num?)?.toInt() ?? 0) : -2,
+      outosSubNote: hasNote ? (json['outos_sub_note'] as String?) : null,
+      outosSubNarration: hasNarration ? (json['outos_sub_narration'] as String?) : null,
+      outosSubFlag: hasFlag ? (json['outos_sub_flag'] as num?)?.toInt() : null,
+      uuid: hasUuid ? (json['uuid'] as String? ?? '') : '',
+      createdAt: hasCreatedAt ? (json['created_at'] as String? ?? '') : '',
+      updatedAt: hasUpdatedAt ? (json['updated_at'] as String? ?? '') : '',
+    );
+  }
+
   Map<String, dynamic> toJson() => _$OutOfStockSubToJson(this);
+
+  /// Merge partial API response with existing out of stock sub data
+  /// Only uses API response values if they were present in the response
+  /// Uses sentinel values (-2 for ints, -2.0 for doubles) to detect missing fields
+  /// This handles cases where API returns only changed fields
+  OutOfStockSub mergeWith(OutOfStockSub existing) {
+    return OutOfStockSub(
+      id: existing.id, // Always preserve local DB primary key
+      outOfStockSubId: outOfStockSubId != -2 ? outOfStockSubId : existing.outOfStockSubId,
+      outosSubOutosId: outosSubOutosId != -2 ? outosSubOutosId : existing.outosSubOutosId,
+      outosSubOrderSubId: outosSubOrderSubId != -2 ? outosSubOrderSubId : existing.outosSubOrderSubId,
+      outosSubCustId: outosSubCustId != -2 ? outosSubCustId : existing.outosSubCustId,
+      outosSubSalesManId: outosSubSalesManId != -2 ? outosSubSalesManId : existing.outosSubSalesManId,
+      outosSubStockKeeperId: outosSubStockKeeperId != -2 ? outosSubStockKeeperId : existing.outosSubStockKeeperId,
+      outosSubDateAndTime: outosSubDateAndTime.isNotEmpty ? outosSubDateAndTime : existing.outosSubDateAndTime,
+      outosSubSuppId: outosSubSuppId != -2 ? outosSubSuppId : existing.outosSubSuppId,
+      outosSubProdId: outosSubProdId != -2 ? outosSubProdId : existing.outosSubProdId,
+      outosSubUnitId: outosSubUnitId != -2 ? outosSubUnitId : existing.outosSubUnitId,
+      outosSubCarId: outosSubCarId != -2 ? outosSubCarId : existing.outosSubCarId,
+      outosSubRate: outosSubRate != -2.0 ? outosSubRate : existing.outosSubRate,
+      outosSubUpdatedRate: outosSubUpdatedRate != -2.0 ? outosSubUpdatedRate : existing.outosSubUpdatedRate,
+      outosSubQty: outosSubQty != -2.0 ? outosSubQty : existing.outosSubQty,
+      outosSubAvailableQty: outosSubAvailableQty != -2.0 ? outosSubAvailableQty : existing.outosSubAvailableQty,
+      outosSubUnitBaseQty: outosSubUnitBaseQty != -2.0 ? outosSubUnitBaseQty : existing.outosSubUnitBaseQty,
+      outosSubStatusFlag: outosSubStatusFlag != -2 ? outosSubStatusFlag : existing.outosSubStatusFlag,
+      outosSubIsCheckedFlag: outosSubIsCheckedFlag != -2 ? outosSubIsCheckedFlag : existing.outosSubIsCheckedFlag,
+      outosSubNote: outosSubNote ?? existing.outosSubNote,
+      outosSubNarration: outosSubNarration ?? existing.outosSubNarration,
+      outosSubFlag: outosSubFlag ?? existing.outosSubFlag,
+      uuid: uuid.isNotEmpty ? uuid : existing.uuid,
+      createdAt: createdAt.isNotEmpty ? createdAt : existing.createdAt,
+      updatedAt: updatedAt.isNotEmpty ? updatedAt : existing.updatedAt,
+    );
+  }
 
   /// Convert from database map (camelCase column names) - OutOfStockProducts table
   factory OutOfStockSub.fromMap(Map<String, dynamic> map) {
     return OutOfStockSub(
-      id: map['oospId'] as int? ?? -1,
+      id: map['id'] as int?, // Local DB PK
+      outOfStockSubId: map['oospId'] as int? ?? -1, // Server ID
       outosSubOutosId: map['oospMasterId'] as int? ?? -1,
       outosSubOrderSubId: map['orderSubId'] as int? ?? -1,
       outosSubCustId: map['custId'] as int? ?? -1,
@@ -1523,9 +2048,10 @@ class OutOfStockSub {
   }
 
   /// Convert to database map (camelCase column names) - OutOfStockProducts table
+  /// Note: 'id' column is omitted - SQLite will auto-increment
   Map<String, dynamic> toMap() {
     return {
-      'oospId': id,
+      'oospId': outOfStockSubId, // Server ID
       'oospMasterId': outosSubOutosId,
       'orderSubId': outosSubOrderSubId,
       'custId': outosSubCustId,
@@ -1574,6 +2100,37 @@ class OutOfStockSubApi {
 
   factory OutOfStockSubApi.fromJson(Map<String, dynamic> json) =>
       _$OutOfStockSubApiFromJson(json);
+
+  /// Custom fromJson with merge support for partial API responses
+  /// Merges partial API response with existing out of stock sub data during deserialization
+  /// This prevents default values from overwriting unchanged fields
+  factory OutOfStockSubApi.fromJsonWithMerge(
+    Map<String, dynamic> json, {
+    OutOfStockSub? existingOutOfStockSub,
+  }) {
+    final status = (json['status'] as num?)?.toInt() ?? 2;
+    final message = json['message'] as String? ?? '';
+    
+    // Parse the data object manually to avoid default values
+    final dataJson = json['data'] as Map<String, dynamic>?;
+    if (dataJson == null) {
+      throw FormatException('Missing data field in OutOfStockSubApi response');
+    }
+    
+    // Create OutOfStockSub from partial JSON without defaults
+    final partialOutOfStockSub = OutOfStockSub._fromJsonPartial(dataJson);
+    
+    // Merge with existing out of stock sub if provided
+    final mergedOutOfStockSub = existingOutOfStockSub != null
+        ? partialOutOfStockSub.mergeWith(existingOutOfStockSub)
+        : partialOutOfStockSub;
+    
+    return OutOfStockSubApi(
+      status: status,
+      message: message,
+      data: mergedOutOfStockSub,
+    );
+  }
 
   Map<String, dynamic> toJson() => _$OutOfStockSubApiToJson(this);
 }
@@ -1626,7 +2183,7 @@ class OutOfStockMasterWithDetails {
   }
 
   // Convenience getters matching KMP property names
-  int get oospMasterId => outOfStock.id;
+  int get oospMasterId => outOfStock.outOfStockId; // Server ID
   int get orderSubId => outOfStock.outosOrderSubId;
   int get custId => outOfStock.outosCustId;
   int get salesmanId => outOfStock.outosSalesManId;
@@ -1694,7 +2251,7 @@ class OutOfStockSubWithDetails {
   }
 
   // Convenience getters matching KMP property names
-  int get oospId => outOfStockSub.id;
+  int get oospId => outOfStockSub.outOfStockSubId; // Server ID
   int get oospMasterId => outOfStockSub.outosSubOutosId;
   int get orderSubId => outOfStockSub.outosSubOrderSubId;
   int get custId => outOfStockSub.outosSubCustId;
@@ -1719,4 +2276,45 @@ class OutOfStockSubWithDetails {
   int get flag => outOfStockSub.outosSubFlag ?? 0;
   String get UUID => outOfStockSub.uuid;
 }
+
+int parseInt(dynamic value, {int defaultValue = -1}) {
+  if (value == null) return defaultValue;
+
+  if (value is int) return value;
+
+  if (value is num) return value.toInt();
+
+  if (value is String) {
+    final v = value.trim();
+    if (v.isEmpty) return defaultValue;
+    return int.tryParse(v) ?? defaultValue;
+  }
+
+  return defaultValue;
+}
+
+double parseDouble(dynamic value, {double defaultValue = 0.0}) {
+  if (value == null) return defaultValue;
+
+  if (value is double) return value;
+
+  if (value is num) return value.toDouble();
+
+  if (value is String) {
+    final v = value.trim();
+    if (v.isEmpty) return defaultValue;
+    return double.tryParse(v) ?? defaultValue;
+  }
+
+  return defaultValue;
+}
+
+String parseString(dynamic value, {String defaultValue = ''}) {
+  if (value == null) return defaultValue;
+
+  if (value is String) return value;
+
+  return value.toString();
+}
+
 

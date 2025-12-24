@@ -135,10 +135,11 @@ class ProductUnitApi {
 
 @JsonSerializable(explicitToJson: true)
 class Product {
-  @JsonKey(includeFromJson: false,includeToJson: false,defaultValue: -1)
-  final int id;
-  @JsonKey(name: 'id',defaultValue: -1)
-  final int? productId;
+  @JsonKey(includeFromJson: false, includeToJson: false, defaultValue: -1)
+  final int id; // Local DB primary key (AUTOINCREMENT)
+  
+  @JsonKey(name: 'id', defaultValue: -1) // API 'id' maps to productId
+  final int productId; // Server ID
   @JsonKey(defaultValue: '')
   final String name;
   @JsonKey(defaultValue: '')
@@ -178,7 +179,7 @@ class Product {
 
   const Product({
     this.id = -1,
-    this.productId,
+    this.productId = -1,
     required this.name,
     required this.code,
     required this.barcode,
@@ -230,10 +231,10 @@ class Product {
   }
 
   /// Convert to database map (camelCase column names)
+  /// Note: 'id' column is omitted - SQLite will auto-increment
   Map<String, dynamic> toMap() {
     return {
-      // Note: 'id' (local PK) is not included - handled separately in repository
-      'productId': productId ?? -1,
+      'productId': productId,
       'code': code,
       'barcode': barcode,
       'name': name,
@@ -260,8 +261,11 @@ class Product {
 
 @JsonSerializable()
 class ProductUnit {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(defaultValue: -1, includeFromJson: false, includeToJson: false)
+  final int? id; // Local DB primary key (AUTOINCREMENT)
+
+  @JsonKey(name: 'id', defaultValue: -1) // API 'id' maps to productUnitId
+  final int productUnitId; // Server ID
   @JsonKey(defaultValue: -1)
   final int prd_id;
   @JsonKey(defaultValue: -1)
@@ -270,7 +274,8 @@ class ProductUnit {
   final int derived_unit_id;
 
   const ProductUnit({
-    required this.id,
+    this.id,
+    this.productUnitId = -1,
     required this.prd_id,
     required this.base_unit_id,
     required this.derived_unit_id,
@@ -283,7 +288,8 @@ class ProductUnit {
   /// Convert from database map (camelCase column names)
   factory ProductUnit.fromMap(Map<String, dynamic> map) {
     return ProductUnit(
-      id: map['productUnitId'] as int? ?? -1,
+      id: map['id'] as int?, // Local DB PK
+      productUnitId: map['productUnitId'] as int? ?? -1, // Server ID
       prd_id: map['productId'] as int? ?? -1,
       base_unit_id: map['baseUnitId'] as int? ?? -1,
       derived_unit_id: map['derivedUnitId'] as int? ?? -1,

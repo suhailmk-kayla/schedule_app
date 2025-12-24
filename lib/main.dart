@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:developer' as developer;
 import 'di.dart';
 import 'utils/push_notification_helper.dart';
 import 'utils/notification_manager.dart';
@@ -20,6 +21,7 @@ import 'presentation/provider/categories_provider.dart';
 import 'presentation/provider/sub_categories_provider.dart';
 import 'presentation/provider/cars_provider.dart';
 
+//TODO:change to production server before sending apk
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // final result = await createAdminAccount();
@@ -64,6 +66,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       // App came to foreground from background
       // Process any stored notifications that were received while app was in background
       PushNotificationHelper.processStoredNotifications();
+      
+      // Optional enhancement: Retry failed syncs when app comes to foreground
+      // This helps catch any missed notifications while app was in background
+      // (KMP doesn't do this automatically, but it's a good practice for reliability)
+      try {
+        final syncProvider = getIt<SyncProvider>();
+        syncProvider.syncFailedSyncs().catchError((e) {
+          developer.log('Error retrying failed syncs on resume: $e');
+        });
+      } catch (e) {
+        developer.log('Error getting SyncProvider on resume: $e');
+      }
     }
   }
 

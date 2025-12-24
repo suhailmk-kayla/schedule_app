@@ -115,6 +115,7 @@ class CustomersProvider extends ChangeNotifier {
     _clearError();
 
     final userType = await StorageHelper.getUserType();
+    final userId = await StorageHelper.getUserId();
     final result = await _customersRepository.getAllCustomers(
       searchKey: _searchKey,
       routeId: _routeId == -1 ? -1 : _routeId,

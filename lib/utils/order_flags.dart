@@ -22,4 +22,17 @@ class OrderSubFlag {
   static const int replaced = 7;
 }
 
+class OrderFlags {
+  static const int deleted = 0;
+  static const int active = 1;
+  static const int temp = 2;
+  static const int draft = 3;
+}
+
+class OrderSubFlags {
+  static const int deleted = 0;
+  static const int active = 1;
+  static const int temp = 2;
+}
+
 

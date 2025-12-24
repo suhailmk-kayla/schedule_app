@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 import 'package:either_dart/either.dart';
 import 'package:sqflite/sqflite.dart';
@@ -509,36 +511,20 @@ class OutOfStockRepository {
   }) async {
     try {
       final db = await _database;
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
         INSERT OR REPLACE INTO OutOfStockMaster (
-          id,
-          oospMasterId,
-          orderSubId,
-          custId,
-          salesmanId,
-          storekeeperId,
-          dateAndTime,
-          productId,
-          unitId,
-          carId,
-          qty,
-          availQty,
-          baseQty,
-          note,
-          narration,
-          createdDateTime,
-          updatedDateTime,
-          isCompleteflag,
-          flag,
-          UUID,
-          isViewed
+          oospMasterId, orderSubId, custId, salesmanId, storekeeperId, 
+          dateAndTime, productId, unitId, carId, qty, availQty, baseQty, 
+          note, narration, createdDateTime, updatedDateTime, isCompleteflag, 
+          flag, UUID, isViewed
         ) VALUES (
-          NULL,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
-          outOfStock.id == -1 ? null : outOfStock.id,
+          outOfStock.outOfStockId, // Server ID
           outOfStock.outosOrderSubId,
           outOfStock.outosCustId,
           outOfStock.outosSalesManId,
@@ -571,43 +557,27 @@ class OutOfStockRepository {
   /// Matching KMP: reportAdmin sets isViewed=1 (line 1785), reportAllAdmin sets isViewed=0 (line 1633)
   Future<Either<Failure, void>> addOutOfStockMasters(
     List<OutOfStock> outOfStocks, {
-    int isViewed = 0,
+    int isViewed = 1,
   }) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT OR REPLACE INTO OutOfStockMaster (
-          id,
-          oospMasterId,
-          orderSubId,
-          custId,
-          salesmanId,
-          storekeeperId,
-          dateAndTime,
-          productId,
-          unitId,
-          carId,
-          qty,
-          availQty,
-          baseQty,
-          note,
-          narration,
-          createdDateTime,
-          updatedDateTime,
-          isCompleteflag,
-          flag,
-          UUID,
-          isViewed
-        ) VALUES (
-          NULL,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-        ''';
+        final batch = txn.batch();
+        // Use INSERT OR REPLACE (matches KMP pattern)
         for (final outOfStock in outOfStocks) {
-          await txn.rawInsert(
-            sql,
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO OutOfStockMaster (
+              oospMasterId, orderSubId, custId, salesmanId, storekeeperId, 
+              dateAndTime, productId, unitId, carId, qty, availQty, baseQty, 
+              note, narration, createdDateTime, updatedDateTime, isCompleteflag, 
+              flag, UUID, isViewed
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ''',
             [
-              outOfStock.id == -1 ? null : outOfStock.id,
+              outOfStock.outOfStockId, // Server ID
               outOfStock.outosOrderSubId,
               outOfStock.outosCustId,
               outOfStock.outosSalesManId,
@@ -630,6 +600,7 @@ class OutOfStockRepository {
             ],
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -646,41 +617,73 @@ class OutOfStockRepository {
   }) async {
     try {
       final db = await _database;
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
         INSERT OR REPLACE INTO OutOfStockProducts (
-          id,
-          oospId,
-          oospMasterId,
-          orderSubId,
-          custId,
-          salesmanId,
-          storekeeperId,
-          dateAndTime,
-          supplierId,
-          productId,
-          unitId,
-          carId,
-          rate,
-          updateRate,
-          qty,
-          availQty,
-          baseQty,
-          note,
-          narration,
-          oospFlag,
-          createdDateTime,
-          updatedDateTime,
-          isCheckedflag,
-          flag,
-          UUID,
-          isViewed
+          oospId, oospMasterId, orderSubId, custId, salesmanId, storekeeperId, 
+          dateAndTime, supplierId, productId, unitId, carId, rate, updateRate, 
+          qty, availQty, baseQty, note, narration, oospFlag, createdDateTime, 
+          updatedDateTime, isCheckedflag, flag, UUID, isViewed
         ) VALUES (
-          NULL,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
-          outOfStockSub.id == -1 ? null : outOfStockSub.id,
+          outOfStockSub.outOfStockSubId, // Server ID
+          outOfStockSub.outosSubOutosId,
+          outOfStockSub.outosSubOrderSubId,
+          outOfStockSub.outosSubCustId,
+          outOfStockSub.outosSubSalesManId,
+          outOfStockSub.outosSubStockKeeperId,
+          outOfStockSub.outosSubDateAndTime,
+          outOfStockSub.outosSubSuppId,
+          outOfStockSub.outosSubProdId,
+          outOfStockSub.outosSubUnitId,
+          outOfStockSub.outosSubCarId,
+          outOfStockSub.outosSubRate,
+          outOfStockSub.outosSubUpdatedRate,
+          outOfStockSub.outosSubQty,
+          outOfStockSub.outosSubAvailableQty,
+          outOfStockSub.outosSubUnitBaseQty,
+          outOfStockSub.outosSubNote ?? '',
+          outOfStockSub.outosSubNarration ?? '',
+          outOfStockSub.outosSubStatusFlag,
+          outOfStockSub.createdAt,
+          outOfStockSub.updatedAt,
+          outOfStockSub.outosSubIsCheckedFlag,
+          outOfStockSub.outosSubFlag ?? 0,
+          outOfStockSub.uuid,
+          isViewed,
+        ],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Upsert out of stock product in local DB (conflict replace)
+  Future<Either<Failure, void>> upsertOutOfStockProduct(
+    OutOfStockSub outOfStockSub, {
+    int isViewed = 0,
+  }) async {
+    try {
+      final db = await _database;
+      // Use INSERT OR REPLACE (matches KMP pattern)
+      await db.rawInsert(
+        '''
+        INSERT OR REPLACE INTO OutOfStockProducts (
+          oospId, oospMasterId, orderSubId, custId, salesmanId, storekeeperId, 
+          dateAndTime, supplierId, productId, unitId, carId, rate, updateRate, 
+          qty, availQty, baseQty, note, narration, oospFlag, createdDateTime, 
+          updatedDateTime, isCheckedflag, flag, UUID, isViewed
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        ''',
+        [
+          outOfStockSub.outOfStockSubId, // Server ID
           outOfStockSub.outosSubOutosId,
           outOfStockSub.outosSubOrderSubId,
           outOfStockSub.outosSubCustId,
@@ -723,43 +726,22 @@ class OutOfStockRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT OR REPLACE INTO OutOfStockProducts (
-          id,
-          oospId,
-          oospMasterId,
-          orderSubId,
-          custId,
-          salesmanId,
-          storekeeperId,
-          dateAndTime,
-          supplierId,
-          productId,
-          unitId,
-          carId,
-          rate,
-          updateRate,
-          qty,
-          availQty,
-          baseQty,
-          note,
-          narration,
-          oospFlag,
-          createdDateTime,
-          updatedDateTime,
-          isCheckedflag,
-          flag,
-          UUID,
-          isViewed
-        ) VALUES (
-          NULL,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-        ''';
+        final batch = txn.batch();
+        // Use INSERT OR REPLACE (matches KMP pattern)
         for (final outOfStockSub in outOfStockSubs) {
-          await txn.rawInsert(
-            sql,
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO OutOfStockProducts (
+              oospId, oospMasterId, orderSubId, custId, salesmanId, storekeeperId, 
+              dateAndTime, supplierId, productId, unitId, carId, rate, updateRate, 
+              qty, availQty, baseQty, note, narration, oospFlag, createdDateTime, 
+              updatedDateTime, isCheckedflag, flag, UUID, isViewed
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ''',
             [
-              outOfStockSub.id == -1 ? null : outOfStockSub.id,
+              outOfStockSub.outOfStockSubId, // Server ID
               outOfStockSub.outosSubOutosId,
               outOfStockSub.outosSubOrderSubId,
               outOfStockSub.outosSubCustId,
@@ -787,6 +769,7 @@ class OutOfStockRepository {
             ],
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -1049,51 +1032,46 @@ class OutOfStockRepository {
 
   /// Create out of stock via API and update local DB
   /// Matches KMP's createOutOfStockParams structure
+  /// Note: Endpoint doesn't support notification payload, send notifications separately
   Future<Either<Failure, OutOfStock>> createOutOfStock(
     OutOfStock outOfStock, {
-    Map<String, dynamic>? notificationPayload,
+    Map<String, dynamic>? notificationPayload, // Deprecated: endpoint doesn't support it
   }) async {
     try {
       // Build payload matching KMP's createOutOfStockParams
-      final Map<String, dynamic> payload;
-      if (notificationPayload != null) {
-        // Include notification in payload (matching KMP)
-        payload = {
-          'outos_order_sub_id': outOfStock.outosOrderSubId,
-          'outos_cust_id': outOfStock.outosCustId,
-          'outos_sales_man_id': outOfStock.outosSalesManId,
-          'outos_stock_keeper_id': outOfStock.outosStockKeeperId,
-          'outos_date_and_time': outOfStock.outosDateAndTime,
-          'outos_prod_id': outOfStock.outosProdId,
-          'outos_unit_id': outOfStock.outosUnitId,
-          'outos_car_id': outOfStock.outosCarId,
-          'outos_qty': outOfStock.outosQty,
-          'outos_available_qty': outOfStock.outosAvailableQty,
-          'outos_unit_base_qty': outOfStock.outosUnitBaseQty,
-          'outos_note': '',
-          'outos_narration': outOfStock.outosNarration ?? '',
-          'outos_is_compleated_flag': outOfStock.outosIsCompleatedFlag,
-          'items': outOfStock.items?.map((sub) => {
-                'outos_sub_order_sub_id': sub.outosSubOrderSubId,
-                'outos_sub_supp_id': sub.outosSubSuppId,
-                'outos_sub_prod_id': sub.outosSubProdId,
-                'outos_sub_unit_id': sub.outosSubUnitId,
-                'outos_sub_car_id': sub.outosSubCarId,
-                'outos_sub_rate': sub.outosSubRate,
-                'outos_sub_updated_rate': sub.outosSubUpdatedRate,
-                'outos_sub_qty': sub.outosSubQty,
-                'outos_sub_available_qty': sub.outosSubAvailableQty,
-                'outos_sub_unit_base_qty': sub.outosSubUnitBaseQty,
-                'outos_sub_status_flag': 0,
-                'outos_sub_is_checked_flag': 0,
-                'outos_sub_note': '',
-                'outos_sub_narration': sub.outosSubNarration ?? '',
-              }).toList() ?? [],
-          'notification': notificationPayload,
-        };
-      } else {
-        payload = outOfStock.toJson();
-      }
+      // Note: notificationPayload is ignored as endpoint doesn't support it
+      final Map<String, dynamic> payload = {
+        'outos_order_sub_id': outOfStock.outosOrderSubId,
+        'outos_cust_id': outOfStock.outosCustId,
+        'outos_sales_man_id': outOfStock.outosSalesManId,
+        'outos_stock_keeper_id': outOfStock.outosStockKeeperId,
+        'outos_date_and_time': outOfStock.outosDateAndTime,
+        'outos_prod_id': outOfStock.outosProdId,
+        'outos_unit_id': outOfStock.outosUnitId,
+        'outos_car_id': outOfStock.outosCarId,
+        'outos_qty': outOfStock.outosQty,
+        'outos_available_qty': outOfStock.outosAvailableQty,
+        'outos_unit_base_qty': outOfStock.outosUnitBaseQty,
+        'outos_note': '',
+        'outos_narration': outOfStock.outosNarration ?? '',
+        'outos_is_compleated_flag': outOfStock.outosIsCompleatedFlag,
+        'items': outOfStock.items?.map((sub) => {
+              'outos_sub_order_sub_id': sub.outosSubOrderSubId,
+              'outos_sub_supp_id': sub.outosSubSuppId,
+              'outos_sub_prod_id': sub.outosSubProdId,
+              'outos_sub_unit_id': sub.outosSubUnitId,
+              'outos_sub_car_id': sub.outosSubCarId,
+              'outos_sub_rate': sub.outosSubRate,
+              'outos_sub_updated_rate': sub.outosSubUpdatedRate,
+              'outos_sub_qty': sub.outosSubQty,
+              'outos_sub_available_qty': sub.outosSubAvailableQty,
+              'outos_sub_unit_base_qty': sub.outosSubUnitBaseQty,
+              'outos_sub_status_flag': 0,
+              'outos_sub_is_checked_flag': 0,
+              'outos_sub_note': '',
+              'outos_sub_narration': sub.outosSubNarration ?? '',
+            }).toList() ?? [],
+      };
 
       // 1. Call API
       final response = await _dio.post(
@@ -1117,7 +1095,7 @@ class OutOfStockRepository {
 
       // Create updated master with current DB format dates (matching KMP line 1780-1781)
       final masterToStore = OutOfStock(
-        id: outOfStockApi.data.id,
+        outOfStockId: outOfStockApi.data.outOfStockId, // Server ID from API
         outosOrderSubId: outOfStockApi.data.outosOrderSubId,
         outosCustId: outOfStockApi.data.outosCustId,
         outosSalesManId: outOfStockApi.data.outosSalesManId,
@@ -1148,8 +1126,10 @@ class OutOfStockRepository {
 
       return Right(outOfStockApi.data);
     } on DioException catch (e) {
+      developer.log('createOutOfStock:error creating out of stock: ${e.toString()}');
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
+      developer.log('createOutOfStock:error creating out of stock: ${e.toString()}');
       return Left(UnknownFailure.fromError(e));
     }
   }
@@ -1159,22 +1139,66 @@ class OutOfStockRepository {
     OutOfStockSub outOfStockSub,
   ) async {
     try {
+      // 0. Get existing sub from local DB to preserve unchanged fields
+      OutOfStockSub? existingSub;
+      try {
+        final existingResult = await getOutOfStockSubById(outOfStockSub.outOfStockSubId);
+        existingResult.fold(
+          (_) {},
+          (sub) => existingSub = sub,
+        );
+      } catch (_) {
+        // ignore fetch errors; proceed with provided data
+      }
+
+      // Build base sub with NEW values overlaid on existing fields
+      final baseSub = OutOfStockSub(
+        id: existingSub?.id,
+        outOfStockSubId: existingSub?.outOfStockSubId ?? outOfStockSub.outOfStockSubId,
+        outosSubOutosId: outOfStockSub.outosSubOutosId,
+        outosSubOrderSubId: outOfStockSub.outosSubOrderSubId,
+        outosSubCustId: outOfStockSub.outosSubCustId,
+        outosSubSalesManId: outOfStockSub.outosSubSalesManId,
+        outosSubStockKeeperId: outOfStockSub.outosSubStockKeeperId,
+        outosSubDateAndTime: outOfStockSub.outosSubDateAndTime,
+        outosSubSuppId: outOfStockSub.outosSubSuppId,
+        outosSubProdId: outOfStockSub.outosSubProdId,
+        outosSubUnitId: outOfStockSub.outosSubUnitId,
+        outosSubCarId: outOfStockSub.outosSubCarId,
+        outosSubRate: outOfStockSub.outosSubRate,
+        outosSubUpdatedRate: outOfStockSub.outosSubUpdatedRate,
+        outosSubQty: outOfStockSub.outosSubQty,
+        outosSubAvailableQty: outOfStockSub.outosSubAvailableQty,
+        outosSubUnitBaseQty: outOfStockSub.outosSubUnitBaseQty,
+        outosSubStatusFlag: outOfStockSub.outosSubStatusFlag,
+        outosSubIsCheckedFlag: outOfStockSub.outosSubIsCheckedFlag,
+        outosSubNote: outOfStockSub.outosSubNote,
+        outosSubNarration: outOfStockSub.outosSubNarration,
+        outosSubFlag: outOfStockSub.outosSubFlag,
+        uuid: outOfStockSub.uuid,
+        createdAt: outOfStockSub.createdAt,
+        updatedAt: outOfStockSub.updatedAt,
+      );
+
       // 1. Call API
       final response = await _dio.post(
         ApiEndpoints.updateOutOfStockSub,
         data: outOfStockSub.toJson(),
       );
 
-      // 2. Parse response
-      final outOfStockSubApi = OutOfStockSubApi.fromJson(response.data);
+      // 2. Parse response with merge support (handles partial responses)
+      final outOfStockSubApi = OutOfStockSubApi.fromJsonWithMerge(
+        response.data,
+        existingOutOfStockSub: baseSub,
+      );
       if (outOfStockSubApi.status != 1) {
         return Left(ServerFailure.fromError(
           'Failed to update out of stock sub: ${outOfStockSubApi.message}',
         ));
       }
 
-      // 3. Store in local DB
-      final addResult = await addOutOfStockProduct(outOfStockSubApi.data);
+      // 3. Store in local DB (upsert to avoid duplicates)
+      final addResult = await upsertOutOfStockProduct(outOfStockSubApi.data);
       if (addResult.isLeft) {
         return addResult.map((_) => outOfStockSubApi.data);
       }
@@ -1190,13 +1214,15 @@ class OutOfStockRepository {
   /// Create multiple out of stock records via API and update local DB
   /// Converted from KMP's reportAllAdmin API call (addOutOfStockAll)
   /// Matches KMP's createOutOfStockAllParams structure
+  /// Note: Endpoint doesn't support notification payload, send notifications separately
   Future<Either<Failure, List<OutOfStock>>> createOutOfStockAll({
     required List<OutOfStock> outOfStockMasters,
     required List<OutOfStockSub> outOfStockSubs,
-    required Map<String, dynamic> notificationPayload,
+    Map<String, dynamic>? notificationPayload, // Deprecated: endpoint doesn't support it
   }) async {
     try {
       // Build payload matching KMP's createOutOfStockAllParams
+      // Note: notificationPayload is ignored as endpoint doesn't support it
       final Map<String, dynamic> payload = {
         'masters': outOfStockMasters.map((master) {
           // Find corresponding sub for this master
@@ -1240,7 +1266,6 @@ class OutOfStockRepository {
             ],
           };
         }).toList(),
-        'notification': notificationPayload,
       };
 
       // 1. Call API

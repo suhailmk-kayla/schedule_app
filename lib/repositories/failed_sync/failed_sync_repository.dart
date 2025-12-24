@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:either_dart/either.dart';
 import '../local/database_helper.dart';
 import '../../models/sync_models.dart';
@@ -22,13 +24,14 @@ class FailedSyncRepository {
       final db = await _databaseHelper.database;
       await db.rawInsert(
         '''
-        INSERT INTO FailedSync (id, table_id, data_id)
+        INSERT OR REPLACE INTO FailedSync (id, table_id, data_id)
         VALUES (NULL, ?, ?)
         ''',
         [tableId, dataId],
       );
       return const Right(null);
     } catch (e) {
+      developer.log('FailedSyncRepository: addFailedSync error: ${e.toString()}');
       return Left(DatabaseFailure.fromError(e));
     }
   }

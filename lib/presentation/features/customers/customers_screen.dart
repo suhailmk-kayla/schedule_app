@@ -110,20 +110,21 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Future<void> _handleOrderClick(CustomerWithNames customer) async {
-    final provider = Provider.of<CustomersProvider>(context, listen: false);
-    // final order = await provider.getOrderByCustomer(customer);
-    // if (order != null && mounted) {
-      // Navigate to CreateOrderScreen with the order ID
-      // Matches KMP's orderClick behavior (BaseScreen.kt line 898-903)
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => CreateOrderScreen(
-            // orderId: order.id.toString()
-            ),
+    // Navigate to CreateOrderScreen with customer pre-selected
+    // Matches KMP's orderClick behavior (BaseScreen.kt line 898-903)
+    // When order icon is clicked, navigate to CreateOrderScreen and auto-select the customer
+    developer.log('Customer name: ${customer.name}');
+    final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+    ordersProvider.setCustomer(customer.customerId, customer.name);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CreateOrderScreen(
+          customerId: customer.customerId,
+          customerName: customer.name,
         ),
-      );
-    // }
+      ),
+    );
   }
 
   void _handleAddNew() {
@@ -156,144 +157,162 @@ class _CustomersScreenState extends State<CustomersScreen> {
           });
         }
 
-        return Scaffold(
-      appBar: AppBar(
-        title: _showSearchBar
-            ? TextField(
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                style: const TextStyle(color: Colors.black),
-                decoration: InputDecoration(
-                  hintText: 'Search',
-                  hintStyle: const TextStyle(color: Colors.grey),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(30),
-                    borderSide: BorderSide.none,
+        return PopScope(
+           onPopInvokedWithResult: (didPop, result) {
+            if (didPop) {
+              final provider = Provider.of<CustomersProvider>(context, listen: false);
+              // Clear search and filters when navigating back
+              _searchController.clear();
+              provider.setSearchKey('');
+              provider.setRouteFilter(-1, 'All Routes');
+              provider.loadCustomers();
+              // Hide search bar if it's open
+              if (_showSearchBar) {
+                setState(() {
+                  _showSearchBar = false;
+                });
+              }
+            }
+          },
+          child: Scaffold(
+                appBar: AppBar(
+          title: _showSearchBar
+              ? TextField(
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  style: const TextStyle(color: Colors.black),
+                  decoration: InputDecoration(
+                    hintText: 'Search',
+                    hintStyle: const TextStyle(color: Colors.grey),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[200],
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                   ),
-                  filled: true,
-                  fillColor: Colors.grey[200],
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                ),
-                onChanged: (value) {
-                  _handleSearch(value);
-                },
-              )
-            : const Text('Customers List'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(_showSearchBar ? Icons.close : Icons.search),
-            onPressed: _toggleSearchBar,
+                  onChanged: (value) {
+                    _handleSearch(value);
+                  },
+                )
+              : const Text('Customers List'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Route filter card
-          Consumer<CustomersProvider>(
-            builder: (context, provider, _) {
-              return Card(
-                margin: const EdgeInsets.all(8),
-                child: InkWell(
-                  onTap: _showRouteBottomSheetDialog,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.route, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            provider.routeSt,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.black,
+          actions: [
+            IconButton(
+              icon: Icon(_showSearchBar ? Icons.close : Icons.search),
+              onPressed: _toggleSearchBar,
+            ),
+          ],
+                ),
+                body: Column(
+          children: [
+            // Route filter card
+            Consumer<CustomersProvider>(
+              builder: (context, provider, _) {
+                return Card(
+                  margin: const EdgeInsets.all(8),
+                  child: InkWell(
+                    onTap: _showRouteBottomSheetDialog,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.route, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              provider.routeSt,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.black,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
-          ),
-          // Customers list
-          Expanded(
-            child: Consumer<CustomersProvider>(
-              builder: (context, provider, _) {
-                if (provider.isLoading && provider.customers.isEmpty) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (provider.errorMessage != null && provider.customers.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          provider.errorMessage!,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () => provider.loadCustomers(),
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                if (provider.customers.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      'No customers found',
-                      style: TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  itemCount: provider.customers.length,
-                  // separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final customer = provider.customers[index];
-                    return _CustomerListItem(
-                      customer: customer,
-                      isShowAddOrder: isShowAddOrder,
-                      onOrderClick: () => _handleOrderClick(customer),
-                      onItemClick: () => _handleItemClick(customer),
-                    );
-                  },
                 );
               },
             ),
+            // Customers list
+            Expanded(
+              child: Consumer<CustomersProvider>(
+                builder: (context, provider, _) {
+                  if (provider.isLoading && provider.customers.isEmpty) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+          
+                  if (provider.errorMessage != null && provider.customers.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            provider.errorMessage!,
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () => provider.loadCustomers(),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+          
+                  if (provider.customers.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'No customers found',
+                        style: TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                    );
+                  }
+          
+                  return ListView.builder(
+                    itemCount: provider.customers.length,
+                    // separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final customer = provider.customers[index];
+                      return _CustomerListItem(
+                        customer: customer,
+                        isShowAddOrder: isShowAddOrder,
+                        onOrderClick: () => _handleOrderClick(customer),
+                        onItemClick: () => _handleItemClick(customer),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+                ),
+                // Add customer FAB (only for admin and not in selection mode)
+                floatingActionButton: FutureBuilder<int>(
+          future: StorageHelper.getUserType(),
+          builder: (context, snapshot) {
+            final isAdmin = snapshot.data == 1;
+            if (isShowAddOrder && isAdmin) {
+              return FloatingActionButton(
+                onPressed: _handleAddNew,
+                backgroundColor: Colors.black,
+                child: const Icon(Icons.add, color: Colors.white),
+              );
+            }
+            return const SizedBox.shrink();
+          },
+                ),
           ),
-        ],
-      ),
-      // Add customer FAB (only for admin and not in selection mode)
-      floatingActionButton: FutureBuilder<int>(
-        future: StorageHelper.getUserType(),
-        builder: (context, snapshot) {
-          final isAdmin = snapshot.data == 1;
-          if (isShowAddOrder && isAdmin) {
-            return FloatingActionButton(
-              onPressed: _handleAddNew,
-              backgroundColor: Colors.black,
-              child: const Icon(Icons.add, color: Colors.white),
-            );
-          }
-          return const SizedBox.shrink();
-        },
-      ),
         );
       },
     );

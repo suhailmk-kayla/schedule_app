@@ -56,7 +56,10 @@ class _SplashScreenState extends State<SplashScreen>
       // Process stored notifications (from when app was terminated)
       // This happens AFTER login check, so we don't process during login sync
       try {
-        await PushNotificationHelper.processStoredNotifications();
+        
+       await PushNotificationHelper.processStoredNotifications();
+       // this command by amal just for christmas celebration ignore it
+
       } catch (e) {
         // Log error but don't block navigation
         debugPrint('Error processing stored notifications: $e');
@@ -64,6 +67,7 @@ class _SplashScreenState extends State<SplashScreen>
       
       // Navigate based on user type (matches KMP BaseScreen.kt logic)
       if (mounted) {
+
         await NavigationHelper.navigateToInitialScreen(context);
       }
     } else {

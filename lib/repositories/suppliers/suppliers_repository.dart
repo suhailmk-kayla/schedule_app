@@ -126,7 +126,7 @@ class SuppliersRepository {
       final map = supplier.toMap();
       await db.rawInsert(
         '''
-        INSERT INTO Suppliers(
+        INSERT OR REPLACE INTO Suppliers(
           supplierId, userId, code, name, phone, address,
           deviceToken, createdDateTime, updatedDateTime, flag
         ) VALUES (
@@ -165,7 +165,7 @@ class SuppliersRepository {
           // CRITICAL: Use batch.rawInsert() instead of await txn.rawInsert() - 100x faster!
           batch.rawInsert(
             '''
-            INSERT INTO Suppliers(
+            INSERT OR REPLACE INTO Suppliers(
               supplierId, userId, code, name, phone, address,
               deviceToken, createdDateTime, updatedDateTime, flag
             ) VALUES (

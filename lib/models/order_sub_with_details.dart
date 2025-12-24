@@ -9,6 +9,7 @@ class OrderSubWithDetails {
   final String? productName;
   final String? productBrand;
   final String? productSubBrand;
+  final String? productPhoto; // Product image URL
   final OrderSub orderSub;
 
   const OrderSubWithDetails({
@@ -17,6 +18,7 @@ class OrderSubWithDetails {
     this.productName,
     this.productBrand,
     this.productSubBrand,
+    this.productPhoto,
     required this.orderSub,
   });
 
@@ -28,6 +30,7 @@ class OrderSubWithDetails {
       productName: map['productName'] as String?,
       productBrand: map['productBrand'] as String?,
       productSubBrand: map['productSubBrand'] as String?,
+      productPhoto: map['productPhoto'] as String?,
       orderSub: OrderSub.fromMap(map),
     );
   }

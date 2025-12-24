@@ -391,7 +391,7 @@ class _AddSubCategoryDialogState extends State<_AddSubCategoryDialog> {
               return DropdownButtonFormField<int>(
                 value: _categoryId == -1 ? null : _categoryId,
                 decoration: const InputDecoration(
-                  suffixIcon: Icon(Icons.arrow_drop_down),
+                  // suffixIcon: Icon(Icons.arrow_drop_down),
                   labelText: 'Category',
                   border: OutlineInputBorder(),
                   isDense: true,
@@ -399,10 +399,10 @@ class _AddSubCategoryDialogState extends State<_AddSubCategoryDialog> {
                 hint: const Text('Select Category'),
                 items: provider.categoriesList.map((category) {
                   return DropdownMenuItem<int>(
-
-                    value: category.id,
-                    child: Text(category.name,
-                    style: const TextStyle(
+                    value: category.categoryId, // Use server ID, not local DB primary key
+                    child: Text(
+                      category.name,
+                      style: const TextStyle(
                         fontSize: 16,
                       ),
                     ),
@@ -459,7 +459,7 @@ class _AddSubCategoryDialogState extends State<_AddSubCategoryDialog> {
             }
             widget.onConfirmation(
               _categoryId,
-              widget.subCategory?.id ?? -1,
+              widget.subCategory?.subCategoryId ?? -1, // Use server ID, not local DB primary key
               _nameController.text.trim(),
             );
           },

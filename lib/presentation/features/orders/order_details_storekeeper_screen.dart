@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'dart:developer' as developer;
-
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../../models/order_api.dart';
 import '../../../models/order_item_detail.dart';
 import '../../../models/order_with_name.dart';
@@ -10,6 +9,7 @@ import '../../../utils/config.dart';
 import '../../../utils/order_flags.dart';
 import '../../../utils/notification_manager.dart';
 import '../../provider/orders_provider.dart';
+import '../products/products_screen.dart';
 
 /// Order Details Screen for Storekeeper Role
 /// Converted from KMP's OrderDetailsStorekeeper.kt
@@ -82,7 +82,7 @@ class _OrderDetailsStorekeeperScreenState
           WidgetsBinding.instance.addPostFrameCallback((_) {
             final order = ordersProvider.orderDetails;
             if (order != null &&
-                notificationManager.orderId == order.order.id) {
+                notificationManager.orderId == order.order.orderId) {
               _showStorekeeperCheckingDialog(context, notificationManager);
             } else {
               notificationManager.resetStorekeeperAlreadyCheckingTrigger();
@@ -194,6 +194,18 @@ class _OrderDetailsStorekeeperScreenState
             ...items.asMap().entries.map((entry) {
               final index = entry.key;
               final item = entry.value;
+              
+              // Show completed card if order is completed
+              if (order.orderApproveFlag == OrderApprovalFlag.completed) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _CompletedOrderItemCard(
+                    index: index + 1,
+                    item: item,
+                  ),
+                );
+              }
+              
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _OrderItemCard(
@@ -237,9 +249,11 @@ class _OrderDetailsStorekeeperScreenState
                     }
                   },
                   onAddSuggestion: (orderSub) {
-                    // Navigate to products screen to add suggestion
-                    // This will be handled by the parent/navigation
-                    developer.log('Add suggestion for orderSub: ${orderSub.id}');
+                    _selectProductForSuggestion(
+                      context,
+                      ordersProvider: ordersProvider,
+                      orderSub: orderSub,
+                    );
                   },
                 ),
               );
@@ -380,6 +394,63 @@ class _OrderDetailsStorekeeperScreenState
             child: const Text('Exit'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _selectProductForSuggestion(
+    BuildContext context, {
+    required OrdersProvider ordersProvider,
+    required OrderSub orderSub,
+  }) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProductsScreen(
+          selectForSuggestion: true,
+          onProductSelected: (product) async {
+            // Validate: not same product
+            if (product.productId == orderSub.orderSubPrdId) {
+              ToastHelper.showInfo('Cannot suggest the same product');
+              return;
+            }
+            // Validate: product not already in order
+            final alreadyInOrder = ordersProvider.orderDetailItems.any(
+              (item) => item.orderSub.orderSubPrdId == product.productId,
+            );
+            if (alreadyInOrder) {
+              ToastHelper.showInfo('Product already exists in this order');
+              return;
+            }
+            // Allow multiple suggestions for the same product
+            final price = product.price;
+            final success = await ordersProvider.addSuggestionToOrderSub(
+              orderSubId: orderSub.orderSubId,
+              productId: product.productId,
+              price: price,
+              note: '',
+            );
+
+            if (!context.mounted) return;
+
+            if (success) {
+              // Refresh order details to get updated suggestions list
+              await ordersProvider.loadOrderDetails(widget.orderId);
+              
+              if (!context.mounted) return;
+              
+              ToastHelper.showInfo('Suggestion added successfully');
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    ordersProvider.errorMessage ?? 'Failed to add suggestion',
+                  ),
+                ),
+              );
+            }
+          },
+        ),
       ),
     );
   }
@@ -540,7 +611,7 @@ class _OrderItemCardState extends State<_OrderItemCard> {
   void initState() {
     super.initState();
     final orderSub = widget.item.orderSub;
-    final orderSubId = orderSub.id;
+    final orderSubId = orderSub.orderSubId;
 
     // Initialize note
     String initialNote = '';
@@ -578,7 +649,7 @@ class _OrderItemCardState extends State<_OrderItemCard> {
   @override
   Widget build(BuildContext context) {
     final orderSub = widget.item.orderSub;
-    final orderSubId = orderSub.id;
+    final orderSubId = orderSub.orderSubId;
     final isCheckingOrCancelled = widget.order.orderApproveFlag ==
             OrderApprovalFlag.sendToStorekeeper ||
         widget.order.orderApproveFlag == OrderApprovalFlag.cancelled;
@@ -778,44 +849,27 @@ class _OrderItemCardState extends State<_OrderItemCard> {
             // Suggestions list
             if (_showSuggestions && widget.item.suggestions.isNotEmpty) ...[
               const SizedBox(height: 8),
-              ...widget.item.suggestions.map((suggestion) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: InputChip(
-                    label: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          suggestion.note?.isNotEmpty == true
-                              ? suggestion.note!
-                              : 'Suggestion',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                        Text(
-                          'Price: ${suggestion.price}',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ],
-                    ),
-                    onSelected: (_) {},
-                    deleteIcon: !isChecked
-                        ? const Icon(Icons.close, size: 18)
-                        : null,
-                    onDeleted: !isChecked
-                        ? () {
-                            final ordersProvider =
-                                Provider.of<OrdersProvider>(context,
-                                    listen: false);
-                            ordersProvider.removeSuggestion(suggestion.id);
-                          }
-                        : null,
-                  ),
-                );
-              }),
+              SizedBox(
+                height: widget.item.suggestions.length > 3 ? 150 : null,
+                child: widget.item.suggestions.length > 3
+                    ? ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: widget.item.suggestions.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 4),
+                        itemBuilder: (context, index) {
+                          final suggestion = widget.item.suggestions[index];
+                          return _buildSuggestionChip(suggestion, isChecked);
+                        },
+                      )
+                    : Column(
+                        children: widget.item.suggestions.map((suggestion) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: _buildSuggestionChip(suggestion, isChecked),
+                          );
+                        }).toList(),
+                      ),
+              ),
             ],
             // Note input and Out of Stock checkboxes (if not checked or has status)
             if (!isChecked || hasStatus) ...[
@@ -971,6 +1025,64 @@ class _OrderItemCardState extends State<_OrderItemCard> {
     );
   }
 
+  Widget _buildSuggestionChip(OrderSubSuggestion suggestion, bool isChecked) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  suggestion.productName?.isNotEmpty == true
+                      ? suggestion.productName!
+                      : 'Product ${suggestion.prodId}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  'Price: ${suggestion.price}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                if (suggestion.note?.isNotEmpty == true)
+                  Text(
+                    suggestion.note!,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (!isChecked)
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () {
+                final ordersProvider =
+                    Provider.of<OrdersProvider>(context, listen: false);
+                ordersProvider.removeSuggestion(suggestion.id);
+              },
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStockStatus(OrderSub orderSub) {
     if (orderSub.orderSubOrdrFlag >= OrderSubFlag.outOfStock) {
       final orderFlag = orderSub.orderSubOrdrFlag;
@@ -1026,6 +1138,69 @@ class _OrderItemCardState extends State<_OrderItemCard> {
       }
     }
     return true;
+  }
+}
+
+/// Completed Order Item Card
+/// Shows minimal details for completed orders (read-only, no actions)
+class _CompletedOrderItemCard extends StatelessWidget {
+  final int index;
+  final OrderItemDetail item;
+
+  const _CompletedOrderItemCard({
+    required this.index,
+    required this.item,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final flag = item.orderSub.orderSubOrdrFlag;
+    final qtyLabel = flag > OrderSubFlag.inStock
+        ? item.orderSub.orderSubAvailableQty.toString()
+        : item.orderSub.orderSubQty.toString();
+
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Colors.black12),
+      ),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '#$index  ${item.productName}',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            _InfoRow(label: 'Brand', value: item.productBrand),
+            _InfoRow(label: 'Sub Brand', value: item.productSubBrand),
+            Row(
+              children: [
+                Expanded(
+                  child: _InfoRow(
+                    label: 'Unit',
+                    value: item.unitDisplayName,
+                  ),
+                ),
+                Text(
+                  qtyLabel,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -117,8 +117,11 @@ class CarVersionListApi {
 /// Converted from KMP's Brand class
 @JsonSerializable()
 class Brand {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(includeToJson: false, includeFromJson: false)
+  final int? id; // local autoincrement PK (not part of API)
+
+  @JsonKey(name: 'id', defaultValue: -1) // API/server ID
+  final int carBrandId;
 
   @JsonKey(name: 'brand_name', defaultValue: '')
   final String brandName;
@@ -126,7 +129,8 @@ class Brand {
   final int? flag;
 
   const Brand({
-    this.id = -1,
+    this.id,
+    this.carBrandId = -1,
     this.brandName = '',
     this.flag,
   });
@@ -138,7 +142,8 @@ class Brand {
   /// Convert from database map (camelCase column names)
   factory Brand.fromMap(Map<String, dynamic> map) {
     return Brand(
-      id: map['carBrandId'] as int? ?? -1,
+      id: map['id'] as int?, // local PK if present
+      carBrandId: map['carBrandId'] as int? ?? -1,
       brandName: map['name'] as String? ?? '',
       flag: map['flag'] as int?,
     );
@@ -147,7 +152,7 @@ class Brand {
   /// Convert to database map (camelCase column names)
   Map<String, dynamic> toMap() {
     return {
-      'carBrandId': id,
+      'carBrandId': carBrandId, // server ID
       'name': brandName,
       'flag': flag ?? 1,
     };
@@ -158,8 +163,11 @@ class Brand {
 /// Converted from KMP's Name class
 @JsonSerializable()
 class Name {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(includeToJson: false, includeFromJson: false)
+  final int? id; // local autoincrement PK
+
+  @JsonKey(name: 'id', defaultValue: -1) // API/server ID
+  final int carNameId;
 
   @JsonKey(name: 'car_brand_id', defaultValue: -1)
   final int carBrandId;
@@ -170,7 +178,8 @@ class Name {
   final int? flag;
 
   const Name({
-    this.id = -1,
+    this.id,
+    this.carNameId = -1,
     this.carBrandId = -1,
     this.carName = '',
     this.flag,
@@ -183,7 +192,8 @@ class Name {
   /// Convert from database map (camelCase column names)
   factory Name.fromMap(Map<String, dynamic> map) {
     return Name(
-      id: map['carNameId'] as int? ?? -1,
+      id: map['id'] as int?, // local PK
+      carNameId: map['carNameId'] as int? ?? -1,
       carBrandId: map['carBrandId'] as int? ?? -1,
       carName: map['name'] as String? ?? '',
       flag: map['flag'] as int?,
@@ -193,7 +203,7 @@ class Name {
   /// Convert to database map (camelCase column names)
   Map<String, dynamic> toMap() {
     return {
-      'carNameId': id,
+      'carNameId': carNameId, // server ID
       'carBrandId': carBrandId,
       'name': carName,
       'flag': flag ?? 1,
@@ -205,8 +215,11 @@ class Name {
 /// Converted from KMP's Model class
 @JsonSerializable()
 class Model {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(includeToJson: false, includeFromJson: false)
+  final int? id; // local autoincrement PK
+
+  @JsonKey(name: 'id', defaultValue: -1) // API/server ID
+  final int carModelId;
 
   @JsonKey(name: 'car_brand_id', defaultValue: -1)
   final int carBrandId;
@@ -222,7 +235,8 @@ class Model {
   final List<Version>? versions;
 
   const Model({
-    this.id = -1,
+    this.id,
+    this.carModelId = -1,
     this.carBrandId = -1,
     this.carNameId = -1,
     this.modelName = '',
@@ -237,7 +251,8 @@ class Model {
   /// Convert from database map (camelCase column names)
   factory Model.fromMap(Map<String, dynamic> map) {
     return Model(
-      id: map['carModelId'] as int? ?? -1,
+      id: map['id'] as int?, // local PK
+      carModelId: map['carModelId'] as int? ?? -1,
       carBrandId: map['carBrandId'] as int? ?? -1,
       carNameId: map['carNameId'] as int? ?? -1,
       modelName: map['name'] as String? ?? '',
@@ -248,7 +263,7 @@ class Model {
   /// Convert to database map (camelCase column names)
   Map<String, dynamic> toMap() {
     return {
-      'carModelId': id,
+      'carModelId': carModelId, // server ID
       'carBrandId': carBrandId,
       'carNameId': carNameId,
       'name': modelName,
@@ -261,8 +276,11 @@ class Model {
 /// Converted from KMP's Version class
 @JsonSerializable()
 class Version {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(includeToJson: false, includeFromJson: false)
+  final int? id; // local autoincrement PK
+
+  @JsonKey(name: 'id', defaultValue: -1) // API/server ID
+  final int carVersionId;
 
   @JsonKey(name: 'car_brand_id', defaultValue: -1)
   final int carBrandId;
@@ -279,7 +297,8 @@ class Version {
   final int? flag;
 
   const Version({
-    this.id = -1,
+    this.id,
+    this.carVersionId = -1,
     this.carBrandId = -1,
     this.carNameId = -1,
     this.carModelId = -1,
@@ -295,7 +314,8 @@ class Version {
   /// Convert from database map (camelCase column names)
   factory Version.fromMap(Map<String, dynamic> map) {
     return Version(
-      id: map['carVersionId'] as int? ?? -1,
+      id: map['id'] as int?, // local PK
+      carVersionId: map['carVersionId'] as int? ?? -1,
       carBrandId: map['carBrandId'] as int? ?? -1,
       carNameId: map['carNameId'] as int? ?? -1,
       carModelId: map['carModelId'] as int? ?? -1,
@@ -307,7 +327,7 @@ class Version {
   /// Convert to database map (camelCase column names)
   Map<String, dynamic> toMap() {
     return {
-      'carVersionId': id,
+      'carVersionId': carVersionId, // server ID
       'carBrandId': carBrandId,
       'carNameId': carNameId,
       'carModelId': carModelId,

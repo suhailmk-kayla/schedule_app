@@ -61,10 +61,12 @@ class AuthProvider extends ChangeNotifier {
   }
 
   /// Login with user code and password
+  /// TPIN is optional and only required for admin users when device_token mismatch occurs
   Future<Either<Failure, LoginResponseData>> login({
     required String userCode,
     required String password,
     String? deviceToken,
+    String? tpin, // Optional TPIN for admin override
   }) async {
     _setLoading(true);
     _clearError();
@@ -107,6 +109,12 @@ class AuthProvider extends ChangeNotifier {
         // This should rarely happen if OneSignal is properly initialized
         requestPayload['token'] = 'not_available';
         developer.log('Warning: Device token is empty after retries, using placeholder');
+      }
+
+      // Add TPIN if provided (for admin override when device_token mismatch)
+      if (tpin != null && tpin.isNotEmpty) {
+        requestPayload['tpin'] = tpin;
+        developer.log('TPIN provided for admin override');
       }
 
       // Debug: Log request payload
@@ -272,6 +280,12 @@ class AuthProvider extends ChangeNotifier {
       'userType': await StorageHelper.getUserType(),
       'isLoggedIn': await checkIsLoggedIn(),
     };
+  }
+
+  /// Clear error message (public method for UI to call)
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
   }
 
   // ============================================================================

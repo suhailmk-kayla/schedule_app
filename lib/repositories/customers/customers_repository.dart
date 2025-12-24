@@ -113,10 +113,13 @@ class CustomersRepository {
           );
         }
       }
-
+      if(maps.isEmpty) {
+        developer.log('No customers found!!!');
+      }
       final customers = maps.map((map) => CustomerWithNames.fromMap(map)).toList();
       return Right(customers);
     } catch (e) {
+      developer.log('Failed to get all customers: $e');
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -257,7 +260,7 @@ Future<Either<Failure, void>> editCustomer(Customer customer) async {
       final db = await _database;
       await db.rawInsert(
         '''
-        INSERT INTO Customers (
+        INSERT OR REPLACE INTO Customers (
           customerId,
           code,
           name,
@@ -351,27 +354,18 @@ Future<Either<Failure, void>> editCustomer(Customer customer) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT INTO Customers (
-          customerId,
-          code,
-          name,
-          phone,
-          address,
-          routId,
-          salesmanId,
-          rating,
-          deviceToken,
-          createdDateTime,
-          updatedDateTime,
-          flag
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-        ''';
+        final batch = txn.batch();
         for (final customer in customers) {
-          await txn.rawInsert(
-            sql,
+          // Use INSERT OR REPLACE (matches KMP pattern)
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO Customers (
+              customerId, code, name, phone, address, routId, salesmanId, 
+              rating, deviceToken, createdDateTime, updatedDateTime, flag
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ''',
             [
               customer.customerId,
               customer.code,
@@ -381,13 +375,14 @@ Future<Either<Failure, void>> editCustomer(Customer customer) async {
               customer.routId,
               customer.salesManId,
               customer.rating,
-              '',
+              '', // deviceToken
               customer.createdAt ?? '',
               customer.updatedAt ?? '',
               customer.flag ?? 1,
             ],
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -537,24 +532,40 @@ Future<Either<Failure, void>> editCustomer(Customer customer) async {
   /// Uses custom deserialization to merge partial API response with existing data
   Future<Either<Failure, Customer>> updateCustomer(Customer customer) async {
     try {
-      // 1. Get existing customer from local DB to preserve unchanged fields
+      // 1. Get existing customer from local DB (used to preserve fields like deviceToken/createdAt)
       final existingCustomerResult = await getCustomerById(customer.customerId!);
       Customer? existingCustomer;
       existingCustomerResult.fold(
-        (failure) => null,
+        (_) {},
         (cust) => existingCustomer = cust,
       );
 
-      // 2. Call API
+      // 2. Build base customer with NEW values from the caller overlaid on existing fields
+      //    This ensures merge uses the latest user edits instead of stale local data.
+      final baseCustomer = (existingCustomer ?? customer).copyWith(
+        customerId: existingCustomer?.customerId ?? customer.customerId,
+        code: customer.code,
+        name: customer.name,
+        phoneNo: customer.phoneNo,
+        address: customer.address,
+        routId: customer.routId,
+        salesManId: customer.salesManId,
+        rating: customer.rating,
+        flag: customer.flag,
+        createdAt: existingCustomer?.createdAt ?? customer.createdAt,
+        updatedAt: customer.updatedAt ?? existingCustomer?.updatedAt,
+      );
+
+      // 3. Call API
       final response = await _dio.post(
         ApiEndpoints.updateCustomer,
         data: customer.toJson(),
       );
 
-      // 3. Parse response with merge support (handles partial responses)
+      // 4. Parse response with merge support (handles partial responses)
       final customerSuccessApi = CustomerSuccessApi.fromJsonWithMerge(
         response.data,
-        existingCustomer: existingCustomer,
+        existingCustomer: baseCustomer,
       );
       
       if (customerSuccessApi.status != 1) {
@@ -563,7 +574,7 @@ Future<Either<Failure, void>> editCustomer(Customer customer) async {
         ));
       }
 
-      // 4. Update local DB with merged data
+      // 5. Update local DB with merged data
       final updateResult = await updateCustomerLocal(customerSuccessApi.data);
       if (updateResult.isLeft) {
         return updateResult.map((_) => customerSuccessApi.data);

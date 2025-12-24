@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 
 import '../../provider/salesman_provider.dart';
 import '../../provider/users_provider.dart';
@@ -99,15 +100,28 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
       return;
     }
 
+    // Validation 3: Check if phone number is already taken by another salesman
+    final usersProvider = context.read<UsersProvider>();
+    final phoneNumber = _phoneController.text.trim();
+    
+    final phoneExists = widget.userId == null
+        ? await usersProvider.checkSalesmanPhoneExists(phoneNumber)
+        : await usersProvider.checkSalesmanPhoneExistsWithId(phoneNumber, widget.userId!);
+    
+    if (phoneExists) {
+      if (!mounted) return;
+      ToastHelper.showWarning('Phone number already taken by another salesman');
+      return;
+    }
+
     FocusScope.of(context).unfocus();
     setState(() => _isSaving = true);
 
-    final usersProvider = context.read<UsersProvider>();
     final success = widget.userId == null
         ? await usersProvider.createUser(
             code: _codeController.text.trim(),
             name: _nameController.text.trim(),
-            phone: _phoneController.text.trim(),
+            phone: phoneNumber,
             categoryId: 3, // Salesman category
             address: _addressController.text.trim(),
             password: _passwordController.text,
@@ -116,7 +130,7 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
             userId: widget.userId!,
             code: _codeController.text.trim(),
             name: _nameController.text.trim(),
-            phone: _phoneController.text.trim(),
+            phone: phoneNumber,
             categoryId: 3, // Salesman category
             address: _addressController.text.trim(),
           );
@@ -138,9 +152,7 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
     } else {
       final message =
           usersProvider.errorMessage ?? 'Failed to ${widget.userId == null ? 'create' : 'update'} salesman. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+          ToastHelper.showError(message);
     }
   }
 
@@ -252,11 +264,16 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
                       ),
                     ),
                     validator: (value) {
-                      if (value != null && value.trim().isNotEmpty) {
-                        if (value.trim().length < 10) {
-                          return 'Phone number must be at least 10 digits';
-                        }
+                      // Validation 1: Phone number cannot be empty or null
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Phone number cannot be empty';
                       }
+                      
+                      // Validation 2: Phone number must be exactly 10 digits
+                      if (value.trim().length != 10) {
+                        return 'Phone number must be exactly 10 digits';
+                      }
+                      
                       return null;
                     },
                   ),

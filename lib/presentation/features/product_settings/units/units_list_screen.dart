@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../../utils/asset_images.dart';
 import '../../../provider/units_provider.dart';
 import '../../../../models/master_data_api.dart';
-import 'create_unit_screen.dart';
+import 'unit_form_screen.dart';
 import 'unit_details_screen.dart';
 
 /// Units List Screen
@@ -72,7 +72,7 @@ class _UnitsListScreenState extends State<UnitsListScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const CreateUnitScreen(),
+        builder: (_) => const UnitFormScreen(), // Create mode (unit is null)
       ),
     ).then((_) {
       // Refresh list after returning from create screen

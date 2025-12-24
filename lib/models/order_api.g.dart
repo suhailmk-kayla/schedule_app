@@ -75,7 +75,7 @@ Map<String, dynamic> _$OrderSubApiToJson(OrderSubApi instance) =>
     };
 
 Order _$OrderFromJson(Map<String, dynamic> json) => Order(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  orderId: (json['id'] as num?)?.toInt() ?? -1,
   uuid: json['uuid'] as String? ?? '',
   orderInvNo: json['order_inv_no'] == null
       ? 0
@@ -118,7 +118,7 @@ Order _$OrderFromJson(Map<String, dynamic> json) => Order(
 );
 
 Map<String, dynamic> _$OrderToJson(Order instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.orderId,
   'uuid': instance.uuid,
   'order_inv_no': instance.orderInvNo,
   'order_cust_id': instance.orderCustId,
@@ -139,7 +139,7 @@ Map<String, dynamic> _$OrderToJson(Order instance) => <String, dynamic>{
 };
 
 OrderSub _$OrderSubFromJson(Map<String, dynamic> json) => OrderSub(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  orderSubId: (json['id'] as num?)?.toInt() ?? -1,
   orderSubOrdrInvId: json['order_sub_ordr_inv_id'] == null
       ? 0
       : _intFromJsonZero(json['order_sub_ordr_inv_id']),
@@ -199,7 +199,7 @@ OrderSub _$OrderSubFromJson(Map<String, dynamic> json) => OrderSub(
 );
 
 Map<String, dynamic> _$OrderSubToJson(OrderSub instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.orderSubId,
   'order_sub_ordr_inv_id': instance.orderSubOrdrInvId,
   'order_sub_ordr_id': instance.orderSubOrdrId,
   'order_sub_cust_id': instance.orderSubCustId,
@@ -232,6 +232,7 @@ OrderSubSuggestion _$OrderSubSuggestionFromJson(Map<String, dynamic> json) =>
       price: (json['price'] as num?)?.toDouble() ?? 0.0,
       note: json['note'] as String?,
       flag: (json['flag'] as num?)?.toInt(),
+      productName: json['productName'] as String?,
     );
 
 Map<String, dynamic> _$OrderSubSuggestionToJson(OrderSubSuggestion instance) =>
@@ -242,4 +243,5 @@ Map<String, dynamic> _$OrderSubSuggestionToJson(OrderSubSuggestion instance) =>
       'price': instance.price,
       'note': instance.note,
       'flag': instance.flag,
+      'productName': instance.productName,
     };

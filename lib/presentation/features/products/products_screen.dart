@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/helpers/image_url_handler.dart';
 import 'package:schedule_frontend_flutter/utils/storage_helper.dart';
 import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/products_provider.dart';
@@ -13,12 +14,16 @@ class ProductsScreen extends StatefulWidget {
   final String? orderId; // If provided, this is selection mode for order
   final String? orderSubId; // If provided, this is for replacing order sub
   final bool isOutOfStock; // If true, shows out of stock products
+  final bool selectForSuggestion; // If true, select product for suggestion list
+  final ValueChanged<Product>? onProductSelected;
 
   const ProductsScreen({
     super.key,
     this.orderId,
     this.orderSubId,
     this.isOutOfStock = false,
+    this.selectForSuggestion = false,
+    this.onProductSelected,
   });
 
   @override
@@ -37,9 +42,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<ProductsProvider>(context, listen: false);
       // If orderId is provided, only load products if search key is long enough (matches KMP)
-      if (widget.orderId == null || widget.orderId!.isEmpty) {
-        provider.loadProducts();
-      }
+      // Simplify: load products on init; search filtering handled in provider calls
+      provider.loadProducts();
       provider.loadCategories();
     });
   }
@@ -143,6 +147,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     children: [
                       Expanded(
                         child: DropdownButtonFormField<int>(
+                          isExpanded: true,
                           icon: SizedBox.shrink(),
                           // icon: const Icon(Icons.keyboard_arrow_down_rounded),
                           value: provider.filterCategoryId,
@@ -150,12 +155,20 @@ class _ProductsScreenState extends State<ProductsScreen> {
                             // "All Category" option (matches KMP)
                             const DropdownMenuItem<int>(
                               value: -1,
-                              child: Text('All Category'),
+                              child: Text('All Category',
+                               maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                softWrap: false,
+                              ),
                             ),
                             ...provider.categoryList.map(
                               (c) => DropdownMenuItem<int>(
-                                value: c.id,
-                                child: Text(c.name),
+                                value: c.categoryId,
+                                child: Text(c.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                softWrap: false,
+                                ),
                               ),
                             ),
                           ],
@@ -172,7 +185,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                             final categoryName = categoryId == -1
                                 ? 'All Category'
                                 : provider.categoryList
-                                    .firstWhere((c) => c.id == categoryId)
+                                    .firstWhere((c) => c.categoryId == categoryId)
                                     .name;
                             provider.setCategoryFilter(categoryId, categoryName);
                             provider.loadSubCategories(categoryId);
@@ -183,17 +196,27 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<int>(
+                          isExpanded: true,
+
                           icon: SizedBox.shrink(),
                           // icon: const Icon(Icons.keyboard_arrow_down_rounded),
                           value: provider.filterSubCategoryId == -1
                               ? null
                               : provider.filterSubCategoryId,
-                          hint: const Text('Sub Category'),
+                          hint: const Text('Sub Category',
+                          maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                softWrap: false,
+                          ),
                           items: [
                             ...provider.subCategoryList.map(
                               (s) => DropdownMenuItem<int>(
-                                value: s.id,
-                                child: Text(s.name),
+                                value: s.subCategoryId,
+                                child: Text(s.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                softWrap: false,
+                                ),
                               ),
                             ),
                           ],
@@ -210,7 +233,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                             final subName = subId == -1
                                 ? 'Sub Category'
                                 : provider.subCategoryList
-                                    .firstWhere((s) => s.id == subId)
+                                    .firstWhere((s) => s.subCategoryId == subId)
                                     .name;
                             provider.setSubCategoryFilter(subId, subName);
                             provider.loadProducts(searchKey: _searchController.text.trim());
@@ -245,6 +268,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         final p = provider.productList[index];
                         return InkWell(
                           onTap: () {
+                            if (widget.selectForSuggestion &&
+                                widget.onProductSelected != null) {
+                              widget.onProductSelected!(p);
+                              // Don't pop - keep screen open for multiple selections
+                              return;
+                            }
                             if (widget.orderId != null && widget.orderId!.isNotEmpty) {
                               // Selection mode - show bottom sheet to add product to order
                               _showAddProductDialog(context, p);
@@ -253,7 +282,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => ProductDetailsScreen(productId: p.productId ?? -1),
+        builder: (_) => ProductDetailsScreen(productId: p.productId),
                                 ),
                               );
                             }
@@ -394,7 +423,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
         onSave: (rate, quantity, narration, unitId) async {
           final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
           final success = await ordersProvider.addProductToOrder(
-            productId: product.productId ?? -1,
+            productId: product.productId,
             productPrice: product.price, // Product's base price
             rate: rate, // User-entered rate
             quantity: quantity,
@@ -433,7 +462,7 @@ class ProductImage extends StatelessWidget {
       );
     }
     return Image.network(
-      url,
+      ImageUrlFixer.fix(url),
       fit: BoxFit.cover,
       errorBuilder: (_, __, ___) => Container(
         color: Colors.grey.shade200,

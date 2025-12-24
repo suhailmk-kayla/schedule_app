@@ -7,6 +7,51 @@ import '../presentation/provider/sync_provider.dart';
 /// Processes incoming push notifications and triggers data downloads
 /// Converted from KMP's PushNotificationHandler.kt
 class PushNotificationHandler {
+  // Duplicate prevention: Track recently processed items to prevent duplicate API calls
+  // Format: "table_id" as key, timestamp as value
+  // Items are removed after 30 seconds to allow re-processing of same notification after delay
+  static final Map<String, int> _recentlyProcessed = {};
+  static const int _duplicatePreventionWindowMs = 30000; // 30 seconds
+
+  /// Check if item was recently processed (prevents duplicate API calls)
+  /// Returns true if item was processed recently, false otherwise
+  static bool _wasRecentlyProcessed(int table, int id) {
+    final key = '${table}_$id';
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final lastProcessed = _recentlyProcessed[key];
+    
+    if (lastProcessed == null) {
+      return false; // Not processed recently
+    }
+    
+    // Check if window has expired
+    if (now - lastProcessed > _duplicatePreventionWindowMs) {
+      _recentlyProcessed.remove(key); // Clean up expired entry
+      return false; // Window expired, allow processing
+    }
+    
+    return true; // Processed recently, skip
+  }
+
+  /// Mark item as processed (prevents duplicate processing)
+  static void _markAsProcessed(int table, int id) {
+    final key = '${table}_$id';
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _recentlyProcessed[key] = now;
+    
+    // Clean up old entries periodically (every 100 items)
+    if (_recentlyProcessed.length > 100) {
+      _cleanupOldEntries();
+    }
+  }
+
+  /// Clean up expired entries from duplicate prevention map
+  static void _cleanupOldEntries() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _recentlyProcessed.removeWhere((key, timestamp) {
+      return now - timestamp > _duplicatePreventionWindowMs;
+    });
+  }
   /// Handle notification from OneSignal
   /// Extracts data_ids array and processes each item
   static Future<void> handleNotification(
@@ -89,6 +134,17 @@ class PushNotificationHandler {
         return;
       }
 
+      // Duplicate prevention: Skip if recently processed
+      if (_wasRecentlyProcessed(table, id)) {
+        developer.log(
+          'PushNotificationHandler: Skipping duplicate - table: $table, id: $id (processed recently)',
+        );
+        return;
+      }
+
+      // Mark as processed before API call (prevents race conditions)
+      _markAsProcessed(table, id);
+      
       developer.log('PushNotificationHandler: Downloading item - table: $table, id: $id');
 
       // Route to appropriate download method based on table ID

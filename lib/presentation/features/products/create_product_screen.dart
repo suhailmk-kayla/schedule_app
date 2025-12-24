@@ -103,7 +103,11 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
               child: const Text('No'),
             ),
             TextButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: (){
+                Navigator.pop(context, true);
+                final provider = Provider.of<ProductsProvider>(context, listen: false);
+                provider.resetForm();
+              },
               child: const Text('Yes'),
             ),
           ],
@@ -154,7 +158,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (!didPop) {
-          
+          developer.log('CreateProductScreen: _onPopInvokedWithResult() - didPop: $didPop');
           final shouldPop = await _onWillPop();
           if (shouldPop && mounted) {
           
@@ -387,9 +391,8 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             border: Border.all(
-                              color: provider.formBaseUnitId == -1
-                                  ? Colors.red
-                                  : Colors.grey,
+                              color: 
+                                   Colors.grey,
                             ),
                             borderRadius: BorderRadius.circular(4),
                           ),
@@ -592,6 +595,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
 
   void _showBaseUnitBottomSheet(BuildContext context, ProductsProvider provider) {
     if (provider.unitList.isEmpty) {
+      developer.log('Base unit not found');
       ToastHelper.showError('Base unit not found');
       return;
     }
@@ -610,6 +614,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
 
   void _showSupplierBottomSheet(BuildContext context, ProductsProvider provider) {
     if (provider.supplierList.isEmpty) {
+      
       ToastHelper.showError('Supplier not found');
       return;
     }
@@ -647,10 +652,10 @@ class _CategoryBottomSheet extends StatelessWidget {
         itemCount: categoryList.length,
         itemBuilder: (context, index) {
           final category = categoryList[index];
-          final isSelected = category.id == selectedCategoryId;
+          final isSelected = category.categoryId == selectedCategoryId;
           return RadioListTile<int>(
             title: Text(category.name),
-            value: category.id,
+            value: category.categoryId,
             groupValue: selectedCategoryId,
             onChanged: (value) {
               if (value != null) {
@@ -685,10 +690,10 @@ class _SubCategoryBottomSheet extends StatelessWidget {
         itemCount: subCategoryList.length,
         itemBuilder: (context, index) {
           final subCategory = subCategoryList[index];
-          final isSelected = subCategory.id == selectedSubCategoryId;
+          final isSelected = subCategory.subCategoryId == selectedSubCategoryId;
           return RadioListTile<int>(
             title: Text(subCategory.name),
-            value: subCategory.id,
+            value: subCategory.subCategoryId,
             groupValue: selectedSubCategoryId,
             onChanged: (value) {
               if (value != null) {
@@ -723,10 +728,10 @@ class _BaseUnitBottomSheet extends StatelessWidget {
         itemCount: unitList.length,
         itemBuilder: (context, index) {
           final unit = unitList[index];
-          final isSelected = unit.id == selectedBaseUnitId;
+          final isSelected = unit.unitId == selectedBaseUnitId;
           return RadioListTile<int>(
             title: Text(unit.name ?? ''),
-            value: unit.id,
+            value: unit.unitId,
             groupValue: selectedBaseUnitId,
             onChanged: (value) {
               if (value != null) {

@@ -186,6 +186,7 @@ class UsersProvider extends ChangeNotifier {
       (_) {
         _isLoading = false;
         notifyListeners();
+        // loadUsers();
         return true;
       },
     );
@@ -329,6 +330,52 @@ class UsersProvider extends ChangeNotifier {
   Future<bool> checkCodeExistsWithId(String code, int userId) async {
     final result = await _usersRepository.getUserByCodeWithId(
       code: code,
+      userId: userId,
+    );
+    return result.fold(
+      (failure) => false,
+      (users) => users.isNotEmpty,
+    );
+  }
+
+  /// Check if phone number already exists
+  /// Used for create operations
+  Future<bool> checkPhoneExists(String phone) async {
+    final result = await _usersRepository.getUserByPhone(phone);
+    return result.fold(
+      (failure) => false,
+      (users) => users.isNotEmpty,
+    );
+  }
+
+  /// Check if phone number already exists for a salesman (categoryId = 3)
+  /// Used for create operations in salesman screen
+  Future<bool> checkSalesmanPhoneExists(String phone) async {
+    final result = await _usersRepository.getSalesmanByPhone(phone);
+    return result.fold(
+      (failure) => false,
+      (users) => users.isNotEmpty,
+    );
+  }
+
+  /// Check if phone number already exists (excluding specific user ID)
+  /// Used for update operations to allow keeping the same phone
+  Future<bool> checkPhoneExistsWithId(String phone, int userId) async {
+    final result = await _usersRepository.getUserByPhoneWithId(
+      phone: phone,
+      userId: userId,
+    );
+    return result.fold(
+      (failure) => false,
+      (users) => users.isNotEmpty,
+    );
+  }
+
+  /// Check if phone number already exists for a salesman (excluding specific user ID)
+  /// Used for update operations in salesman screen
+  Future<bool> checkSalesmanPhoneExistsWithId(String phone, int userId) async {
+    final result = await _usersRepository.getSalesmanByPhoneWithId(
+      phone: phone,
       userId: userId,
     );
     return result.fold(

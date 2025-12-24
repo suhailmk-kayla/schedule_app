@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../provider/users_provider.dart';
 
 /// Create/Edit Supplier Screen
@@ -111,6 +112,7 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
     if (!mounted) return;
 
     if (success) {
+      ToastHelper.showSuccess('Supplier created successfully');
       Navigator.of(context).pop(true);
     } else {
       setState(() {

@@ -188,6 +188,84 @@ class UsersRepository {
     }
   }
 
+  /// Get user by phone number
+  Future<Either<Failure, List<User>>> getUserByPhone(String phone) async {
+    try {
+      final db = await _database;
+      final maps = await db.query(
+        'Users',
+        where: 'flag = 1 AND phone = ? AND categoryId = ?',
+        whereArgs: [phone,3],
+        orderBy: 'name ASC',
+      );
+
+      final users = maps.map((map) => User.fromMap(map)).toList();
+      return Right(users);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get salesman by phone number (categoryId = 3)
+  Future<Either<Failure, List<User>>> getSalesmanByPhone(String phone) async {
+    try {
+      final db = await _database;
+      final maps = await db.query(
+        'Users',
+        where: 'flag = 1 AND phone = ? AND categoryId = ?',
+        whereArgs: [phone, 3],
+        orderBy: 'name ASC',
+      );
+
+      final users = maps.map((map) => User.fromMap(map)).toList();
+      return Right(users);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get user by phone number excluding specific user ID
+  Future<Either<Failure, List<User>>> getUserByPhoneWithId({
+    required String phone,
+    required int userId,
+  }) async {
+    try {
+      final db = await _database;
+      final maps = await db.query(
+        'Users',
+        where: 'flag = 1 AND phone = ? AND userId != ?',
+        whereArgs: [phone, userId],
+        orderBy: 'name ASC',
+      );
+
+      final users = maps.map((map) => User.fromMap(map)).toList();
+      return Right(users);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get salesman by phone number excluding specific user ID (categoryId = 3)
+  Future<Either<Failure, List<User>>> getSalesmanByPhoneWithId({
+    required String phone,
+    required int userId,
+  }) async {
+    try {
+      final db = await _database;
+      final maps = await db.query(
+        'Users',
+        where: 'flag = 1 AND phone = ? AND categoryId = ? AND userId != ?',
+        whereArgs: [phone, 3, userId],
+        orderBy: 'name ASC',
+      );
+
+      final users = maps.map((map) => User.fromMap(map)).toList();
+      return Right(users);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
   /// Get users by category ID
   Future<Either<Failure, List<User>>> getUsersByCategory(int categoryId) async {
     try {
@@ -240,26 +318,10 @@ class UsersRepository {
     try {
       final db = await _database;
       
-      // Check if user already exists by userId
-      final existingMaps = await db.query(
-        'Users',
-        columns: ['id'],
-        where: 'userId = ?',
-        whereArgs: [user.userId ?? -1],
-        limit: 1,
-      );
-      
-      // If user exists, preserve its local id; otherwise use NULL for auto-increment
-      final localId = existingMaps.isNotEmpty 
-          ? existingMaps.first['id'] as int?
-          : null;
-      if(localId != null){
-        return const Right(null);
-      }
-      
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
-        INSERT INTO Users (
+        INSERT OR REPLACE INTO Users (
           userId,
           code,
           name,
@@ -302,29 +364,19 @@ class UsersRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT INTO Users (
-          userId,
-          code,
-          name,
-          phone,
-          address,
-          categoryId,
-          password,
-          createdDateTime,
-          updatedDateTime,
-          deviceToken,
-          multiDeviceLogin,
-          flag
-        ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-        ''';
+        final batch = txn.batch();
         for (final userDown in users) {
           if (userDown.code == 'google') continue;
-
-          await txn.rawInsert(
-            sql,
+          // Use INSERT OR REPLACE (matches KMP pattern)
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO Users (
+              userId, code, name, phone, address, categoryId, password, 
+              createdDateTime, updatedDateTime, deviceToken, multiDeviceLogin, flag
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ''',
             [
               userDown.userId,
               userDown.code,
@@ -332,15 +384,16 @@ class UsersRepository {
               userDown.phoneNo,
               userDown.address,
               userDown.userCatId,
-              '',
+              '', // password
               userDown.createdAt ?? '',
               userDown.updatedAt ?? '',
-              '',
-              0,
+              '', // deviceToken
+              0, // multiDeviceLogin
               userDown.flag ?? 1,
             ],
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -478,7 +531,7 @@ class UsersRepository {
         (_) {},
         (users) {
           if (users.isNotEmpty) {
-            throw Exception('Code already Exist');
+            throw Exception('The code already used');
           }
         },
       );
@@ -618,8 +671,20 @@ class UsersRepository {
       final existingUserResult = await getUserById(userId);
       User? existingUser;
       existingUserResult.fold(
-        (failure) => null,
+        (_) {},
         (user) => existingUser = user,
+      );
+
+      // Build a base user using the NEW values provided by the caller,
+      // overlaid on the existing user's other fields (id, userId).
+      final baseUser = User(
+        id: existingUser?.id ?? -1,
+        userId: existingUser?.userId ?? userId,
+        code: code,
+        name: name,
+        phoneNo: phone,
+        address: address,
+        catId: categoryId,
       );
 
       // 2. Call API
@@ -637,7 +702,7 @@ class UsersRepository {
       // 3. Parse response with merge support for partial updates
       final userSuccessApi = UserSuccessApi.fromJsonWithMerge(
         response.data,
-        existingUser: existingUser,
+        existingUser: baseUser,
       );
       if (userSuccessApi.status != 1) {
         return Left(ServerFailure.fromError(

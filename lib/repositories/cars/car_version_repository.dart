@@ -107,13 +107,17 @@ class CarVersionRepository {
   Future<Either<Failure, void>> addCarVersion(Version carVersion) async {
     try {
       final db = await _database;
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
-        INSERT OR REPLACE INTO CarVersion (id, carVersionId, carBrandId, carNameId, carModelId, name, flag)
-        VALUES (NULL, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO CarVersion (
+          carVersionId, carBrandId, carNameId, carModelId, name, flag
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?
+        )
         ''',
         [
-          carVersion.id,
+          carVersion.carVersionId,
           carVersion.carBrandId,
           carVersion.carNameId,
           carVersion.carModelId,
@@ -128,20 +132,23 @@ class CarVersionRepository {
   }
 
   /// Add multiple car versions to local DB (transaction)
-  /// Priority 1: Optimized batch insert (uses batch.commit instead of await in loop)
   Future<Either<Failure, void>> addCarVersions(List<Version> carVersions) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT OR REPLACE INTO CarVersion (id, carVersionId, carBrandId, carNameId, carModelId, name, flag)
-        VALUES (NULL, ?, ?, ?, ?, ?, ?)
-        ''';
+        final batch = txn.batch();
         for (final carVersion in carVersions) {
-          await txn.rawInsert(
-            sql,
+          // Use INSERT OR REPLACE (matches KMP pattern)
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO CarVersion (
+              carVersionId, carBrandId, carNameId, carModelId, name, flag
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?
+            )
+            ''',
             [
-              carVersion.id,
+              carVersion.carVersionId,
               carVersion.carBrandId,
               carVersion.carNameId,
               carVersion.carModelId,
@@ -150,6 +157,7 @@ class CarVersionRepository {
             ],
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {

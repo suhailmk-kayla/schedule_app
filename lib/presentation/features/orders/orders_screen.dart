@@ -1,15 +1,14 @@
-import 'dart:developer' as developer;
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:schedule_frontend_flutter/presentation/features/home/home_drawer.dart';
 import 'package:schedule_frontend_flutter/presentation/features/orders/order_details_storekeeper_screen.dart';
 import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../provider/orders_provider.dart';
+import '../../provider/home_provider.dart';
 import '../../../models/order_api.dart';
 import '../../../models/order_with_name.dart';
-import '../../../utils/order_flags.dart';
 import '../../../utils/storage_helper.dart';
 import 'create_order_screen.dart';
 import 'order_details_checker_screen.dart';
@@ -20,7 +19,12 @@ import 'order_details_salesman_screen.dart';
 /// Displays list of orders with search, route filter, and date filter
 /// Converted from KMP's OrderListScreen.kt
 class OrdersScreen extends StatefulWidget {
-  const OrdersScreen({super.key});
+  final int? salesmanId; // If provided, filters orders by this salesman
+
+  const OrdersScreen({
+    super.key,
+    this.salesmanId,
+  });
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -39,6 +43,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
       ordersProvider.loadRoutes();
+      
+      // If salesmanId is provided, set it as filter
+      // Matches KMP's SalesmanOrderListScreen behavior
+      if (widget.salesmanId != null) {
+        ordersProvider.setSalesmanFilter(widget.salesmanId!);
+      }
+      
       ordersProvider.loadOrders();
     });
   }
@@ -68,7 +79,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
         if (notificationManager.notificationTrigger) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             final provider = Provider.of<OrdersProvider>(context, listen: false);
-            provider.loadOrders();
+            provider.loadOrders(toRefresh: true);
             notificationManager.resetTrigger();
           });
         }
@@ -89,7 +100,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   ordersProvider.loadOrders();
                 },
               )
-            : const Text('Order List'),
+            : Text(widget.salesmanId != null 
+                ? 'Salesman Orders' 
+                : 'Order List'),
      
         actions: [
           IconButton(
@@ -160,37 +173,106 @@ class _OrdersScreenState extends State<OrdersScreen> {
                             orderWithName: orderWithName,
                             userType: _userType,
                             userId: _userId,
-                            onTap: () {
+                            onTap: () async {
                               final order = orderWithName.order;
                               if (_userType == 1) {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) =>
-                                        OrderDetailsScreen(orderId: order.id),
+                                        OrderDetailsScreen(orderId: order.orderId),
                                   ),
                                 );
                               } else if (_userType == 2) {
-                                developer.log(
-                                    'The current role is storekeeper: ${order.id}');
+                                // Storekeeper flow: claim if unassigned, otherwise validate ownership
+                                if (order.orderStockKeeperId == -1) {
+                                  final success = await provider.claimOrderAsStorekeeper(
+                                    orderId: order.orderId,
+                                    storekeeperId: _userId,
+                                  );
+                                  if (!success) {
+                                    final msg = provider.errorMessage ??
+                                        'Failed to claim order. Please try again.';
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text(msg)),
+                                      );
+                                    }
+                                    return;
+                                  }
+                                } else if (order.orderStockKeeperId != _userId) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Another storekeeper is checking this order.'),
+                                      ),
+                                    );
+                                  }
+                                  return;
+                                }
+
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) =>
-                                        OrderDetailsStorekeeperScreen(
-                                            orderId: order.id),
+                                        OrderDetailsStorekeeperScreen(orderId: order.orderId),
                                   ),
-                                );
+                                ).then((_) {
+                                  // Refresh badge counts when returning from order details
+                                  final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                                  homeProvider.refreshCounts();
+                                });
                               } else if (_userType == 3) {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) => OrderDetailsSalesmanScreen(
-                                        orderId: order.id),
+                                        orderId: order.orderId),
                                   ),
-                                );
+                                ).then((_) {
+                                  // Refresh badge counts when returning from order details
+                                  final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                                  homeProvider.refreshCounts();
+                                });
                               } else if (_userType == 6) {
-                                _handleCheckerOrderTap(context, order);
+                                // Checker flow: claim if unassigned, otherwise validate ownership
+                                if (order.orderCheckerId == -1) {
+                                  final success = await provider.claimOrderAsChecker(
+                                    orderId: order.orderId,
+                                    checkerId: _userId,
+                                  );
+                                  if (!success) {
+                                    final msg = provider.errorMessage ??
+                                        'Failed to claim order for checking. Please try again.';
+                                    if (context.mounted) {
+                                      ToastHelper.showSuccess(msg);
+                                      // ScaffoldMessenger.of(context).showSnackBar(
+                                      //   SnackBar(content: Text(msg)),
+                                      // );
+                                    }
+                                    return;
+                                  }
+                                } else if (order.orderCheckerId != _userId) {
+                                  if (context.mounted) {
+                                   ToastHelper.showSuccess('Another checker is currently working on this order.');
+                                   return;
+                                  }
+                                  return;
+                                }
+
+                                // Navigate to checker order details
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => OrderDetailsCheckerScreen(orderId: order.orderId),
+                                  ),
+                                ).then((_) {
+                                  // Refresh badge counts when returning from order details
+                                  final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                                  homeProvider.refreshCounts();
+                                });
+                              } else if (_userType == 5) {
+                                _handleBillerOrderTap(context, order);
                               } else {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
@@ -274,18 +356,19 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  
-  Future<void> _handleCheckerOrderTap(BuildContext context, Order order) async {
+  Future<void> _handleBillerOrderTap(BuildContext context, Order order) async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
-    if (order.orderCheckerId == -1) {
+    // Biller can claim order if not already assigned (matches KMP line 290)
+    // Check for both 0 and -1 (KMP checks: order.billerId == 0L || order.billerId == -1L)
+    if (order.orderBillerId == -1 || order.orderBillerId == 0) {
       final success = await ordersProvider.sendToBillerOrChecker(
-        isBiller: false,
+        isBiller: true,
         userId: _userId,
         order: order,
-        approvalFlag: OrderApprovalFlag.checkerIsChecking,
+        // No approvalFlag - preserves current order state (matches KMP line 292)
       );
 
       if (!mounted) return;
@@ -294,31 +377,37 @@ class _OrdersScreenState extends State<OrdersScreen> {
           SnackBar(
             content: Text(
               ordersProvider.errorMessage ??
-                  'Failed to claim order for checking.',
+                  'Failed to claim order for billing.',
             ),
           ),
         );
         return;
       }
-    } else if (order.orderApproveFlag == OrderApprovalFlag.checkerIsChecking &&
-        order.orderCheckerId != _userId) {
+    } else if (order.orderBillerId != _userId) {
+      // Another biller is working on this order
       if (!mounted) return;
       messenger.showSnackBar(
         const SnackBar(
-          content:
-              Text('Another checker is currently working on this order.'),
+          content: Text('Another biller is currently working on this order.'),
         ),
       );
       return;
     }
 
+    // Navigate to order details screen (same as admin/salesman)
+    // Billers use the same OrderDetailsScreen which shows freight charge and total
     if (!mounted) return;
     await navigator.push(
       MaterialPageRoute(
-        builder: (_) => OrderDetailsCheckerScreen(orderId: order.id),
+        builder: (_) => OrderDetailsScreen(orderId: order.orderId),
       ),
-    );
+    ).then((_) {
+      // Refresh badge counts when returning from order details
+      final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+      homeProvider.refreshCounts();
+    });
 
+    // Refresh orders list after returning
     if (!mounted) return;
     ordersProvider.loadOrders();
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../../../utils/asset_images.dart';
 import '../../../provider/categories_provider.dart';
 import '../../../../models/master_data_api.dart';
@@ -11,6 +12,7 @@ class CategoryListScreen extends StatefulWidget {
   const CategoryListScreen({super.key});
 
   @override
+  
   State<CategoryListScreen> createState() => _CategoryListScreenState();
 }
 
@@ -62,7 +64,7 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
     _showCategoryDialog(
       isEdit: true,
       categoryName: category.name,
-      categoryId: category.id,
+      categoryId: category.categoryId, // Use server ID, not local DB primary key
     );
   }
 
@@ -113,6 +115,7 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
 
     if (success) {
       // Refresh list
+      ToastHelper.showSuccess('Category saved successfully');
       provider.getCategories(searchKey: _searchController.text);
       if (!isEdit) {
         _errorMessage = 'Category Added successfully';
@@ -320,7 +323,7 @@ class _AddCategoryDialog extends StatefulWidget {
 
 class _AddCategoryDialogState extends State<_AddCategoryDialog> {
   late TextEditingController _nameController;
-
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   @override
   void initState() {
     super.initState();
@@ -337,13 +340,22 @@ class _AddCategoryDialogState extends State<_AddCategoryDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(widget.isAddNew ? 'Add Category' : 'Update Category'),
-      content: TextField(
-        controller: _nameController,
-        decoration: const InputDecoration(
-          labelText: 'Category Name',
-          border: OutlineInputBorder(),
+      content: Form(
+        key: _formKey,
+        child: TextFormField(
+          controller: _nameController,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Category name cannot be empty';
+            }
+            return null;
+          },
+          decoration: const InputDecoration(
+            labelText: 'Category Name',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
         ),
-        autofocus: true,
       ),
       actions: [
         TextButton(
@@ -352,10 +364,8 @@ class _AddCategoryDialogState extends State<_AddCategoryDialog> {
         ),
         TextButton(
           onPressed: () {
-            if (_nameController.text.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Enter category name')),
-              );
+            if (!_formKey.currentState!.validate()) {
+              ToastHelper.showError('Please enter category name');
               return;
             }
             widget.onConfirmation(_nameController.text.trim());

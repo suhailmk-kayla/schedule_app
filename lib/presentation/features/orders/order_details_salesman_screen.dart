@@ -43,11 +43,19 @@ class _OrderDetailsSalesmanScreenState
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     await ordersProvider.loadOrderDetails(widget.orderId);
     
-    // Set button visibility
+    // Update process flag to mark order as viewed
+    // This ensures the badge count decreases when order is opened
+    await ordersProvider.updateProcessFlag(
+      orderId: widget.orderId,
+      isProcessFinish: 1,
+    );
+    
+    // Set button visibility based on order state (matching KMP lines 86-87, 107-108, 130-131)
     if (ordersProvider.orderDetails != null) {
       final order = ordersProvider.orderDetails!.order;
       setState(() {
-        // Show button if order hasn't been sent to biller or checker yet
+        // Matching KMP: showSendToBiller = order!!.billerId==-1L
+        // Matching KMP: showSendToChecker = (item.order.approveFlag != OrderApprovalFlag.SEND_TO_CHECKER && item.order.approveFlag != OrderApprovalFlag.CHECKER_IS_CHECKING)
         _showSendButton = order.orderBillerId == -1 &&
             order.orderApproveFlag != OrderApprovalFlag.sendToChecker &&
             order.orderApproveFlag != OrderApprovalFlag.checkerIsChecking;
@@ -60,9 +68,21 @@ class _OrderDetailsSalesmanScreenState
     });
   }
 
-  Future<void> _refresh() {
+  Future<void> _refresh() async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
-    return ordersProvider.loadOrderDetails(widget.orderId);
+    await ordersProvider.loadOrderDetails(widget.orderId);
+    
+    // Update button visibility based on refreshed order state (matching KMP lines 86-87, 107-108, 130-131)
+    final order = ordersProvider.orderDetails?.order;
+    if (order != null && mounted) {
+      setState(() {
+        // Matching KMP: showSendToBiller = order!!.billerId==-1L
+        // Matching KMP: showSendToChecker = (item.order.approveFlag != OrderApprovalFlag.SEND_TO_CHECKER && item.order.approveFlag != OrderApprovalFlag.CHECKER_IS_CHECKING)
+        _showSendButton = order.orderBillerId == -1 &&
+            order.orderApproveFlag != OrderApprovalFlag.sendToChecker &&
+            order.orderApproveFlag != OrderApprovalFlag.checkerIsChecking;
+      });
+    }
   }
 
   void _handleEdit() {
@@ -99,13 +119,27 @@ class _OrderDetailsSalesmanScreenState
     final checkerSuccess = results[1];
 
     if (billerSuccess && checkerSuccess) {
-      setState(() {
-        _showSendButton = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order sent to biller and checker')),
-      );
+      // Refresh order details to get updated state (matching KMP's reload behavior)
       await _refresh();
+      
+      // Update button visibility based on refreshed order state (matching KMP lines 86-87, 107-108, 130-131)
+      final refreshedOrder = ordersProvider.orderDetails?.order;
+      if (refreshedOrder != null && mounted) {
+        setState(() {
+          // Hide button if biller is assigned OR order is sent to checker/checker is checking
+          // Matching KMP: showSendToBiller = order!!.billerId==-1L
+          // Matching KMP: showSendToChecker = (item.order.approveFlag != OrderApprovalFlag.SEND_TO_CHECKER && item.order.approveFlag != OrderApprovalFlag.CHECKER_IS_CHECKING)
+          _showSendButton = refreshedOrder.orderBillerId == -1 &&
+              refreshedOrder.orderApproveFlag != OrderApprovalFlag.sendToChecker &&
+              refreshedOrder.orderApproveFlag != OrderApprovalFlag.checkerIsChecking;
+        });
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Order sent to biller and checker')),
+        );
+      }
     } else {
       // Show error message for failed operations
       final errorMessages = <String>[];
@@ -115,17 +149,19 @@ class _OrderDetailsSalesmanScreenState
       if (!checkerSuccess) {
         errorMessages.add('Failed to send to checker');
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            errorMessages.join(' and ') +
-                (ordersProvider.errorMessage != null
-                    ? ': ${ordersProvider.errorMessage}'
-                    : ''),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              errorMessages.join(' and ') +
+                  (ordersProvider.errorMessage != null
+                      ? ': ${ordersProvider.errorMessage}'
+                      : ''),
+            ),
+            backgroundColor: Colors.red,
           ),
-          backgroundColor: Colors.red,
-        ),
-      );
+        );
+      }
     }
   }
 
@@ -174,9 +210,21 @@ class _OrderDetailsSalesmanScreenState
       builder: (context, ordersProvider, _) {
         final notificationManager = NotificationManager();
         if (notificationManager.notificationTrigger) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            ordersProvider.loadOrderDetails(widget.orderId);
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            await ordersProvider.loadOrderDetails(widget.orderId);
             notificationManager.resetTrigger();
+            
+            // Update button visibility after notification refresh (matching KMP lines 86-87)
+            final refreshedOrder = ordersProvider.orderDetails?.order;
+            if (refreshedOrder != null && mounted) {
+              setState(() {
+                // Matching KMP: showSendToBiller = order!!.billerId==-1L
+                // Matching KMP: showSendToChecker = (item.order.approveFlag != OrderApprovalFlag.SEND_TO_CHECKER && item.order.approveFlag != OrderApprovalFlag.CHECKER_IS_CHECKING)
+                _showSendButton = refreshedOrder.orderBillerId == -1 &&
+                    refreshedOrder.orderApproveFlag != OrderApprovalFlag.sendToChecker &&
+                    refreshedOrder.orderApproveFlag != OrderApprovalFlag.checkerIsChecking;
+              });
+            }
           });
         }
 
@@ -242,7 +290,7 @@ class _OrderDetailsSalesmanScreenState
     final order = orderWithName.order;
     final items = ordersProvider.orderDetailItems;
 
-    // Check if any item has orderFlag == 3 (out of stock)
+    // Check if any item has orderFlag == 3 (out of stock) and not already reported
     final hasReportItem = items.any(
       (item) => item.orderSub.orderSubOrdrFlag == OrderSubFlag.outOfStock,
     );
@@ -386,6 +434,7 @@ class _OrderDetailsSalesmanScreenState
           else
             _OrderItemsList(
               items: items,
+              order: order,
               onReportItem: _handleReportItem,
             ),
 
@@ -442,7 +491,7 @@ class _OrderDetailsSalesmanScreenState
                     style: TextStyle(fontSize: 14, color: Colors.black),
                   ),
                   Text(
-                    (order.orderTotal + order.orderFreightCharge).toString(),
+                    (order.orderTotal).toString(),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -606,10 +655,12 @@ class _InfoRow extends StatelessWidget {
 
 class _OrderItemsList extends StatelessWidget {
   final List<OrderItemDetail> items;
+  final Order order;
   final Function(OrderSub) onReportItem;
 
   const _OrderItemsList({
     required this.items,
+    required this.order,
     required this.onReportItem,
   });
 
@@ -619,6 +670,18 @@ class _OrderItemsList extends StatelessWidget {
       children: items.asMap().entries.map((entry) {
         final index = entry.key;
         final item = entry.value;
+        
+        // Show completed card if order is completed
+        if (order.orderApproveFlag == OrderApprovalFlag.completed) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _CompletedOrderItemCard(
+              index: index + 1,
+              item: item,
+            ),
+          );
+        }
+        
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: _OrderItemCard(
@@ -673,13 +736,60 @@ class _OrderItemCardState extends State<_OrderItemCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Product name
-            Text(
-              '#${widget.index}  ${item.productName}',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
+            // Product image and name row
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Product image
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.black12),
+                  ),
+                  child: item.productPhoto.isNotEmpty
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            item.productPhoto,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.image,
+                              size: 30,
+                              color: Colors.grey,
+                            ),
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return const Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              );
+                            },
+                          ),
+                        )
+                      : const Icon(
+                          Icons.image,
+                          size: 30,
+                          color: Colors.grey,
+                        ),
+                ),
+                const SizedBox(width: 12),
+                // Product name
+                Expanded(
+                  child: Text(
+                    '#${widget.index}  ${item.productName}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
 
             // Narration
@@ -859,7 +969,7 @@ class _OrderItemCardState extends State<_OrderItemCard> {
                         children: [
                           Text(
                             suggestion.note?.isNotEmpty == true
-                                ? suggestion.note!
+                                ? suggestion.productName!
                                 : 'Suggestion',
                             style: const TextStyle(
                               fontSize: 14,
@@ -915,7 +1025,28 @@ class _OrderItemCardState extends State<_OrderItemCard> {
                       ),
                   ],
                   const Spacer(),
-                  if (orderSub.orderSubOrdrFlag == OrderSubFlag.outOfStock)
+                  // Show "Reported" text if already reported, otherwise show Report button
+                  if (orderSub.orderSubOrdrFlag == OrderSubFlag.reported)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'Reported',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    )
+                  else if (orderSub.orderSubOrdrFlag == OrderSubFlag.outOfStock)
                     ElevatedButton(
                       onPressed: widget.onReport,
                       style: ElevatedButton.styleFrom(
@@ -1016,6 +1147,69 @@ class _ErrorState extends StatelessWidget {
                 onRetry();
               },
               child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Completed Order Item Card
+/// Shows minimal details for completed orders (read-only, no actions)
+class _CompletedOrderItemCard extends StatelessWidget {
+  final int index;
+  final OrderItemDetail item;
+
+  const _CompletedOrderItemCard({
+    required this.index,
+    required this.item,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final flag = item.orderSub.orderSubOrdrFlag;
+    final qtyLabel = flag > OrderSubFlag.inStock
+        ? item.orderSub.orderSubAvailableQty.toString()
+        : item.orderSub.orderSubQty.toString();
+
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Colors.black12),
+      ),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '#$index  ${item.productName}',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            _InfoRow(label: 'Brand', value: item.productBrand),
+            _InfoRow(label: 'Sub Brand', value: item.productSubBrand),
+            Row(
+              children: [
+                Expanded(
+                  child: _InfoRow(
+                    label: 'Unit',
+                    value: item.unitDisplayName,
+                  ),
+                ),
+                Text(
+                  qtyLabel,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

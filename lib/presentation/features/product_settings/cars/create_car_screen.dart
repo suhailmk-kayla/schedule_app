@@ -61,24 +61,24 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
 
   void _handleBrandSelected(Brand brand) {
     setState(() {
-      _selectedBrandId = brand.id;
+      _selectedBrandId = brand.carBrandId;
       _selectedBrandName = brand.brandName;
       _selectedNameId = -1;
       _selectedNameName = 'Select Name';
       _modelAndVersionList.clear();
     });
     final provider = Provider.of<CarsProvider>(context, listen: false);
-    provider.getCarNames(brand.id);
+    provider.getCarNames(brand.carBrandId);
   }
 
   void _handleNameSelected(Name name) {
     setState(() {
-      _selectedNameId = name.id;
+      _selectedNameId = name.carNameId;
       _selectedNameName = name.carName;
       _modelAndVersionList.clear();
     });
     final provider = Provider.of<CarsProvider>(context, listen: false);
-    provider.getCarModels(brandId: _selectedBrandId, nameId: name.id);
+    provider.getCarModels(brandId: _selectedBrandId, nameId: name.carNameId);
   }
 
   Future<void> _handleAddBrand() async {
@@ -161,7 +161,7 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
           versionName,
           _selectedBrandId,
           _selectedNameId,
-          _selectedModelForVersion!.carModel.id,
+          _selectedModelForVersion!.carModel.carModelId,
         )
         .then((exists) {
       if (exists) {
@@ -170,10 +170,10 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
       }
 
       final newVersion = Version(
-        id: -1,
+        carVersionId: -1,
         carBrandId: _selectedBrandId,
         carNameId: _selectedNameId,
-        carModelId: _selectedModelForVersion!.carModel.id,
+        carModelId: _selectedModelForVersion!.carModel.carModelId,
         versionName: versionName,
       );
 
@@ -277,7 +277,7 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
             itemCount: provider.brandList.length,
             itemBuilder: (context, index) {
               final brand = provider.brandList[index];
-              final isSelected = _selectedBrandId == brand.id;
+              final isSelected = _selectedBrandId == brand.carBrandId;
               return ListTile(
                 title: Text(brand.brandName),
                 trailing: isSelected ? const Icon(Icons.check, color: Colors.blue) : null,
@@ -313,7 +313,7 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
             itemCount: provider.nameList.length,
             itemBuilder: (context, index) {
               final name = provider.nameList[index];
-              final isSelected = _selectedNameId == name.id;
+              final isSelected = _selectedNameId == name.carNameId;
               return ListTile(
                 title: Text(name.carName),
                 trailing: isSelected ? const Icon(Icons.check, color: Colors.blue) : null,
@@ -930,7 +930,7 @@ class _AddModelDialogState extends State<_AddModelDialog> {
 
   void _createModelAndVersion(String modelName) {
     final carModel = Model(
-      id: _selectedModelId > -1 ? _selectedModelId : -1,
+      carModelId: _selectedModelId > -1 ? _selectedModelId : -1,
       carBrandId: widget.brandId,
       carNameId: widget.nameId,
       modelName: modelName,
@@ -968,13 +968,13 @@ class _AddModelDialogState extends State<_AddModelDialog> {
             itemCount: provider.modelList.length,
             itemBuilder: (context, index) {
               final model = provider.modelList[index];
-              final isSelected = _selectedModelId == model.id;
+              final isSelected = _selectedModelId == model.carModelId;
               return ListTile(
                 title: Text(model.modelName),
                 trailing: isSelected ? const Icon(Icons.check, color: Colors.blue) : null,
                 onTap: () {
                   setState(() {
-                    _selectedModelId = model.id;
+                    _selectedModelId = model.carModelId;
                     _selectedModel = model;
                     _modelController.text = model.modelName;
                   });

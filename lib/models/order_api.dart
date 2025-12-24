@@ -114,8 +114,11 @@ class OrderSubApi {
 /// Converted from KMP's Order class
 @JsonSerializable()
 class Order {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(defaultValue: -1, includeFromJson: false, includeToJson: false)
+  final int id; // Local DB primary key (AUTOINCREMENT)
+
+  @JsonKey(name: 'id', defaultValue: -1) // API 'id' maps to orderId
+  final int orderId; // Server ID
 
   @JsonKey(defaultValue: '')
   final String uuid;
@@ -209,6 +212,7 @@ class Order {
 
   const Order({
     this.id = -1,
+    this.orderId = -1,
     this.uuid = '',
     this.orderInvNo = 0,
     this.orderCustId = -1,
@@ -235,7 +239,8 @@ class Order {
   /// Convert from database map (camelCase column names)
   factory Order.fromMap(Map<String, dynamic> map) {
     return Order(
-      id: map['orderId'] as int? ?? -1,
+      id: map['id'] as int? ?? -1, // Local DB PK
+      orderId: map['orderId'] as int? ?? -1, // Server ID
       uuid: map['UUID'] as String? ?? '',
       orderInvNo: int.tryParse(map['invoiceNo'] as String? ?? '0') ?? 0,
       orderCustId: map['customerId'] as int? ?? -1,
@@ -256,9 +261,10 @@ class Order {
   }
 
   /// Convert to database map (camelCase column names)
+  /// Note: 'id' column is omitted - SQLite will auto-increment
   Map<String, dynamic> toMap() {
     return {
-      'orderId': id,
+      'orderId': orderId,
       'invoiceNo': orderInvNo.toString(),
       'UUID': uuid,
       'customerId': orderCustId,
@@ -275,7 +281,7 @@ class Order {
       'createdDateTime': createdAt,
       'updatedDateTime': updatedAt,
       'flag': orderFlag,
-      'isProcessFinish': 0,
+      'isProcessFinish': 1,
     };
   }
 }
@@ -284,8 +290,11 @@ class Order {
 /// Converted from KMP's OrderSub class
 @JsonSerializable()
 class OrderSub {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(defaultValue: -1, includeFromJson: false, includeToJson: false)
+  final int id; // Local DB primary key (AUTOINCREMENT)
+
+  @JsonKey(name: 'id', defaultValue: -1) // API 'id' maps to orderSubId
+  final int orderSubId; // Server ID
 
   @JsonKey(
     name: 'order_sub_ordr_inv_id',
@@ -418,6 +427,7 @@ class OrderSub {
 
   const OrderSub({
     this.id = -1,
+    this.orderSubId = -1,
     this.orderSubOrdrInvId = 0,
     this.orderSubOrdrId = -1,
     this.orderSubCustId = -1,
@@ -450,7 +460,8 @@ class OrderSub {
   /// Convert from database map (camelCase column names)
   factory OrderSub.fromMap(Map<String, dynamic> map) {
     return OrderSub(
-      id: map['orderSubId'] as int? ?? -1,
+      id: map['id'] as int? ?? -1, // Local DB PK
+      orderSubId: map['orderSubId'] as int? ?? -1, // Server ID
       orderSubOrdrInvId: int.tryParse(map['invoiceNo'] as String? ?? '0') ?? 0,
       orderSubOrdrId: map['orderId'] as int? ?? -1,
       orderSubCustId: map['customerId'] as int? ?? -1,
@@ -476,9 +487,10 @@ class OrderSub {
   }
 
   /// Convert to database map (camelCase column names)
+  /// Note: 'id' column is omitted - SQLite will auto-increment
   Map<String, dynamic> toMap() {
     return {
-      'orderSubId': id,
+      'orderSubId': orderSubId,
       'orderId': orderSubOrdrId,
       'invoiceNo': orderSubOrdrInvId.toString(),
       'UUID': '',
@@ -525,6 +537,9 @@ class OrderSubSuggestion {
 
   final int? flag;
 
+  /// Product name (from JOIN query, not stored in DB)
+  final String? productName;
+
   const OrderSubSuggestion({
     this.id = -1,
     this.orderSubId = -1,
@@ -532,6 +547,7 @@ class OrderSubSuggestion {
     this.price = 0.0,
     this.note,
     this.flag,
+    this.productName,
   });
 
   factory OrderSubSuggestion.fromJson(Map<String, dynamic> json) =>
@@ -548,6 +564,7 @@ class OrderSubSuggestion {
       price: (map['price'] as num?)?.toDouble() ?? 0.0,
       note: map['note'] as String?,
       flag: map['flag'] as int?,
+      productName: map['productName'] as String?,
     );
   }
 

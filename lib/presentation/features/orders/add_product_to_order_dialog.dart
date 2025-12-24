@@ -117,7 +117,7 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
         selectedUnitId: _selectedUnitId,
         onUnitSelected: (unit) {
           setState(() {
-            _selectedUnitId = unit.id;
+            _selectedUnitId = unit.unitId;
             _selectedUnitName = unit.displayName.isNotEmpty ? unit.displayName : unit.name;
           });
           Navigator.pop(context);
@@ -389,7 +389,7 @@ class _UnitSelectionBottomSheet extends StatelessWidget {
               itemCount: units.length,
               itemBuilder: (context, index) {
                 final unit = units[index];
-                final isSelected = unit.id == selectedUnitId;
+                final isSelected = unit.unitId == selectedUnitId;
                 return ListTile(
                   title: Text(unit.displayName.isNotEmpty ? unit.displayName : unit.name),
                   subtitle: unit.name != unit.displayName ? Text(unit.name) : null,

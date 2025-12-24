@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:developer' as developer;
 import 'package:schedule_frontend_flutter/utils/push_notification_helper.dart';
 import 'package:schedule_frontend_flutter/utils/storage_helper.dart';
 import '../../provider/home_provider.dart';
+import '../../provider/sync_provider.dart';
 import '../../../utils/notification_manager.dart';
 import '../products/products_screen.dart';
 import '../users/users_screen.dart';
@@ -25,15 +27,48 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    // Add observer to detect when app comes to foreground
+    WidgetsBinding.instance.addObserver(this);
+    
     // Load unviewed counts on init
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final homeProvider = Provider.of<HomeProvider>(context, listen: false);
       homeProvider.loadUnviewedCounts();
+      
+      // Retry failed syncs on app start (matching KMP BaseScreen.kt line 176)
+      // This ensures any missed push notifications are caught
+      final syncProvider = Provider.of<SyncProvider>(context, listen: false);
+      syncProvider.syncFailedSyncs().then((_) {
+        developer.log('HomeScreen: Completed retrying failed syncs');
+      }).catchError((e) {
+        developer.log('HomeScreen: Error retrying failed syncs: $e');
+      });
     });
+  }
+
+  @override
+  void dispose() {
+    // Remove observer
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Refresh badge counts when app comes to foreground
+    // This catches cases when user returns from detail screens or app comes from background
+    if (state == AppLifecycleState.resumed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+        homeProvider.refreshCounts();
+        developer.log('HomeScreen: Refreshed badge counts on app resume');
+      });
+    }
   }
 
   Future<void> _debugNotifications() async {
@@ -234,8 +269,8 @@ class _MenuItemCard extends StatelessWidget {
                 top: 6,
                 right: 6,
                 child: Container(
-                  width: 20,
-                  height: 20,
+                height: 20,
+                width: 20,
                   decoration: const BoxDecoration(
                     color: Colors.red,
                     shape: BoxShape.circle,
@@ -245,7 +280,7 @@ class _MenuItemCard extends StatelessWidget {
                       menuItem.count.toString(),
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 12,
+                        fontSize: 9,
                         fontWeight: FontWeight.bold,
                       ),
                     ),

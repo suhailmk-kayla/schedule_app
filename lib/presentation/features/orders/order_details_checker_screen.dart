@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 
 import '../../../models/order_api.dart';
 import '../../../models/order_item_detail.dart';
@@ -29,7 +32,9 @@ class _OrderDetailsCheckerScreenState
   final Map<int, TextEditingController> _noteControllers = {};
   final Map<int, double> _qtyChanges = {};
   final Map<int, String> _noteChanges = {};
+  final Map<int, String> _imageMap = {}; // orderSubId -> base64 data URI
   final Set<int> _checkedItems = {};
+  final ImagePicker _imagePicker = ImagePicker();
 
   bool _didInit = false;
   bool _isSubmitting = false;
@@ -84,10 +89,11 @@ class _OrderDetailsCheckerScreenState
     _noteControllers.clear();
     _qtyChanges.clear();
     _noteChanges.clear();
+    _imageMap.clear();
     _checkedItems.clear();
 
     for (final item in items) {
-      final id = item.orderSub.id;
+      final id = item.orderSub.orderSubId;
       final baseQty = _baseQuantity(item);
       _qtyControllers[id] = TextEditingController(
         text: NumberFormat('##0.###').format(baseQty),
@@ -134,6 +140,21 @@ class _OrderDetailsCheckerScreenState
     return _checkedItems.length == totalCount;
   }
 
+  /// Calculate total price for in-stock items only
+  /// Excludes out-of-stock items (flag > OrderSubFlag.inStock)
+  double _calculateInStockTotal(List<OrderItemDetail> items) {
+    double total = 0.0;
+    for (final item in items) {
+      final flag = item.orderSub.orderSubOrdrFlag;
+      // Only include items that are in stock (flag <= OrderSubFlag.inStock)
+      if (flag <= OrderSubFlag.inStock) {
+        // Formula: updateRate * quantity
+        total += item.orderSub.orderSubUpdateRate * item.orderSub.orderSubQty;
+      }
+    }
+    return total;
+  }
+
   Future<void> _handleSubmit(
     OrdersProvider provider,
     List<OrderItemDetail> items,
@@ -152,6 +173,7 @@ class _OrderDetailsCheckerScreenState
     final success = await provider.sendCheckedReport(
       updatedQtyMap: _qtyChanges,
       noteMap: _noteChanges,
+      imageMap: _imageMap,
     );
 
     if (!mounted) return;
@@ -160,16 +182,18 @@ class _OrderDetailsCheckerScreenState
     });
 
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order submitted successfully')),
-      );
+      ToastHelper.showSuccess('Order submitted successfully');
+      // ScaffoldMessenger.of(context).showSnackBar(
+      //   const SnackBar(content: Text('Order submitted successfully')),
+      // );
       Navigator.pop(context);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(provider.errorMessage ?? 'Failed to submit order'),
-        ),
-      );
+      ToastHelper.showError(provider.errorMessage ?? 'Failed to submit order');
+      // ScaffoldMessenger.of(context).showSnackBar(
+      //   SnackBar(
+      //     content: Text(provider.errorMessage ?? 'Failed to submit order'),
+      //   ),
+      // );
     }
   }
 
@@ -207,6 +231,69 @@ class _OrderDetailsCheckerScreenState
     });
   }
 
+  Future<void> _pickImage(int orderSubId) async {
+    try {
+      // Show dialog to choose source
+      final source = await showDialog<ImageSource>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Select Image Source'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Camera'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Gallery'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (source == null) return;
+
+      final XFile? image = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 80,
+      );
+
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        // Determine image type from file extension
+        final extension = image.path.split('.').last.toLowerCase();
+        final mimeType = extension == 'png' 
+            ? 'image/png' 
+            : extension == 'jpg' || extension == 'jpeg'
+                ? 'image/jpeg'
+                : 'image/jpeg'; // default to jpeg
+        
+        // Convert to base64 with data URI format
+        final base64String = base64Encode(bytes);
+        final dataUri = 'data:$mimeType;base64,$base64String';
+        
+        setState(() {
+          _imageMap[orderSubId] = dataUri;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ToastHelper.showError('Failed to pick image: $e');
+      }
+    }
+  }
+
+  void _removeImage(int orderSubId) {
+    setState(() {
+      _imageMap.remove(orderSubId);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<OrdersProvider, NotificationManager>(
@@ -236,6 +323,7 @@ class _OrderDetailsCheckerScreenState
           bottomNavigationBar: _buildBottomBar(
             ordersProvider,
             orderWithName?.order,
+            ordersProvider.orderDetailItems,
             _isSubmissionEnabled(ordersProvider.orderDetailItems),
           ),
         );
@@ -351,7 +439,19 @@ class _OrderDetailsCheckerScreenState
             ...items.asMap().entries.map((entry) {
               final index = entry.key;
               final item = entry.value;
-              final id = item.orderSub.id;
+              final id = item.orderSub.orderSubId;
+              
+              // Show completed card if order is completed
+              if (order.orderApproveFlag == OrderApprovalFlag.completed) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _CompletedOrderItemCard(
+                    index: index + 1,
+                    item: item,
+                  ),
+                );
+              }
+              
               final qtyController =
                   _qtyControllers[id] ?? TextEditingController(text: _baseQuantity(item).toString());
               _qtyControllers[id] = qtyController;
@@ -377,6 +477,9 @@ class _OrderDetailsCheckerScreenState
                   onQtyChanged: (value) => _handleQtyChanged(id, value, item),
                   onNoteChanged: (value) => _handleNoteChanged(id, value, item),
                   replacementItem: replacedItems[id],
+                  imageDataUri: _imageMap[id],
+                  onImagePick: () => _pickImage(id),
+                  onImageRemove: () => _removeImage(id),
                 ),
               );
             }),
@@ -402,12 +505,17 @@ class _OrderDetailsCheckerScreenState
   Widget? _buildBottomBar(
     OrdersProvider provider,
     Order? order,
+    List<OrderItemDetail> items,
     bool isEnabled,
   ) {
     if (order == null) return null;
 
     final shouldShowButton = order.orderApproveFlag != OrderApprovalFlag.completed &&
         order.orderApproveFlag != OrderApprovalFlag.cancelled;
+
+    // Calculate total price for in-stock items only (excludes out-of-stock items)
+    final inStockTotal = _calculateInStockTotal(items);
+    final finalTotal = inStockTotal + order.orderFreightCharge;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -448,7 +556,7 @@ class _OrderDetailsCheckerScreenState
                     style: TextStyle(fontSize: 14, color: Colors.black),
                   ),
                   Text(
-                    (order.orderTotal + order.orderFreightCharge).toString(),
+                    finalTotal.toString(),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -643,6 +751,9 @@ class _CheckerOrderItemCard extends StatelessWidget {
   final ValueChanged<String> onQtyChanged;
   final ValueChanged<String> onNoteChanged;
   final OrderItemDetail? replacementItem;
+  final String? imageDataUri;
+  final VoidCallback onImagePick;
+  final VoidCallback onImageRemove;
 
   const _CheckerOrderItemCard({
     required this.index,
@@ -658,6 +769,9 @@ class _CheckerOrderItemCard extends StatelessWidget {
     required this.onQtyChanged,
     required this.onNoteChanged,
     this.replacementItem,
+    this.imageDataUri,
+    required this.onImagePick,
+    required this.onImageRemove,
   });
 
   @override
@@ -770,10 +884,127 @@ class _CheckerOrderItemCard extends StatelessWidget {
               maxLines: 3,
               onChanged: onNoteChanged,
             ),
+            if (!disableEditing) ...[
+              const SizedBox(height: 8),
+              // Image upload button
+              OutlinedButton.icon(
+                onPressed: onImagePick,
+                icon: const Icon(Icons.camera_alt, size: 18),
+                label: const Text('Upload Image'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+              // Image preview if image is selected
+              if (imageDataUri != null) ...[
+                const SizedBox(height: 8),
+                Stack(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      height: 150,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.memory(
+                          base64Decode(imageDataUri!.split(',').last),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Center(
+                              child: Icon(Icons.error, color: Colors.red),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.black54,
+                          padding: const EdgeInsets.all(4),
+                          minimumSize: const Size(32, 32),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: onImageRemove,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
             if (replacementItem != null) ...[
               const SizedBox(height: 12),
               _ReplacementPreview(replacement: replacementItem!),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Completed Order Item Card
+/// Shows minimal details for completed orders (read-only, no actions)
+class _CompletedOrderItemCard extends StatelessWidget {
+  final int index;
+  final OrderItemDetail item;
+
+  const _CompletedOrderItemCard({
+    required this.index,
+    required this.item,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final flag = item.orderSub.orderSubOrdrFlag;
+    final qtyLabel = flag > OrderSubFlag.inStock
+        ? item.orderSub.orderSubAvailableQty.toString()
+        : item.orderSub.orderSubQty.toString();
+
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Colors.black12),
+      ),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '#$index  ${item.productName}',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            _KeyValueRow(label: 'Brand', value: item.productBrand),
+            _KeyValueRow(label: 'Sub Brand', value: item.productSubBrand),
+            Row(
+              children: [
+                Expanded(
+                  child: _KeyValueRow(
+                    label: 'Unit',
+                    value: item.unitDisplayName,
+                  ),
+                ),
+                Text(
+                  qtyLabel,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),

@@ -30,7 +30,7 @@ class _CarsDetailsScreenState extends State<CarsDetailsScreen> {
     
     // Get brand and name IDs
     final brandId = widget.car.carName?.carBrandId ?? -1;
-    final nameId = widget.car.carName?.id ?? -1;
+    final nameId = widget.car.carName?.carNameId ?? -1;
 
     if (brandId == -1 || nameId == -1) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -46,7 +46,7 @@ class _CarsDetailsScreenState extends State<CarsDetailsScreen> {
     final Map<String, Map<int, List<int>>> selectedMap = {};
     
     for (final modelAndVersion in widget.car.carModelList) {
-      final modelId = modelAndVersion.carModel.id;
+      final modelId = modelAndVersion.carModel.carModelId;
       
       if (modelId == -1) continue;
       
@@ -58,8 +58,8 @@ class _CarsDetailsScreenState extends State<CarsDetailsScreen> {
       } else {
         // Add each version
         for (final version in modelAndVersion.carVersionList) {
-          if (version.id != -1) {
-            versionMap[version.id] = [];
+          if (version.carVersionId != -1) {
+            versionMap[version.carVersionId] = [];
           }
         }
       }

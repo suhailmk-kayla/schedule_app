@@ -356,37 +356,15 @@ class ProductsRepository {
   /// Add single product to local DB
   /// Converted from KMP's addProduct function (single product)
   /// Uses raw query matching KMP's insertProduct query exactly
-  /// 
-  /// CRITICAL: Handles create vs update correctly:
-  /// - When creating (product doesn't exist): id = NULL (auto-increment)
-  /// - When updating (product exists): preserves existing local id
-  /// 
-  /// Matches KMP pattern:
-  /// - Single product (line 21): passes productId only (id is NULL)
-  /// - List products (line 32): passes id (preserves local id)
+  /// Uses INSERT OR REPLACE to match KMP pattern (matches KMP's Product.sq line 28)
   Future<Either<Failure, void>> addProduct(Product product) async {
     try {
       final db = await _database;
       
-      // Check if product already exists by productId
-      final existingMaps = await db.query(
-        'Product',
-        columns: ['id'],
-        where: 'productId = ?',
-        whereArgs: [product.productId ?? -1],
-        limit: 1,
-      );
-      
-      // If product exists, preserve its local id; otherwise use NULL for auto-increment
-      final localId = existingMaps.isNotEmpty 
-          ? existingMaps.first['id'] as int?
-          : null;
-      
-      // Raw query matching KMP's insertProduct query (Product.sq line 27-30)
-      // Column order: id,productId,code,barcode,name,subName,brand,subBrand,categoryId,subCategoryId,defaultSuppId,autoSend,baseUnitId,defaultUnitId,photoUrl,price,mrp,retailPrice,fittingCharge,note,outtOfStockFlag,flag
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
-        INSERT INTO Product(
+        INSERT OR REPLACE INTO Product(
           productId, code, barcode, name, subName, brand, subBrand, 
           categoryId, subCategoryId, defaultSuppId, autoSend, baseUnitId, defaultUnitId,
           photoUrl, price, mrp, retailPrice, fittingCharge, note, outtOfStockFlag, flag
@@ -420,6 +398,7 @@ class ProductsRepository {
       );
       return const Right(null);
     } catch (e) {
+      developer.log('ProductsRepository: addProduct() - Error: ${e.toString()}');
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -443,7 +422,7 @@ class ProductsRepository {
           // CRITICAL: Use batch.rawInsert() instead of await txn.rawInsert() - 100x faster!
           batch.rawInsert(
             '''
-            INSERT INTO Product(
+            INSERT OR REPLACE INTO Product(
               productId, code, barcode, name, subName, brand, subBrand, 
               categoryId, subCategoryId, defaultSuppId, autoSend, baseUnitId, defaultUnitId,
               photoUrl, price, mrp, retailPrice, fittingCharge, note, outtOfStockFlag, flag
@@ -481,6 +460,7 @@ class ProductsRepository {
       });
       return const Right(null);
     } catch (e) {
+      developer.log('ProductsRepository: addProducts() - Error: ${e.toString()}');
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -490,8 +470,10 @@ class ProductsRepository {
     try {
       final db = await _database;
       await db.delete('Product');
+      developer.log('ProductsRepository: clearAll() - Products cleared');
       return const Right(null);
     } catch (e) {
+      developer.log('ProductsRepository: clearAll() - Error: ${e.toString()}');
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -647,8 +629,8 @@ class ProductsRepository {
         ];
         
         // Include productUnit if it exists (matches KMP line 208-211)
-        if (productApi.productUnit.id != -1) {
-          dataIds.add(PushData(table: NotificationId.productUnits, id: productApi.productUnit.id));
+        if (productApi.productUnit.productUnitId != -1) {
+          dataIds.add(PushData(table: NotificationId.productUnits, id: productApi.productUnit.productUnitId)); // Server ID
         }
         
         // Fire-and-forget: don't await, just trigger in background
@@ -784,27 +766,25 @@ class ProductsRepository {
       final db = await _database;
       await db.transaction((txn) async {
         final batch = txn.batch();
-        const sql = '''
-        INSERT OR REPLACE INTO ProductUnits (
-          id, productUnitId, productId, baseUnitId, derivedUnitId, flag
-        ) VALUES (
-          NULL, ?, ?, ?, ?, ?
-        )
-        ''';
+        // Use INSERT OR REPLACE (matches KMP pattern)
         for (final productUnit in productUnits) {
-          // CRITICAL: Use batch.rawInsert() instead of await txn.rawInsert() - 100x faster!
           batch.rawInsert(
-            sql,
+            '''
+            INSERT OR REPLACE INTO ProductUnits (
+              productUnitId, productId, baseUnitId, derivedUnitId, flag
+            ) VALUES (
+              ?, ?, ?, ?, ?
+            )
+            ''',
             [
-              productUnit.id, // productUnitId from API
-              productUnit.prd_id, // productId
-              productUnit.base_unit_id, // baseUnitId
-              productUnit.derived_unit_id, // derivedUnitId
-              1, // flag
+              productUnit.productUnitId, // Server ID
+              productUnit.prd_id,
+              productUnit.base_unit_id,
+              productUnit.derived_unit_id,
+              1,
             ],
           );
         }
-        // CRITICAL: Commit all inserts at once - matches SQLDelight's optimized behavior
         await batch.commit(noResult: true);
       });
       return const Right(null);
@@ -1138,18 +1118,23 @@ class ProductsRepository {
       await db.transaction((txn) async {
         final batch = txn.batch();
         for (final car in productCars) {
-          batch.insert(
-            'ProductCar',
-            {
-              'productCarId': car.id,
-              'productId': car.product_id,
-              'carBrandId': car.car_brand_id,
-              'carNameId': car.car_name_id,
-              'carModelId': car.car_model_id,
-              'carVersionId': car.car_version_id,
-              'flag': car.flag ?? 1,
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO ProductCar (
+              productCarId, productId, carBrandId, carNameId, carModelId, carVersionId, flag
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?
+            )
+            ''',
+            [
+              car.id,
+              car.product_id,
+              car.car_brand_id,
+              car.car_name_id,
+              car.car_model_id,
+              car.car_version_id,
+              car.flag ?? 1,
+            ],
           );
         }
         await batch.commit(noResult: true);
@@ -1206,7 +1191,7 @@ class ProductsRepository {
       // Fire-and-forget: don't await, just trigger in background
       if (_pushNotificationSender != null) {
         final dataIds = [
-          PushData(table: NotificationId.productUnits, id: productUnitApi.data.id),
+          PushData(table: NotificationId.productUnits, id: productUnitApi.data.productUnitId), // Server ID
         ];
         _pushNotificationSender.sendPushNotification(
           dataIds: dataIds,
@@ -1252,19 +1237,23 @@ class ProductsRepository {
 Future<Either<Failure, void>> addProductUnitLocal(ProductUnit productUnit) async {
   try {
     final db = await _database;
-
-    await db.rawInsert('''
-      INSERT OR REPLACE INTO ProductUnits 
-      (id,productUnitId, productId, baseUnitId, derivedUnitId, flag)
-      VALUES (NULL,?, ?, ?, ?, ?)
-    ''', [
-      productUnit.id,
-      productUnit.prd_id,
-      productUnit.base_unit_id,
-      productUnit.derived_unit_id,
-      1,
-    ]);
-
+    // Use INSERT OR REPLACE (matches KMP pattern)
+    await db.rawInsert(
+      '''
+      INSERT OR REPLACE INTO ProductUnits (
+        productUnitId, productId, baseUnitId, derivedUnitId, flag
+      ) VALUES (
+        ?, ?, ?, ?, ?
+      )
+      ''',
+      [
+        productUnit.productUnitId, // Server ID
+        productUnit.prd_id,
+        productUnit.base_unit_id,
+        productUnit.derived_unit_id,
+        1,
+      ],
+    );
     return const Right(null);
   } catch (e) {
     return Left(DatabaseFailure.fromError(e));

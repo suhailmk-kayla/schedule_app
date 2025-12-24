@@ -71,6 +71,7 @@ class PushNotificationHelper {
         // Extract additional data from notification
         final additionalData = event.notification.additionalData;
         if (additionalData != null) {
+          developer.log('OneSignal notification additional data: ${additionalData.toString()}');
           try {
             await _processNotification(additionalData);
           } catch (e, stackTrace) {
@@ -169,6 +170,7 @@ if (!isPayloadNotification || showNotification == '0') {
       developer.log('🚀 Calling PushNotificationHandler.handleNotification()...');
       developer.log('  • additionalData: $additionalData');
       developer.log('  • syncProvider: available');
+      
       
       await PushNotificationHandler.handleNotification(
         additionalData,

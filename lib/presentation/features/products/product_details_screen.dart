@@ -1,5 +1,8 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/helpers/image_url_handler.dart';
 import 'package:schedule_frontend_flutter/utils/storage_helper.dart';
 import '../../provider/products_provider.dart';
 import '../../../models/product_api.dart';
@@ -29,6 +32,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   }
 
   void _showFullImageDialog(BuildContext context, String imageUrl) {
+    developer.log('imageUrl: $imageUrl');
     showDialog(
       context: context,
       barrierDismissible: true,
@@ -164,6 +168,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     child: GestureDetector(
                       onTap: product.photo.isNotEmpty
                           ? () {
+                              developer.log('product.photo: ${product.photo}');
                               _showFullImageDialog(context, product.photo);
                             }
                           : null,
@@ -179,7 +184,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
                                 child: Image.network(
-                                  product.photo,
+                                  ImageUrlFixer.fix(product.photo),
                                   fit: BoxFit.cover,
                                   errorBuilder: (context, error, stackTrace) {
                                     return const Center(
@@ -626,6 +631,8 @@ class _FullImageDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fixedUrl = ImageUrlFixer.fix(imageUrl);
+    developer.log('imageUrl: $fixedUrl');
     return Dialog(
       backgroundColor: Colors.transparent,
       child: GestureDetector(
@@ -642,7 +649,7 @@ class _FullImageDialog extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Center(
             child: Image.network(
-              imageUrl,
+              fixedUrl,
               fit: BoxFit.contain,
               errorBuilder: (context, error, stackTrace) {
                 return const Center(

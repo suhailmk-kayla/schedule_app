@@ -126,7 +126,7 @@ class SalesManRepository {
       final map = salesman.toMapLocalDatabase();
       await db.rawInsert(
         '''
-        INSERT INTO SalesMan(
+        INSERT OR REPLACE INTO SalesMan(
           salesManId, userId, code, name, phone, address, 
           deviceToken, createdDateTime, updatedDateTime, flag
         ) VALUES (
@@ -170,7 +170,7 @@ class SalesManRepository {
           // CRITICAL: Use batch.rawInsert() instead of await txn.rawInsert() - 100x faster!
           batch.rawInsert(
             '''
-            INSERT INTO SalesMan(
+            INSERT OR REPLACE INTO SalesMan(
               salesManId, userId, code, name, phone, address, 
               deviceToken, createdDateTime, updatedDateTime, flag
             ) VALUES (

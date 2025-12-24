@@ -33,6 +33,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   Future<void> _loadInitialData() async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     await ordersProvider.loadOrderDetails(widget.orderId);
+    
+    // Update process flag to mark order as viewed
+    // This ensures the badge count decreases when order is opened
+    await ordersProvider.updateProcessFlag(
+      orderId: widget.orderId,
+      isProcessFinish: 1,
+    );
+    
     final userType = await StorageHelper.getUserType();
     if (!mounted) return;
     setState(() {
@@ -167,13 +175,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               items: items,
               replacedIds: ordersProvider.replacedOrderSubIds,
               replacedItems: ordersProvider.replacedOrderItems,
+              order: order,
             ),
           if (_shouldShowSummary())
             Padding(
               padding: const EdgeInsets.only(top: 16),
               child: _BottomSummary(
                 freightCharge: order.orderFreightCharge,
-                total: order.orderTotal,
+                total: _calculateInStockTotal(items),
               ),
             ),
           const SizedBox(height: 24),
@@ -184,6 +193,21 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
   bool _shouldShowSummary() =>
       _userType == 1 || _userType == 3 || _userType == 5;
+
+  /// Calculate total price for in-stock items only
+  /// Excludes out-of-stock items (flag > OrderSubFlag.inStock)
+  double _calculateInStockTotal(List<OrderItemDetail> items) {
+    double total = 0.0;
+    for (final item in items) {
+      final flag = item.orderSub.orderSubOrdrFlag;
+      // Only include items that are in stock (flag <= OrderSubFlag.inStock)
+      if (flag <= OrderSubFlag.inStock) {
+        // Formula: updateRate * quantity
+        total += item.orderSub.orderSubUpdateRate * item.orderSub.orderSubQty;
+      }
+    }
+    return total;
+  }
 }
 
 class _OrderHeader extends StatelessWidget {
@@ -322,12 +346,14 @@ class _OrderItemsList extends StatelessWidget {
   final List<OrderItemDetail> items;
   final Map<int, int> replacedIds;
   final Map<int, OrderItemDetail> replacedItems;
+  final Order order;
 
   const _OrderItemsList({
     required this.userType,
     required this.items,
     required this.replacedIds,
     required this.replacedItems,
+    required this.order,
   });
 
   @override
@@ -345,8 +371,8 @@ class _OrderItemsList extends StatelessWidget {
       }
 
       OrderItemDetail? replacement;
-      if (replacedIds.containsKey(item.orderSub.id)) {
-        final replacementId = replacedIds[item.orderSub.id];
+      if (replacedIds.containsKey(item.orderSub.orderSubId)) {
+        final replacementId = replacedIds[item.orderSub.orderSubId];
         if (replacementId != null) {
           replacement = replacedItems[replacementId];
         }
@@ -355,6 +381,19 @@ class _OrderItemsList extends StatelessWidget {
       final primaryItem = (userType == 7 && replacement != null)
           ? replacement
           : item;
+
+      // Show completed card if order is completed
+      if (order.orderApproveFlag == OrderApprovalFlag.completed) {
+        widgets.add(
+          _CompletedOrderItemCard(
+            index: index,
+            item: primaryItem,
+          ),
+        );
+        widgets.add(const SizedBox(height: 12));
+        index++;
+        continue;
+      }
 
       widgets.add(
         _OrderItemCard(
@@ -542,7 +581,7 @@ class _OrderItemCard extends StatelessWidget {
                           children: [
                             Text(
                               suggestion.note?.isNotEmpty == true
-                                  ? suggestion.note!
+                                  ? suggestion.productName!
                                   : 'Suggestion',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
@@ -853,6 +892,69 @@ class _ErrorState extends StatelessWidget {
                 onRetry();
               },
               child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Completed Order Item Card
+/// Shows minimal details for completed orders (read-only, no actions)
+class _CompletedOrderItemCard extends StatelessWidget {
+  final int index;
+  final OrderItemDetail item;
+
+  const _CompletedOrderItemCard({
+    required this.index,
+    required this.item,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final flag = item.orderSub.orderSubOrdrFlag;
+    final qtyLabel = flag > OrderSubFlag.inStock
+        ? item.orderSub.orderSubAvailableQty.toString()
+        : item.orderSub.orderSubQty.toString();
+
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Colors.black12),
+      ),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '#$index  ${item.productName}',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            _InfoRow(label: 'Brand', value: item.productBrand),
+            _InfoRow(label: 'Sub Brand', value: item.productSubBrand),
+            Row(
+              children: [
+                Expanded(
+                  child: _InfoRow(
+                    label: 'Unit',
+                    value: item.unitDisplayName,
+                  ),
+                ),
+                Text(
+                  qtyLabel,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

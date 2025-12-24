@@ -16,6 +16,8 @@ import org.json.JSONObject
  * Intercepts ALL notifications (foreground, background, terminated) before OneSignal displays them
  * Registered via meta-data in AndroidManifest.xml
  */
+
+ 
 @Keep
 class OneSignalNotificationServiceExtension : INotificationServiceExtension {
     private val tag = "OneSignalServiceExtension"
@@ -86,15 +88,24 @@ class OneSignalNotificationServiceExtension : INotificationServiceExtension {
                         return // Early return - service extension handled it
                     } else {
                         // PAYLOAD notification in foreground
-                        // OneSignal SDK WILL call addForegroundWillDisplayListener
-                        // Let OneSignal SDK handle it - don't intercept
+                        // CRITICAL FIX: OneSignal SDK's foreground detection can be unreliable
+                        // Even though we detect foreground, OneSignal SDK may think app is in background
+                        // (see logs: "App is in background, show notification" even when service extension detects foreground)
+                        // Therefore, we MUST process the notification data here to ensure it's handled
                         Log.d(tag, "🟢 PAYLOAD notification in FOREGROUND")
-                        Log.d(tag, "  → OneSignal SDK's addForegroundWillDisplayListener will handle it")
-                        Log.d(tag, "  → Service Extension: Not intercepting (letting OneSignal SDK process)")
+                        Log.d(tag, "  → Processing notification data to ensure it's handled")
+                        Log.d(tag, "  → OneSignal SDK may incorrectly detect background and skip its listener")
+                        Log.d(tag, "  → Processing here ensures data is handled regardless")
+                        Log.d(tag, "  → Duplicate prevention in PushNotificationHandler will prevent duplicate downloads")
                         
-                        // Don't intercept - let OneSignal SDK's foreground listener handle it
-                        // Just return early without calling sendToFlutter or preventDefault
-                        return // Early return - let OneSignal SDK handle it
+                        // Send to Flutter to ensure notification data is processed
+                        // This ensures processing even if OneSignal SDK's listener doesn't trigger
+                        // Duplicate prevention in PushNotificationHandler will handle cases where both trigger
+                        sendToFlutter(context, notificationData)
+                        
+                        // Don't prevent display - let the notification show
+                        // The notification will display, and data is processed
+                        return // Early return - data sent to Flutter, notification will display
                     }
                 } else {
                     Log.d(tag, "📴 App is in BACKGROUND/TERMINATED")

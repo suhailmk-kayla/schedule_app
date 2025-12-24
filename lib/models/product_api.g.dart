@@ -167,7 +167,7 @@ Map<String, dynamic> _$ProductToJson(Product instance) => <String, dynamic>{
 };
 
 ProductUnit _$ProductUnitFromJson(Map<String, dynamic> json) => ProductUnit(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  productUnitId: (json['id'] as num?)?.toInt() ?? -1,
   prd_id: (json['prd_id'] as num?)?.toInt() ?? -1,
   base_unit_id: (json['base_unit_id'] as num?)?.toInt() ?? -1,
   derived_unit_id: (json['derived_unit_id'] as num?)?.toInt() ?? -1,
@@ -175,7 +175,7 @@ ProductUnit _$ProductUnitFromJson(Map<String, dynamic> json) => ProductUnit(
 
 Map<String, dynamic> _$ProductUnitToJson(ProductUnit instance) =>
     <String, dynamic>{
-      'id': instance.id,
+      'id': instance.productUnitId,
       'prd_id': instance.prd_id,
       'base_unit_id': instance.base_unit_id,
       'derived_unit_id': instance.derived_unit_id,

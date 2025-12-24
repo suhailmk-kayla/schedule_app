@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../provider/auth_provider.dart';
 import '../../../utils/storage_helper.dart';
 import '../sync/sync_screen.dart';
@@ -18,8 +20,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _userCodeController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _tpinController = TextEditingController();
   bool _obscurePassword = true;
   bool _isUserAlreadyLogin = false;
+  bool _showTpinField = false; // Track if TPIN field should be shown
 
   @override
   void initState() {
@@ -34,10 +38,29 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
+  /// Clear errors and hide TPIN field when user starts typing
+  void _clearErrorsAndTpin() {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    
+    // Clear error in AuthProvider if it exists
+    if (authProvider.errorMessage != null) {
+      authProvider.clearError();
+    }
+    
+    // Hide TPIN field and clear its value if it's currently shown
+    if (_showTpinField) {
+      setState(() {
+        _showTpinField = false;
+        _tpinController.clear();
+      });
+    }
+  }
+
   @override
   void dispose() {
     _userCodeController.dispose();
     _passwordController.dispose();
+    _tpinController.dispose();
     super.dispose();
   }
 
@@ -48,23 +71,39 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
+    // Get TPIN if field is visible (admin override scenario)
+    final String? tpin = _showTpinField && _tpinController.text.isNotEmpty
+        ? _tpinController.text.trim()
+        : null;
+
     final result = await authProvider.login(
       userCode: _userCodeController.text.trim(),
       password: _passwordController.text,
+      tpin: tpin,
     );
 
     result.fold(
       (failure) {
+        // Check if error indicates TPIN is required for admin override
+        // Backend returns: "Device token mismatch. TPIN required for override"
+        final errorMessage = failure.message;
+        if (errorMessage.toLowerCase().contains('tpin') || 
+            errorMessage.toLowerCase().contains('device token mismatch')) {
+          // Show TPIN field for admin override
+          setState(() {
+            _showTpinField = true;
+          });
+        }
         // Error is already set in AuthProvider, show snackbar
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(failure.message),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ToastHelper.showError(errorMessage);
       },
       (userData) async {
-        // Login successful
+        // Login successful - reset TPIN field visibility
+        setState(() {
+          _showTpinField = false;
+          _tpinController.clear();
+        });
+        
         // Always navigate to sync screen after fresh login
         // (If user was already logged in, they wouldn't see LoginScreen - SplashScreen would navigate to HomeScreen directly)
         if (mounted) {
@@ -99,6 +138,7 @@ class _LoginScreenState extends State<LoginScreen> {
             
               controller: _userCodeController,
               decoration: InputDecoration(
+                
                 labelText: _isUserAlreadyLogin ? 'User Name' : 'User Code',
                 hintText: _isUserAlreadyLogin ? 'Enter user name' : 'Enter user code',
                 prefixIcon: const Icon(Icons.person),
@@ -125,6 +165,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   );
                 }
+                
+                // Clear errors and hide TPIN field when user starts typing
+                _clearErrorsAndTpin();
               },
             ),
             const SizedBox(height: 16),
@@ -139,7 +182,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 prefixIcon: const Icon(Icons.lock),
                 suffixIcon: IconButton(
                   icon: Icon(
-                    _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                    _obscurePassword ? Icons.visibility_off : Icons.visibility,
                   ),
                   onPressed: () {
                     setState(() {
@@ -162,8 +205,47 @@ class _LoginScreenState extends State<LoginScreen> {
                 }
                 return null;
               },
+              onChanged: (value) {
+                // Clear errors and hide TPIN field when user starts typing
+                _clearErrorsAndTpin();
+              },
             ),
             const SizedBox(height: 24),
+
+            // TPIN Field (shown when admin override is required)
+            if (_showTpinField) ...[
+              TextFormField(
+                controller: _tpinController,
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                ],
+                decoration: InputDecoration(
+                  counterText: '',
+                  labelText: 'TPIN (4 digits)',
+                  hintText: 'Enter 4-digit TPIN',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  helperText: 'Admin override: Enter your TPIN to login from this device',
+                  helperMaxLines: 2,
+                ),
+                validator: (value) {
+                  if (_showTpinField && (value == null || value.trim().isEmpty)) {
+                    return 'TPIN is required for admin override';
+                  }
+                  if (value != null && value.trim().isNotEmpty && value.trim().length != 4) {
+                    return 'TPIN must be exactly 4 digits';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
 
             // Error Message
             if (authProvider.errorMessage != null)

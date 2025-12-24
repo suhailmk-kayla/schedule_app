@@ -10,10 +10,14 @@ import '../products/products_screen.dart';
 /// Converted from KMP's CreateOrderScreen.kt
 class CreateOrderScreen extends StatefulWidget {
   final String? orderId; // If provided, loads draft order
+  final int? customerId; // If provided, automatically selects this customer
+  final String? customerName; // Customer name (required if customerId is provided)
 
   const CreateOrderScreen({
     super.key,
     this.orderId,
+    this.customerId,
+    this.customerName,
   });
 
   @override
@@ -29,6 +33,11 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadOrder();
+      if (widget.customerId != null && widget.customerName != null) {
+        final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+        // ordersProvider.setCustomer(widget.customerId!, widget.customerName!);
+        ordersProvider.updateCustomer(widget.customerId!, widget.customerName!);
+      }
     });
   }
 
@@ -47,6 +56,12 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       if (ordersProvider.orderMaster != null) {
         _noteController.text = ordersProvider.orderMaster!.orderNote ?? '';
       }
+    }
+    
+    // If customerId is provided, automatically set the customer
+    // This matches KMP's behavior when clicking order icon from customers screen
+    if (widget.customerId != null && widget.customerName != null) {
+      await ordersProvider.updateCustomer(widget.customerId!, widget.customerName!);
     }
   }
 
@@ -262,7 +277,11 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                               border: Border.all(color: Colors.grey),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: Text(
+                            child: 
+                            widget.customerName != null ? Text(
+                              ordersProvider.customerName,
+                              style: const TextStyle(fontSize: 16),
+                            ):Text(
                               ordersProvider.customerName,
                               style: const TextStyle(fontSize: 16),
                             ),
@@ -325,11 +344,11 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                             final index = entry.key;
                             final item = entry.value;
                             return _OrderItemCard(
-                              key: ValueKey(item.orderSub.id),
+                              key: ValueKey(item.orderSub.orderSubId),
                               slNo: index + 1,
                               item: item,
                               onDelete: () async {
-                                final success = await ordersProvider.deleteOrderSub(item.orderSub.id);
+                                final success = await ordersProvider.deleteOrderSub(item.orderSub.orderSubId);
                                 if (success) {
                                   await ordersProvider.getAllOrderSubAndDetails();
                                 }

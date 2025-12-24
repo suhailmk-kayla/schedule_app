@@ -576,8 +576,8 @@ class OutOfStockProvider extends ChangeNotifier {
             (_) {},
             (admins) {
               for (final admin in admins) {
-                if (admin.id != currentUserId) {
-                  userIds.add({'user_id': admin.id, 'silent_push': 1});
+                if (admin.userId != currentUserId) {
+                  userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
                 }
               }
             },
@@ -669,8 +669,8 @@ class OutOfStockProvider extends ChangeNotifier {
             (_) {},
             (admins) {
               for (final admin in admins) {
-                if (admin.id != currentUserId) {
-                  userIds.add({'user_id': admin.id, 'silent_push': 1});
+                if (admin.userId != currentUserId) {
+                  userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
                 }
               }
             },
@@ -750,8 +750,8 @@ class OutOfStockProvider extends ChangeNotifier {
         (_) {},
         (admins) {
           for (final admin in admins) {
-            if (admin.id != currentUserId) {
-              userIds.add({'user_id': admin.id, 'silent_push': 1});
+            if (admin.userId != currentUserId) {
+              userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
             }
           }
         },
@@ -839,8 +839,8 @@ class OutOfStockProvider extends ChangeNotifier {
             (_) {},
             (admins) {
               for (final admin in admins) {
-                if (admin.id != currentUserId) {
-                  userIds.add({'user_id': admin.id, 'silent_push': 1});
+                if (admin.userId != currentUserId) {
+                  userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
                 }
               }
             },
@@ -929,7 +929,7 @@ class OutOfStockProvider extends ChangeNotifier {
         (_) {},
         (admins) {
           for (final admin in admins) {
-            userIds.add({'user_id': admin.id, 'silent_push': 0});
+            userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 0});
           }
         },
       );
@@ -1016,8 +1016,8 @@ class OutOfStockProvider extends ChangeNotifier {
             (_) {},
             (admins) {
               for (final admin in admins) {
-                if (admin.id != currentUserId) {
-                  userIds.add({'user_id': admin.id, 'silent_push': 1});
+                if (admin.userId != currentUserId) {
+                  userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
                 }
               }
             },
@@ -1114,8 +1114,8 @@ class OutOfStockProvider extends ChangeNotifier {
         (_) {},
         (admins) {
           for (final admin in admins) {
-            if (admin.id != currentUserId) {
-              userIds.add({'user_id': admin.id, 'silent_push': 1});
+            if (admin.userId != currentUserId) {
+              userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
             }
           }
         },
@@ -1130,7 +1130,7 @@ class OutOfStockProvider extends ChangeNotifier {
             (_) {},
             (checkers) {
               for (final checker in checkers) {
-                userIds.add({'user_id': checker.id, 'silent_push': 1});
+                userIds.add({'user_id': checker.userId ?? -1, 'silent_push': 1});
               }
             },
           );
@@ -1143,7 +1143,7 @@ class OutOfStockProvider extends ChangeNotifier {
             (_) {},
             (billers) {
               for (final biller in billers) {
-                userIds.add({'user_id': biller.id, 'silent_push': 1});
+                userIds.add({'user_id': biller.userId ?? -1, 'silent_push': 1});
               }
             },
           );
@@ -1307,8 +1307,8 @@ class OutOfStockProvider extends ChangeNotifier {
         (_) {},
         (admins) {
           for (final admin in admins) {
-            if (admin.id != currentUserId) {
-              userIds.add({'user_id': admin.id, 'silent_push': 1});
+            if (admin.userId != currentUserId) {
+              userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
             }
           }
         },
