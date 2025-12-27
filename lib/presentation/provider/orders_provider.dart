@@ -1193,6 +1193,7 @@ _setError(failure.message);
         (updatedOrder) {
           // Reload order details to reflect changes
           loadOrderDetails(order.orderId);
+          loadOrders();
           _setLoading(false);
           onSuccess();
         },
@@ -2356,6 +2357,8 @@ _setError(failure.message);
       _setLoading(false);
       if (success) {
         await loadOrderDetails(order.orderId);
+        // Refresh order list to update status in the list view
+        loadOrders();
       }
       return success;
     } catch (e) {

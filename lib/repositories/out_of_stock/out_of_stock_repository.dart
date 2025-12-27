@@ -418,6 +418,7 @@ class OutOfStockRepository {
       );
 
       if (maps.isEmpty) {
+        developer.log('OutOfStockRepository: No out of stock sub found for ID: $oospId');
         return const Right(null);
       }
 

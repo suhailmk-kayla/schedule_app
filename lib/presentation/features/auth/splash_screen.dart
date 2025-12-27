@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/asset_images.dart';
 import '../../provider/auth_provider.dart';
 import 'login_screen.dart';
+import 'notification_permission_screen.dart';
 import '../../../utils/navigation_helper.dart';
 import '../../../utils/push_notification_helper.dart';
+import '../../../utils/notification_permission_enforcer.dart';
 
 /// Splash Screen
 /// Shows logo and checks if user is logged in
@@ -45,10 +47,32 @@ class _SplashScreenState extends State<SplashScreen>
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     await authProvider.initialize();
 
-    // Wait 3 seconds before showing login (like KMP)
+    // Wait 1 second before showing login (like KMP)
     await Future.delayed(const Duration(seconds: 1));
 
     if (!mounted) return;
+
+    // Check notification permission BEFORE allowing app usage
+    // This is critical for internal app where notifications are required
+    // final hasNotificationPermission = await NotificationPermissionEnforcer.checkPermission();
+    // if (!hasNotificationPermission) {
+    //   // Show blocking permission screen
+    //   final granted = await Navigator.of(context).push<bool>(
+    //     MaterialPageRoute(
+    //       builder: (_) => const NotificationPermissionScreen(),
+    //       fullscreenDialog: true,
+    //     ),
+    //   );
+      
+    //   // If still not granted, the screen will handle periodic checking
+    //   // If granted, continue with normal flow
+    //   if (granted != true) {
+    //     return; // Stay on permission screen (it handles its own checking)
+    //   }
+      
+    //   // Give OneSignal a moment to update subscription state
+    //   await Future.delayed(const Duration(milliseconds: 500));
+    // }
 
     // Check if user is already logged in
     if (authProvider.isAuthenticated) {

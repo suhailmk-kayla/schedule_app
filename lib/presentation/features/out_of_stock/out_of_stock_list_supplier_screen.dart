@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -5,6 +7,7 @@ import '../../provider/out_of_stock_provider.dart';
 import '../../../models/master_data_api.dart';
 import '../../../utils/storage_helper.dart';
 import '../../../utils/notification_manager.dart';
+import 'package:schedule_frontend_flutter/presentation/features/home/home_drawer.dart';
 import 'out_of_stock_details_supplier_screen.dart';
 
 /// OutOfStock List Supplier Screen
@@ -168,6 +171,7 @@ class _OutOfStockListSupplierScreenState
         }
 
         return Scaffold(
+          drawer: const HomeDrawer(), // Add drawer for suppliers
           appBar: AppBar(
             title: _showSearchBar
                 ? TextField(
@@ -187,9 +191,13 @@ class _OutOfStockListSupplierScreenState
                     },
                   )
                 : Text(isStorekeeper ? 'Out of Stock' : 'Orders'),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => Navigator.of(context).pop(),
+            leading: Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () {
+                  Scaffold.of(context).openDrawer();
+                },
+              ),
             ),
             actions: [
               IconButton(
@@ -291,6 +299,7 @@ class _OutOfStockListSupplierScreenState
                           item: item,
                           userType: _userType,
                           onTap: () {
+                            developer.log('OutOfStockListSupplierScreen: Navigating to out of stock details screen for item: ${item.oospId}');
                             Navigator.push(
                               context,
                               MaterialPageRoute(
