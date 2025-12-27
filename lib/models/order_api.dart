@@ -425,6 +425,9 @@ class OrderSub {
   @JsonKey(name: 'updated_at', defaultValue: '')
   final String updatedAt;
 
+  @JsonKey(name: 'order_sub_checker_image')
+  final String? checkerImage;
+
   final List<OrderSubSuggestion>? suggestions;
 
   const OrderSub({
@@ -446,13 +449,14 @@ class OrderSub {
     this.orderSubUnitBaseQty = 0.0,
     this.orderSubIsCheckedFlag = 0,
     this.orderSubOrdrFlag = 0,
-    this.orderSubNote,
-    this.orderSubNarration,
-    this.orderSubFlag = 1,
-    this.createdAt = '',
-    this.updatedAt = '',
-    this.suggestions,
-  });
+      this.orderSubNote,
+      this.orderSubNarration,
+      this.orderSubFlag = 1,
+      this.createdAt = '',
+      this.updatedAt = '',
+      this.checkerImage,
+      this.suggestions,
+    });
 
   factory OrderSub.fromJson(Map<String, dynamic> json) =>
       _$OrderSubFromJson(json);
@@ -485,6 +489,7 @@ class OrderSub {
       orderSubFlag: map['flag'] as int? ?? 1,
       createdAt: map['createdDateTime'] as String? ?? '',
       updatedAt: map['updatedDateTime'] as String? ?? '',
+      checkerImage: map['checkerImage'] as String?,
     );
   }
 
@@ -515,6 +520,7 @@ class OrderSub {
       'updatedDateTime': updatedAt,
       'isCheckedflag': orderSubIsCheckedFlag,
       'flag': orderSubFlag,
+      'checkerImage': checkerImage,
     };
   }
 }

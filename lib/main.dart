@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/helpers/admin_registration_helper.dart';
 import 'dart:developer' as developer;
 import 'di.dart';
 import 'utils/push_notification_helper.dart';
@@ -20,11 +21,10 @@ import 'presentation/provider/units_provider.dart';
 import 'presentation/provider/categories_provider.dart';
 import 'presentation/provider/sub_categories_provider.dart';
 import 'presentation/provider/cars_provider.dart';
-
 //TODO:change to production server before sending apk
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // final result = await createAdminAccount();
+  final result = await createAdminAccount();
   // Initialize OneSignal for push notifications (must be before setupDependencies)
   try {
     await PushNotificationHelper.initialize();
@@ -108,6 +108,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       child: Consumer<NotificationManager>(
         builder: (context, notificationManager, _) {
           if (notificationManager.notificationLogoutTrigger) {
+            developer.log('Logout trigger detected');
             WidgetsBinding.instance.addPostFrameCallback((_) {
               notificationManager.resetLogoutTrigger();
               _navigatorKey.currentState?.pushAndRemoveUntil(

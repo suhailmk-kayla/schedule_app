@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../provider/products_provider.dart';
 import '../../../models/product_api.dart';
 import '../../../models/order_api.dart';
@@ -57,40 +58,56 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
     final productsProvider = Provider.of<ProductsProvider>(context, listen: false);
     // Load base unit first
     await productsProvider.loadBaseUnits();
-    // If product has baseUnitId, load derived units
+    final baseUnits = productsProvider.unitList;
+    
+    List<Units> units;
+    
+    // If product has baseUnitId, load derived units and include base unit in the list
     if (widget.product.base_unit_id != -1) {
       await productsProvider.loadDerivedUnits(widget.product.base_unit_id);
+      final derivedUnits = productsProvider.unitList;
+      
+      // Find the base unit by unitId (server ID) and prepend it to derived units
+      // This ensures the base unit is always available in the list
+      final baseUnit = baseUnits.firstWhere(
+        (u) => u.unitId == widget.product.base_unit_id,
+        orElse: () => baseUnits.isNotEmpty ? baseUnits.first : throw StateError('No base units found'),
+      );
+      
+      // Combine: base unit first, then derived units
+      units = [baseUnit, ...derivedUnits];
+    } else {
+      units = baseUnits;
     }
-    // Get units from provider
-    final units = productsProvider.unitList;
+    
     // Set default unit if not set (matches KMP's ProductListScreen.kt line 1088-1090)
     if (_selectedUnitId == -1 && units.isNotEmpty) {
-      // Try to find default unit, base unit, or use first available
       Units defaultUnit;
       
-      // Try default_unit_id first (if valid)
+      // Try default_unit_id first (if valid) - use unitId (server ID) for comparison
       if (widget.product.default_unit_id != -1) {
-        final found = units.where((u) => u.id == widget.product.default_unit_id).firstOrNull;
+        final found = units.where((u) => u.unitId == widget.product.default_unit_id).firstOrNull;
         if (found != null) {
           defaultUnit = found;
         } else if (widget.product.base_unit_id != -1) {
-          // If not found, try base_unit_id (if valid)
-          final baseFound = units.where((u) => u.id == widget.product.base_unit_id).firstOrNull;
+          // If not found, try base_unit_id (if valid) - use unitId (server ID) for comparison
+          final baseFound = units.where((u) => u.unitId == widget.product.base_unit_id).firstOrNull;
           defaultUnit = baseFound ?? units.first;
         } else {
           // Use first unit in list (matches KMP line 1089)
           defaultUnit = units.first;
         }
       } else if (widget.product.base_unit_id != -1) {
-        // Try base_unit_id if default_unit_id is not set
-        final baseFound = units.where((u) => u.id == widget.product.base_unit_id).firstOrNull;
+        // Try base_unit_id if default_unit_id is not set - use unitId (server ID) for comparison
+        final baseFound = units.where((u) => u.unitId == widget.product.base_unit_id).firstOrNull;
         defaultUnit = baseFound ?? units.first;
       } else {
         // Use first unit in list
         defaultUnit = units.first;
       }
       
-      _selectedUnitId = defaultUnit.id;
+      // Use unitId (server ID) instead of id (local DB primary key)
+      _selectedUnitId = defaultUnit.unitId;
       _selectedUnitName = defaultUnit.displayName.isNotEmpty 
           ? defaultUnit.displayName 
           : defaultUnit.name;
@@ -132,23 +149,26 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
     final narration = _narrationController.text;
 
     if (quantity <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid quantity')),
-      );
+      ToastHelper.showWarning('Please enter a valid quantity');
+      // ScaffoldMessenger.of(context).showSnackBar(
+      //   const SnackBar(content: Text('Please enter a valid quantity')),
+      // );
       return;
     }
 
     if (rate <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid rate')),
-      );
+      ToastHelper.showWarning('Please enter a valid rate');
+      // ScaffoldMessenger.of(context).showSnackBar(
+      //   const SnackBar(content: Text('Please enter a valid rate')),
+      // );
       return;
     }
 
     if (_selectedUnitId == -1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a unit')),
-      );
+      ToastHelper.showWarning('Please select a unit');
+      // ScaffoldMessenger.of(context).showSnackBar(
+      //   const SnackBar(content: Text('Please select a unit')),
+      // );
       return;
     }
 

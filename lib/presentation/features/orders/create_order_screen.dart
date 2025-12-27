@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../provider/orders_provider.dart';
 import '../../../models/order_sub_with_details.dart';
 import '../customers/customers_screen.dart';
@@ -108,12 +109,14 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   Future<void> _sendOrder() async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     if (ordersProvider.orderMaster == null) {
-      _showError('Unknown error occurred');
+      ToastHelper.show('Unknown error occured');
+      // _showError('Unknown error occurred');
       return;
     }
 
     if (ordersProvider.orderMaster!.orderCustId == -1) {
-      _showError('Please Select a customer!');
+      ToastHelper.showWarning('Please Select a customer!');
+      // _showError('Please Select a customer!');
       return;
     }
 
@@ -134,7 +137,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         Navigator.of(context).pop();
       }
     } else {
-      _showError(ordersProvider.errorMessage ?? 'Failed to send order');
+      ToastHelper.showError(ordersProvider.errorMessage ?? 'Failed to send order');
     }
   }
 
@@ -149,7 +152,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   void _selectCustomer() {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     if (ordersProvider.orderMaster == null) {
-      _showError('Order not loaded');
+      ToastHelper.showError('Order not loaded');
+      // _showError('Order not loaded');
       return;
     }
 
@@ -173,7 +177,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   void _addProduct() {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     if (ordersProvider.orderMaster == null) {
-      _showError('Order not loaded');
+      ToastHelper.showError('Order not loaded');
+      // _showError('Order not loaded');
       return;
     }
 
@@ -288,7 +293,6 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-      
                         // Note Field
                         const Text(
                           'Note',

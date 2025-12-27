@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 
+import '../../../helpers/image_url_handler.dart';
 import '../../../models/order_api.dart';
 import '../../../models/order_item_detail.dart';
 import '../../../models/order_with_name.dart';
@@ -195,12 +198,13 @@ class _OrderDetailsSalesmanScreenState
       });
       await _refresh();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ordersProvider.errorMessage ?? 'Failed to report items'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ToastHelper.showError(ordersProvider.errorMessage ?? 'Failed to report items');
+      // ScaffoldMessenger.of(context).showSnackBar(
+      //   SnackBar(
+      //     content: Text(ordersProvider.errorMessage ?? 'Failed to report items'),
+      //     backgroundColor: Colors.red,
+      //   ),
+      // );
     }
   }
 
@@ -1210,6 +1214,115 @@ class _CompletedOrderItemCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+            // Checker Image (only for completed orders)
+            if (item.orderSub.checkerImage != null &&
+                item.orderSub.checkerImage!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Checked Image',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 6),
+              _buildCheckerImage(item.orderSub.checkerImage!),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Build checker image widget
+  /// Handles base64 data URIs and URL paths (local vs production)
+  Widget _buildCheckerImage(String imageData) {
+    // Check if it's a base64 data URI
+    if (imageData.startsWith('data:image')) {
+      try {
+        final base64String = imageData.split(',').last;
+        final imageBytes = base64Decode(base64String);
+        return Container(
+          width: double.infinity,
+          height: 200,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.memory(
+              imageBytes,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return _buildPlaceholder();
+              },
+            ),
+          ),
+        );
+      } catch (e) {
+        return _buildPlaceholder();
+      }
+    }
+
+    // It's a URL path - use ImageUrlFixer to clean up the URL
+    // (removes /LaravelProject and /public for local dev URLs)
+    final imageUrl = ImageUrlFixer.fix(imageData);
+
+    return Container(
+      width: double.infinity,
+      height: 200,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          imageUrl,
+          fit: BoxFit.cover,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            );
+          },
+          errorBuilder: (context, error, stackTrace) {
+            return _buildPlaceholder();
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Build placeholder widget for missing images
+  Widget _buildPlaceholder() {
+    return Container(
+      width: double.infinity,
+      height: 200,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.image_not_supported,
+              size: 48,
+              color: Colors.grey,
+            ),
+            SizedBox(height: 8),
+            Text(
+              'No Image Available',
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 12,
+              ),
             ),
           ],
         ),

@@ -821,9 +821,9 @@ class OrdersRepository {
           orderSubId, orderId, invoiceNo, UUID, customerId, storeKeeperId, 
           salesmanId, dateAndTime, productId, unitId, carId, rate, updateRate, 
           quantity, availQty, unitBaseQty, note, narration, orderFlag, 
-          createdDateTime, updatedDateTime, isCheckedflag, flag
+          createdDateTime, updatedDateTime, isCheckedflag, flag, checkerImage
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
@@ -850,6 +850,7 @@ class OrdersRepository {
           orderSub.updatedAt,
           orderSub.orderSubIsCheckedFlag,
           orderSub.orderSubFlag,
+          orderSub.checkerImage,
         ],
       );
       developer.log('OrdersRepository: Added order sub: ${orderSub.orderSubId}');
@@ -874,9 +875,9 @@ class OrdersRepository {
               orderSubId, orderId, invoiceNo, UUID, customerId, storeKeeperId, 
               salesmanId, dateAndTime, productId, unitId, carId, rate, updateRate, 
               quantity, availQty, unitBaseQty, note, narration, orderFlag, 
-              createdDateTime, updatedDateTime, isCheckedflag, flag
+              createdDateTime, updatedDateTime, isCheckedflag, flag, checkerImage
             ) VALUES (
-              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             ''',
             [
@@ -903,6 +904,7 @@ class OrdersRepository {
               orderSub.updatedAt,
               orderSub.orderSubIsCheckedFlag,
               orderSub.orderSubFlag,
+              orderSub.checkerImage,
             ],
           );
         }
@@ -1341,6 +1343,7 @@ class OrdersRepository {
       // 2. Parse response
       final orderApi = OrderApi.fromJson(response.data);
       if (orderApi.status != 1) {
+        developer.log('Failed to update order with custom payload: ${orderApi.message}');
         return Left(ServerFailure.fromError(
           'Failed to update order: ${orderApi.message}',
         ));
@@ -1374,8 +1377,10 @@ class OrdersRepository {
 
       return Right(orderApi.data);
     } on DioException catch (e) {
+      developer.log('Failed to update order with custom payload: ${e.response?.data}');
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
+      developer.log('Failed to update order with custom payload: $e');
       return Left(UnknownFailure.fromError(e));
     }
   }

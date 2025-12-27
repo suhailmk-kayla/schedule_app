@@ -1091,6 +1091,7 @@ _setError(failure.message);
           'data_ids': [
             {'table': 8, 'id': order.orderId} // Order table
           ],
+          //0 means visible notification and 1 means silent notification
           'show_notification': '0',
           'message': 'Updates from storekeeper',
         },
@@ -1280,6 +1281,14 @@ _setError(failure.message);
         },
       };
 
+      // Generate a NEW UUID for this order send operation
+      // This matches KMP's UUID generation pattern from createTempOrder (line 367-368)
+      // and ensures server creates a new order instead of matching by UUID
+      final now = DateTime.now();
+      final userId = await StorageHelper.getUserId();
+      final deviceToken = await StorageHelper.getDeviceToken();
+      final newUuid = '${now.millisecondsSinceEpoch}$deviceToken$userId';
+
       // Build order params (matches KMP line 740-747)
       final params = _createOrderParams(
         _orderMaster!,
@@ -1288,6 +1297,7 @@ _setError(failure.message);
         freightCharge,
         storekeeperId,
         notificationJsonObject,
+        newUuid, // Pass new UUID instead of reusing temp order's UUID
       );
 
       // Call API (matches KMP line 749-750)
@@ -1396,9 +1406,10 @@ _setError(failure.message);
     double freight,
     int storekeeperId,
     Map<String, dynamic> notificationJsonObject,
+    String uuid, // Add this parameter - new UUID generated for each order send
   ) {
     final params = <String, dynamic>{
-      'uuid': orderMaster.uuid,
+      'uuid': uuid, // Use passed UUID instead of orderMaster.uuid
       'order_cust_id': orderMaster.orderCustId,
       'order_cust_name': orderMaster.orderCustName,
       'order_salesman_id': orderMaster.orderSalesmanId,
@@ -1773,7 +1784,7 @@ _setError(failure.message);
 
       // Build notification data
       final dataIds = [
-        {'table': 8, 'id': order.id}
+        {'table': 8, 'id': order.orderId}
       ];
 
       final notificationJsonObject = {
@@ -2284,7 +2295,7 @@ _setError(failure.message);
         'data_message': 'Order checked and completed',
         'data': {
           'data_ids': [
-            {'table': 8, 'id': order.id},
+            {'table': 8, 'id': order.orderId},
           ],
           'show_notification': '0',
           'message': 'Order checked and completed',
@@ -2380,7 +2391,7 @@ _setError(failure.message);
       orderFlag = OrderSubFlag.inStock;
     }
 
-    return {
+    final payload = {
       'order_sub_id': sub.orderSubId,
       'order_sub_prd_id': sub.orderSubPrdId,
       'order_sub_unit_id': sub.orderSubUnitId,
@@ -2396,6 +2407,13 @@ _setError(failure.message);
       'order_sub_note': note,
       'order_sub_narration': sub.orderSubNarration ?? '',
     };
+    
+    // Add checker_image if image is provided for this order sub
+    if (imageMap.containsKey(sub.orderSubId) && imageMap[sub.orderSubId]!.isNotEmpty) {
+      payload['checker_image'] = imageMap[sub.orderSubId]!;
+    }
+    
+    return payload;
   }
 
   Map<String, dynamic> _buildCheckerTempItemPayload({

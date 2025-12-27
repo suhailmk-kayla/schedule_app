@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/helpers/image_url_handler.dart';
 import 'package:schedule_frontend_flutter/utils/storage_helper.dart';
 import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../provider/products_provider.dart';
 import '../../provider/orders_provider.dart';
 import '../../../models/product_api.dart';
@@ -166,6 +167,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                 value: c.categoryId,
                                 child: Text(c.name,
                                 maxLines: 1,
+                                style: TextStyle(fontSize: 14),
                                 overflow: TextOverflow.ellipsis,
                                 softWrap: false,
                                 ),
@@ -214,6 +216,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                 value: s.subCategoryId,
                                 child: Text(s.name,
                                 maxLines: 1,
+                                style: TextStyle(fontSize: 14),
                                 overflow: TextOverflow.ellipsis,
                                 softWrap: false,
                                 ),
@@ -433,15 +436,17 @@ class _ProductsScreenState extends State<ProductsScreen> {
           if (success && mounted) {
             Navigator.pop(context); // Close bottom sheet
             // Don't pop ProductsScreen - let user add more products
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Product added to order')),
-            );
+            ToastHelper.showSuccess('Product added to order');
+            // ScaffoldMessenger.of(context).showSnackBar(
+            //   const SnackBar(content: Text('Product added to order')),
+            // );
           } else if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(ordersProvider.errorMessage ?? 'Failed to add product'),
-              ),
-            );
+            ToastHelper.showWarning(ordersProvider.errorMessage ?? 'Failed to add product');
+            // ScaffoldMessenger.of(context).showSnackBar(
+            //   SnackBar(
+            //     content: Text(ordersProvider.errorMessage ?? 'Failed to add product'),
+            //   ),
+            // );
           }
         },
       ),

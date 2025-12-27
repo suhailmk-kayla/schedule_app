@@ -6,6 +6,7 @@ import '../../../utils/asset_images.dart';
 import '../../../utils/storage_helper.dart';
 import 'create_supplier_screen.dart';
 import 'supplier_details_screen.dart';
+import '../out_of_stock/out_of_stock_list_supplier_screen.dart';
 
 /// Suppliers Screen
 /// Displays list of suppliers with search functionality
@@ -127,15 +128,13 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                   );
                 },
                 onReportTap: () {
-                  // TODO: Navigate to out of stock supplier view
-                  // Navigator.push(
-                  //   context,
-                  //   MaterialPageRoute(
-                  //     builder: (_) => OutOfStockListSupplierScreen(userId: supplier.userId),
-                  //   ),
-                  // );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Out of stock view for supplier ${supplier.name}')),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => OutOfStockListSupplierScreen(
+                        userId: supplier.userId ?? -1,
+                      ),
+                    ),
                   );
                 },
               );

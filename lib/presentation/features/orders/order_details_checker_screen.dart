@@ -160,9 +160,7 @@ class _OrderDetailsCheckerScreenState
     List<OrderItemDetail> items,
   ) async {
     if (!_isSubmissionEnabled(items) || _isSubmitting) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please check all items before submitting')),
-      );
+      ToastHelper.showWarning('Please check all items before submitting');
       return;
     }
 
@@ -183,17 +181,9 @@ class _OrderDetailsCheckerScreenState
 
     if (success) {
       ToastHelper.showSuccess('Order submitted successfully');
-      // ScaffoldMessenger.of(context).showSnackBar(
-      //   const SnackBar(content: Text('Order submitted successfully')),
-      // );
       Navigator.pop(context);
     } else {
       ToastHelper.showError(provider.errorMessage ?? 'Failed to submit order');
-      // ScaffoldMessenger.of(context).showSnackBar(
-      //   SnackBar(
-      //     content: Text(provider.errorMessage ?? 'Failed to submit order'),
-      //   ),
-      // );
     }
   }
 
@@ -774,9 +764,20 @@ class _CheckerOrderItemCard extends StatelessWidget {
     required this.onImageRemove,
   });
 
+  /// Calculate price for this item
+  /// Uses updateRate * qty (or availableQty for out of stock items)
+  double _calculateItemPrice(OrderSub orderSub) {
+    final flag = orderSub.orderSubOrdrFlag;
+    final qty = flag > OrderSubFlag.inStock
+        ? orderSub.orderSubAvailableQty
+        : orderSub.orderSubQty;
+    return orderSub.orderSubUpdateRate * qty;
+  }
+
   @override
   Widget build(BuildContext context) {
     final flag = item.orderSub.orderSubOrdrFlag;
+    final isOutOfStock = flag > OrderSubFlag.inStock;
     final qtyLabel = flag > OrderSubFlag.inStock
         ? item.orderSub.orderSubAvailableQty.toString()
         : item.orderSub.orderSubQty.toString();
@@ -854,6 +855,25 @@ class _CheckerOrderItemCard extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 4),
+            // Price row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Price: ',
+                  style: TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+                Text(
+                  _calculateItemPrice(item.orderSub).toStringAsFixed(2),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
             if (!disableEditing)
               TextField(
@@ -886,9 +906,9 @@ class _CheckerOrderItemCard extends StatelessWidget {
             ),
             if (!disableEditing) ...[
               const SizedBox(height: 8),
-              // Image upload button
+              // Image upload button - disabled for out-of-stock products
               OutlinedButton.icon(
-                onPressed: onImagePick,
+                onPressed: isOutOfStock ? null : onImagePick,
                 icon: const Icon(Icons.camera_alt, size: 18),
                 label: const Text('Upload Image'),
                 style: OutlinedButton.styleFrom(
