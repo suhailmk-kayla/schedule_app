@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../../../utils/asset_images.dart';
 import '../../../provider/sub_categories_provider.dart';
 import '../../../../models/master_data_api.dart';
@@ -99,9 +100,7 @@ class _SubCategoryListScreenState extends State<SubCategoryListScreen> {
     int parentId,
   ) async {
     if (parentId == -1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select category')),
-      );
+     ToastHelper.showError('Select category');
       return;
     }
 
@@ -128,30 +127,20 @@ class _SubCategoryListScreenState extends State<SubCategoryListScreen> {
       // Refresh list
       provider.getSubCategories(searchKey: _searchController.text);
       if (!isEdit) {
-        _errorMessage = 'Sub-Category Added successfully';
-        _showErrorDialog();
+        ToastHelper.showSuccess('Sub-Category Added successfully');
+        // _errorMessage = 'Sub-Category Added successfully';
+        // _showErrorDialog();
+      }else{
+        ToastHelper.showSuccess('Sub-Category Updated successfully');
       }
     } else {
-      _errorMessage = provider.errorMessage ?? 'Failed to save sub-category';
-      _showErrorDialog();
+      ToastHelper.showError(provider.errorMessage ?? 'Failed to save sub-category');
+      // _errorMessage = provider.errorMessage ?? 'Failed to save sub-category';
+      // _showErrorDialog();
     }
   }
 
-  void _showErrorDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Message'),
-        content: Text(_errorMessage),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -358,14 +347,16 @@ class _AddSubCategoryDialogState extends State<_AddSubCategoryDialog> {
     _nameController = TextEditingController(
       text: widget.subCategory?.name ?? '',
     );
-    if (widget.isAddNew) {
-      // Load categories for selection
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final provider =
-            Provider.of<SubCategoriesProvider>(context, listen: false);
-        provider.getAllCategories();
-      });
-    } else {
+    
+    // Load categories for both add and edit modes
+    // In edit mode, we need categories loaded to display the selected category name
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider =
+          Provider.of<SubCategoriesProvider>(context, listen: false);
+      provider.getAllCategories();
+    });
+    
+    if (!widget.isAddNew) {
       // Edit mode - set category from sub-category
       _categoryId = widget.subCategory?.catId ?? -1;
     }
@@ -391,7 +382,8 @@ class _AddSubCategoryDialogState extends State<_AddSubCategoryDialog> {
               return DropdownButtonFormField<int>(
                 value: _categoryId == -1 ? null : _categoryId,
                 decoration: const InputDecoration(
-                  // suffixIcon: Icon(Icons.arrow_drop_down),
+
+                  
                   labelText: 'Category',
                   border: OutlineInputBorder(),
                   isDense: true,
@@ -403,7 +395,7 @@ class _AddSubCategoryDialogState extends State<_AddSubCategoryDialog> {
                     child: Text(
                       category.name,
                       style: const TextStyle(
-                        fontSize: 16,
+                        fontSize: 12,
                       ),
                     ),
                   );

@@ -48,7 +48,7 @@ class SalesManRepository {
           'SalesMan',
           where: 'flag = ?',
           whereArgs: [1],
-          orderBy: 'name ASC',
+          orderBy: 'LOWER(name) ASC',
         );
       } else {
         final searchPattern = '%$searchKey%';
@@ -56,7 +56,7 @@ class SalesManRepository {
           'SalesMan',
           where: 'flag = 1 AND (LOWER(name) LIKE LOWER(?) OR LOWER(code) LIKE LOWER(?))',
           whereArgs: [searchPattern, searchPattern],
-          orderBy: 'name ASC',
+          orderBy: 'LOWER(name) ASC',
         );
       }
 

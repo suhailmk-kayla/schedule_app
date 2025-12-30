@@ -984,8 +984,10 @@ class OrdersRepository {
           whereArgs: [orderId],
         );
       });
+      developer.log('OrdersRepository: Updated order flag: $flag for order: $orderId');
       return const Right(null);
     } catch (e) {
+      developer.log('OrdersRepository: Error updating order flag: ${e.toString()}');
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -1587,7 +1589,7 @@ class OrdersRepository {
         'Orders',
         {
         'billerId': billerId,
-        'approveFlag': OrderApprovalFlag.checkerIsChecking
+        // 'approveFlag': OrderApprovalFlag.checkerIsChecking
         },
         where: 'orderId = ?',
         whereArgs: [orderId],

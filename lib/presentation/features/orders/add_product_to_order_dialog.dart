@@ -205,9 +205,9 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  const Text(
-                    'Add Product',
-                    style: TextStyle(
+                  Text(
+                    widget.orderSub != null ? 'Edit Product' : 'Add Product',
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
@@ -338,7 +338,7 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                         ),
-                        child: const Text('Add to Order'),
+                        child: Text(widget.orderSub != null ? 'Update Item' : 'Add to Order'),
                       ),
                     ),
                   ],

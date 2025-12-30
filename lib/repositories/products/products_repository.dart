@@ -686,6 +686,7 @@ class ProductsRepository {
       );
       return const Right(null);
     } catch (e) {
+      developer.log('ProductsRepository: updateProductLocal() - Error: $e');
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -693,6 +694,7 @@ class ProductsRepository {
   /// Update product via API and update local DB
   Future<Either<Failure, Product>> updateProduct(Product product) async {
     try {
+      final testtojson=product.toJson();
       // 1. Call API
       final response = await _dio.post(
         ApiEndpoints.updateProduct,
@@ -745,8 +747,10 @@ class ProductsRepository {
 
       return Right(updateProductApi.product);
     } on DioException catch (e) {
+      developer.log('ProductsRepository: updateProduct() - DioException: $e');
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
+      developer.log('ProductsRepository: updateProduct() - Error: $e');
       return Left(UnknownFailure.fromError(e));
     }
   }

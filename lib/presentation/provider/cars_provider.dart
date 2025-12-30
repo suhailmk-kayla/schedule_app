@@ -364,6 +364,7 @@ class CarsProvider extends ChangeNotifier {
       await _carBrandRepository.addCarBrand(carApi.carBrand);
       await _carNameRepository.addCarName(carApi.carName);
       
+      
       if (carApi.models.isNotEmpty) {
         for (final model in carApi.models) {
           await _carModelRepository.addCarModel(model);

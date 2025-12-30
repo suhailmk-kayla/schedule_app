@@ -843,7 +843,7 @@ _setError(failure.message);
 
     // Update flag to 3 (draft)
     final flagResult = await _ordersRepository.updateOrderFlag(
-      orderId: _orderMaster!.orderId,
+      orderId: _orderMaster!.id,
       flag: 3,
     );
 
@@ -1716,8 +1716,10 @@ _setError(failure.message);
         (failure) => _setError(failure.message),
         (_) {
           success = true;
-          // Update local DB for biller (matching KMP's updateBiller - line 2178)
-          if (isBiller) {
+          // Update local DB for biller only if userId != 0 (meaning a specific user is being assigned)
+          // When userId == 0, we're just notifying billers, not assigning anyone
+          // Actual biller assignment happens when biller opens the order
+          if (isBiller && userId != 0) {
             _ordersRepository.updateBillerLocal(
               orderId: order.orderId,
               billerId: userId,

@@ -102,27 +102,38 @@ class _OrderDetailsSalesmanScreenState
     final order = ordersProvider.orderDetails?.order;
     if (order == null) return;
 
-    // Run both operations in parallel since they are independent
-    final results = await Future.wait([
-      // Send to biller (if not already sent)
-      order.orderBillerId == -1
-          ? ordersProvider.sendToBillerOrChecker(
-              isBiller: true,
-              userId: 0, // 0L in KMP means no specific user
-              order: order,
-            )
-          : Future.value(true), // Already sent to biller
-      // Send to checker
-      ordersProvider.sendToCheckers(order),
-    ]);
+    // Step 1: Send to biller first (just notifications, no flag change, no assignment)
+    // This is essentially a "no-op" for local DB - just sends notifications
+    bool billerSuccess = true;
+    if (order.orderBillerId == -1) {
+      billerSuccess = await ordersProvider.sendToBillerOrChecker(
+        isBiller: true,
+        userId: 0, // 0 means notify all billers, don't assign anyone
+        order: order,
+      );
+      
+      if (!billerSuccess) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to send to biller: ${ordersProvider.errorMessage ?? "Unknown error"}',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return; // Stop here if biller notification failed
+      }
+    }
+
+    // Step 2: Send to checker (sets approveFlag to 6)
+    // Run sequentially to avoid race conditions and ensure correct flag update
+    final checkerSuccess = await ordersProvider.sendToCheckers(order);
 
     if (!mounted) return;
 
-    final billerSuccess = results[0];
-    final checkerSuccess = results[1];
-
-    if (billerSuccess && checkerSuccess) {
-      // Refresh order details to get updated state (matching KMP's reload behavior)
+    if (checkerSuccess) {
+      // Refresh order details to get updated state (flag should now be 6)
       await _refresh();
       
       // Update button visibility based on refreshed order state (matching KMP lines 86-87, 107-108, 130-131)
@@ -144,22 +155,12 @@ class _OrderDetailsSalesmanScreenState
         );
       }
     } else {
-      // Show error message for failed operations
-      final errorMessages = <String>[];
-      if (!billerSuccess) {
-        errorMessages.add('Failed to send to biller');
-      }
-      if (!checkerSuccess) {
-        errorMessages.add('Failed to send to checker');
-      }
+      // Show error if checker assignment failed
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              errorMessages.join(' and ') +
-                  (ordersProvider.errorMessage != null
-                      ? ': ${ordersProvider.errorMessage}'
-                      : ''),
+              'Failed to send to checker: ${ordersProvider.errorMessage ?? "Unknown error"}',
             ),
             backgroundColor: Colors.red,
           ),

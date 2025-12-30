@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../provider/orders_provider.dart';
+import '../../provider/products_provider.dart';
 import '../../../models/order_sub_with_details.dart';
+import '../../../models/order_api.dart';
 import '../customers/customers_screen.dart';
 import '../products/products_screen.dart';
+import 'add_product_to_order_dialog.dart';
 
 /// Create Order Screen
 /// Allows creating new orders with customer selection, products, and notes
@@ -133,6 +136,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     if (success) {
       // Delete temp order and subs (matches KMP line 362)
       await ordersProvider.deleteOrderAndSub();
+      ToastHelper.showSuccess('Order sent successfully');
       if (mounted) {
         Navigator.of(context).pop();
       }
@@ -199,6 +203,81 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         ordersProvider.getAllOrderSubAndDetails();
       }
     });
+  }
+
+  void _editProduct(OrderSubWithDetails item) async {
+    final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+    final productsProvider = Provider.of<ProductsProvider>(context, listen: false);
+    
+    if (ordersProvider.orderMaster == null) {
+      ToastHelper.showError('Order not loaded');
+      return;
+    }
+
+    // Load the product by ID
+    final product = await productsProvider.loadProductById(item.orderSub.orderSubPrdId);
+    if (product == null) {
+      ToastHelper.showError('Product not found');
+      return;
+    }
+
+    // Show bottom sheet for editing
+    if (mounted) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) => AddProductToOrderDialog(
+          product: product,
+          orderId: ordersProvider.orderMaster!.id.toString(),
+          orderSub: item.orderSub, // Pass existing orderSub for edit mode
+          onSave: (rate, quantity, narration, unitId) async {
+            // Update the order sub
+            final updatedOrderSub = OrderSub(
+              id: item.orderSub.id, // Keep local DB ID
+              orderSubId: item.orderSub.orderSubId, // Keep server ID
+              orderSubOrdrInvId: item.orderSub.orderSubOrdrInvId,
+              orderSubOrdrId: item.orderSub.orderSubOrdrId,
+              orderSubCustId: item.orderSub.orderSubCustId,
+              orderSubSalesmanId: item.orderSub.orderSubSalesmanId,
+              orderSubStockKeeperId: item.orderSub.orderSubStockKeeperId,
+              orderSubDateTime: item.orderSub.orderSubDateTime,
+              orderSubPrdId: item.orderSub.orderSubPrdId, // Keep product ID
+              orderSubUnitId: unitId, // Updated unit
+              orderSubCarId: item.orderSub.orderSubCarId,
+              orderSubRate: item.orderSub.orderSubRate, // Keep original rate
+              orderSubUpdateRate: rate, // Updated rate
+              orderSubQty: quantity, // Updated quantity
+              orderSubAvailableQty: item.orderSub.orderSubAvailableQty,
+              orderSubUnitBaseQty: item.orderSub.orderSubUnitBaseQty,
+              orderSubNote: item.orderSub.orderSubNote,
+              orderSubNarration: narration, // Updated narration
+              orderSubOrdrFlag: item.orderSub.orderSubOrdrFlag,
+              orderSubIsCheckedFlag: item.orderSub.orderSubIsCheckedFlag,
+              orderSubFlag: item.orderSub.orderSubFlag,
+              createdAt: item.orderSub.createdAt,
+              updatedAt: DateTime.now().toIso8601String(),
+              checkerImage: item.orderSub.checkerImage,
+              suggestions: item.orderSub.suggestions, // Preserve suggestions
+            );
+
+            // Update order sub in local DB only (no API call)
+            // Server update happens when "Check Stock" is clicked
+            final success = await ordersProvider.addOrderSub(updatedOrderSub);
+            if (success) {
+              Navigator.pop(context); // Close bottom sheet
+              await ordersProvider.getAllOrderSubAndDetails(); // Refresh list
+              if (mounted) {
+                ToastHelper.showSuccess('Item updated successfully');
+              }
+            } else {
+              if (mounted) {
+                ToastHelper.showError(ordersProvider.errorMessage ?? 'Failed to update item');
+              }
+            }
+          },
+        ),
+      );
+    }
   }
 
   @override
@@ -358,8 +437,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                                 }
                               },
                               onTap: () {
-                                // TODO: Edit item - navigate to product selection with orderSubId
-                                _addProduct();
+                                // Show edit bottom sheet instead of navigating to products page
+                                _editProduct(item);
                               },
                             );
                           }),

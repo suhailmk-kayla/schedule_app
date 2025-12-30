@@ -142,13 +142,14 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
     if (success) {
       await context.read<SalesmanProvider>().loadSalesmen();
       Navigator.of(context).pop(true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(widget.userId == null
-              ? 'Salesman created successfully'
-              : 'Salesman updated successfully'),
-        ),
-      );
+      ToastHelper.showSuccess(widget.userId == null ? 'Salesman created successfully' : 'Salesman updated successfully');
+      // ScaffoldMessenger.of(context).showSnackBar(
+      //   SnackBar(
+      //     content: Text(widget.userId == null
+      //         ? 'Salesman created successfully'
+      //         : 'Salesman updated successfully'),
+      //   ),
+      // );
     } else {
       final message =
           usersProvider.errorMessage ?? 'Failed to ${widget.userId == null ? 'create' : 'update'} salesman. Please try again.';

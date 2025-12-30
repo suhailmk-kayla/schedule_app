@@ -822,7 +822,7 @@ class ProductsProvider extends ChangeNotifier {
         : ''; // Empty string = preserve existing photo
 
     final product = Product(
-      id: productId,
+      productId: productId,
       name: _nameSt,
       code: _codeSt,
       barcode: _barcodeSt,

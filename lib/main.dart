@@ -120,6 +120,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           }
 
           return MaterialApp(
+            builder: (context, child) {
+              return MediaQuery(
+                data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(1.0)),
+                 child: child!
+                 );
+            },
             navigatorKey: _navigatorKey,
             title: 'Schedule App',
             debugShowCheckedModeBanner: false,
