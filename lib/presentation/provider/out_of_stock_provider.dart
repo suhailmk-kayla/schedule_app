@@ -467,7 +467,13 @@ class OutOfStockProvider extends ChangeNotifier {
   }) async {
     _setLoading(true);
     _clearError();
-
+    //if no supplier is selected return earlier
+    if (subItem.supplierId == -1) {
+      _setError('No supplier selected');
+      _setLoading(false);
+      onFailure('No supplier selected');
+      return;
+    }
     try {
       final payload = _buildUpdateOutOfStockSubParams(
         subItem: subItem,
@@ -501,7 +507,7 @@ class OutOfStockProvider extends ChangeNotifier {
             customUserIds: [
               {'user_id': subItem.supplierId, 'silent_push': 0}
             ],
-            message: 'New order received',
+            message: 'Out of stock order received',
           );
           _setLoading(false);
           onSuccess();

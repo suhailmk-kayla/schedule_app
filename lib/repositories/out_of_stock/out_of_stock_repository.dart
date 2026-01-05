@@ -272,7 +272,7 @@ class OutOfStockRepository {
           LEFT JOIN Units un ON un.unitId = oosp.unitId
           LEFT JOIN Product pr ON pr.productId = oosp.productId
           WHERE oosp.flag = 1 AND oosp.supplierId = ? AND oosp.updatedDateTime LIKE ?
-          ORDER BY oosp.oospId
+          ORDER BY oosp.updatedDateTime DESC
           ''',
           [supplierId, '%$date%'],
         );
@@ -295,7 +295,7 @@ class OutOfStockRepository {
           LEFT JOIN Units un ON un.unitId = oosp.unitId
           LEFT JOIN Product pr ON pr.productId = oosp.productId
           WHERE oosp.flag = 1 AND oosp.supplierId = ? AND LOWER(pr.name) LIKE LOWER(?) AND oosp.updatedDateTime LIKE ?
-          ORDER BY oosp.oospId
+          ORDER BY oosp.updatedDateTime DESC
           ''',
           [supplierId, '%$searchKey%', '%$date%'],
         );

@@ -939,7 +939,7 @@ class _OrderItemCardState extends State<_OrderItemCard> {
                 ],
               ),
               // Available Qty input (if out of stock)
-              if (_isOutOfStock) ...[
+              if (_isOutOfStock&&orderSub.orderSubQty>1) ...[
                 const SizedBox(height: 8),
                 SizedBox(
                   width: 150,

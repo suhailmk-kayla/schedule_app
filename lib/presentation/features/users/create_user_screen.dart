@@ -179,14 +179,17 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
       });
       return;
     }
-
     // Clear category error if valid
     setState(() {
       _categoryError = null;
     });
 
     final provider = Provider.of<UsersProvider>(context, listen: false);
-
+     bool isPhoneTaken=await provider.checkPhoneNumberTaken(_phoneController.text.trim());
+    if (isPhoneTaken) {
+      ToastHelper.showError('Phone number already taken');
+      return;
+    }
     if (widget.userId != null) {
       // Edit mode: Update user
       // Check code duplicate (excluding current user)
@@ -198,6 +201,7 @@ class _CreateUserScreenState extends State<CreateUserScreen> {
         ToastHelper.showError('Code already Exist');
         return;
       }
+
 
       final success = await provider.updateUser(
         userId: widget.userId!,

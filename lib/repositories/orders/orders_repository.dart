@@ -70,8 +70,8 @@ class OrdersRepository {
           SELECT Orders.*
           FROM Orders
           LEFT JOIN Customers ON Customers.customerId = Orders.customerId
-          LEFT JOIN Routes ON Routes.routeId = Customers.routId
-          WHERE $whereClause AND Routes.routeId = ?
+          LEFT JOIN Routes rt ON rt.routeId = Customers.routId
+          WHERE $whereClause AND rt.routeId = ?
           ORDER BY Orders.updatedDateTime DESC
           ''',
           [...whereArgs, routeId],
@@ -147,7 +147,7 @@ class OrdersRepository {
           END AS storeKeeperName,
           CASE
             WHEN Customers.routId = -1 THEN ''
-            ELSE COALESCE(Routes.name, '')
+            ELSE COALESCE(rt.name, '')
           END AS routeName,
           CASE
             WHEN Orders.billerId = -1 THEN ''
@@ -166,7 +166,7 @@ class OrdersRepository {
         LEFT JOIN Users biller ON biller.userId = Orders.billerId
         LEFT JOIN Users checker ON checker.userId = Orders.checkerId
         LEFT JOIN Customers ON Customers.customerId = Orders.customerId
-        LEFT JOIN Routes ON Routes.routeId = Customers.routId
+        LEFT JOIN Routes rt ON rt.routeId = Customers.routId
         WHERE Orders.orderId = ?
         LIMIT 1
         ''',
@@ -207,7 +207,7 @@ class OrdersRepository {
       final List<Map<String, dynamic>> maps;
 
       // Build query with JOINs to get names
-      String whereClause = 'Orders.flag > 0 AND Orders.flag != 2';
+      String whereClause = '(Orders.flag = 1 OR Orders.flag = 3)';
       List<dynamic> whereArgs = [];
 
       if (salesmanId != null) {
@@ -217,7 +217,7 @@ class OrdersRepository {
 
 
       if (routeId != -1) {
-        whereClause += ' AND Routes.routeId = ?';
+        whereClause += ' AND rt.routeId = ?';
         whereArgs.add(routeId);
       }
 
@@ -242,7 +242,7 @@ class OrdersRepository {
           END AS storeKeeperName,
           CASE
             WHEN Customers.routId = -1 THEN ''
-            ELSE COALESCE(Routes.name, '')
+            ELSE COALESCE(rt.name, '')
           END AS routeName,
           CASE
             WHEN Orders.billerId = -1 THEN ''
@@ -261,7 +261,7 @@ class OrdersRepository {
         LEFT JOIN Users biller ON biller.userId = Orders.billerId
         LEFT JOIN Users checker ON checker.userId = Orders.checkerId
         LEFT JOIN Customers ON Customers.customerId = Orders.customerId
-        LEFT JOIN Routes ON Routes.routeId = Customers.routId
+        LEFT JOIN Routes rt ON rt.routeId = Customers.routId
         WHERE $whereClause
         ORDER BY Orders.updatedDateTime DESC
         ''',
@@ -829,7 +829,7 @@ class OrdersRepository {
         [
           orderSub.orderSubId,
           orderSub.orderSubOrdrId,
-          orderSub.orderSubOrdrInvId.toString(),
+          orderSub.orderSubOrdrInvId, // Already a String, no .toString() needed
           '', // UUID
           orderSub.orderSubCustId,
           orderSub.orderSubStockKeeperId,
@@ -883,7 +883,7 @@ class OrdersRepository {
             [
               orderSub.orderSubId,
               orderSub.orderSubOrdrId,
-              orderSub.orderSubOrdrInvId.toString(),
+              orderSub.orderSubOrdrInvId, // Already a String, no .toString() needed
               '', // UUID
               orderSub.orderSubCustId,
               orderSub.orderSubStockKeeperId,
@@ -967,10 +967,26 @@ class OrdersRepository {
   Future<Either<Failure, void>> updateOrderFlag({
     required int orderId,
     required int flag,
+    bool isDraft=false
   }) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
+        if(isDraft){
+          await txn.update(
+            'Orders',
+            {'flag': flag},
+            where: 'id = ?',
+            whereArgs: [orderId],
+          );
+          await txn.update(
+            'OrderSub',
+            {'flag': flag},
+            where: 'id = ?',
+            whereArgs: [orderId],
+          );
+        }
+        else{ 
         await txn.update(
           'Orders',
           {'flag': flag},
@@ -983,6 +999,7 @@ class OrdersRepository {
           where: 'orderId = ?',
           whereArgs: [orderId],
         );
+        }
       });
       developer.log('OrdersRepository: Updated order flag: $flag for order: $orderId');
       return const Right(null);
@@ -999,6 +1016,7 @@ class OrdersRepository {
     required int checkerId,
   }) async {
     try {
+      developer.log('updateCheckerLocal: updating checker id: $checkerId for order: $orderId');
       final db = await _database;
       await db.update(
         'Orders',
@@ -1006,6 +1024,7 @@ class OrdersRepository {
         where: 'orderId = ?',
         whereArgs: [orderId],
       );
+      developer.log('updateCheckerLocal: checker id updated: $checkerId for order: $orderId');
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -1018,9 +1037,19 @@ class OrdersRepository {
     required int orderId,
     required double freightCharge,
     required double total,
+    bool isDraft=false,
   }) async {
     try {
       final db = await _database;
+      if(isDraft){
+        await db.update(
+          'Orders',
+          {'freightCharge': freightCharge, 'total': total},
+          where: 'id = ?',
+          whereArgs: [orderId],
+        );
+      }
+      else{
       await db.update(
         'Orders',
         {
@@ -1030,6 +1059,39 @@ class OrdersRepository {
         where: 'orderId = ?',
         whereArgs: [orderId],
       );
+      }
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+
+
+    Future<Either<Failure, void>> updateCustomer({
+    required int orderId,
+    required String customerName,
+    required int customerId,
+    bool isDraft=false,
+  }) async {
+    try {
+      final db = await _database;
+      if(isDraft){
+        await db.update(
+          'Orders',
+          {'customerId': customerId, 'customerName': customerName},
+          where: 'id = ?',
+          whereArgs: [orderId],
+        );
+      }
+      else{
+      await db.update(
+        'Orders',
+        {'customerId': customerId, 'customerName': customerName},
+        where: 'orderId = ?',
+        whereArgs: [orderId],
+      );
+      }
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -1041,15 +1103,26 @@ class OrdersRepository {
   Future<Either<Failure, void>> updateUpdatedDate({
     required int orderId,
     required String updatedDateTime,
+    bool isDraft=false
   }) async {
     try {
       final db = await _database;
+      if(isDraft){
+        await db.update(
+          'Orders',
+          {'updatedDateTime': updatedDateTime},
+          where: 'id = ?',
+          whereArgs: [orderId],
+        );
+      }
+      else{
       await db.update(
         'Orders',
         {'updatedDateTime': updatedDateTime},
         where: 'orderId = ?',
         whereArgs: [orderId],
       );
+      }
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -1492,10 +1565,12 @@ class OrdersRepository {
       );
 
       if (response.statusCode != 200) {
+        developer.log('updateOrderApproveFlag: failed to update order approval flag: ${response.statusMessage}');
         return Left(ServerFailure.fromError(
           'Failed to update order approval flag: ${response.statusMessage}',
         ));
       }
+      developer.log('updateOrderApproveFlag: order approval flag updated for server: $approveFlag for order: $orderId');
 
       // Update local DB
       final db = await _database;
@@ -1505,6 +1580,7 @@ class OrdersRepository {
         where: 'orderId = ?',
         whereArgs: [orderId],
       );
+      developer.log('updateOrderApproveFlag: approve flag updated for local db: $approveFlag for order: $orderId');
 
       return const Right(null);
     } on DioException catch (e) {
@@ -1597,6 +1673,48 @@ class OrdersRepository {
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Mark order as billed
+  /// Calls API to mark order as billed, then updates local database
+  Future<Either<Failure, void>> markOrderAsBilled({
+    required int orderId,
+    required int billerId,
+    Map<String, dynamic>? notification,
+  }) async {
+    try {
+      final params = {
+        'order_id': orderId,
+        'biller_id': billerId,
+        if (notification != null) 'notification': notification,
+      };
+
+      final response = await _dio.post(
+        ApiEndpoints.markOrderAsBilled,
+        data: params,
+      );
+
+      if (response.statusCode != 200) {
+        return Left(ServerFailure.fromError(
+          'Failed to mark order as billed: ${response.statusMessage}',
+        ));
+      }
+
+      // Update local DB after successful API call
+      final db = await _database;
+      await db.update(
+        'Orders',
+        {'isBilled': 1},
+        where: 'orderId = ?',
+        whereArgs: [orderId],
+      );
+
+      return const Right(null);
+    } on DioException catch (e) {
+      return Left(NetworkFailure.fromDioError(e));
+    } catch (e) {
+      return Left(UnknownFailure.fromError(e));
     }
   }
 

@@ -860,7 +860,10 @@ class _SubItemCard extends StatelessWidget {
                       ),
                       child: Text(
                         subItem.oospFlag == 3 && subItem.availQty > 0 ? 'Reject' : 'Not Available',
-                        style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.red,
+                           fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -876,12 +879,17 @@ class _SubItemCard extends StatelessWidget {
                         backgroundColor: Theme.of(context).primaryColor,
                       ),
                       child: Text(
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         subItem.supplierId == -1
                             ? 'Select Supplier'
                             : subItem.oospFlag == 3
                                 ? (subItem.availQty > 0 ? 'Accept' : 'Change Supplier')
                                 : 'Send to Supplier',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.white,
+                           fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),

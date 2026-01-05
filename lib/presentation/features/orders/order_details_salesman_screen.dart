@@ -106,11 +106,15 @@ class _OrderDetailsSalesmanScreenState
     // This is essentially a "no-op" for local DB - just sends notifications
     bool billerSuccess = true;
     if (order.orderBillerId == -1) {
-      billerSuccess = await ordersProvider.sendToBillerOrChecker(
-        isBiller: true,
-        userId: 0, // 0 means notify all billers, don't assign anyone
-        order: order,
-      );
+      billerSuccess=await ordersProvider.sendToBiller(
+        userId: 0,
+         order: order
+         );
+      // billerSuccess = await ordersProvider.sendToBillerOrChecker(
+      //   isBiller: true,
+      //   userId: 0, 
+      //   order: order,
+      // );
       
       if (!billerSuccess) {
         if (!mounted) return;
@@ -172,18 +176,11 @@ class _OrderDetailsSalesmanScreenState
   Future<void> _handleReportItem(OrderSub orderSub) async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     final success = await ordersProvider.reportAdmin(orderSub);
-
     if (!mounted) return;
-
     if (success) {
       await _refresh();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(ordersProvider.errorMessage ?? 'Failed to report item'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ToastHelper.showError(ordersProvider.errorMessage ?? 'Failed to report item');
     }
   }
 

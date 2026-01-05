@@ -419,6 +419,7 @@ class DatabaseHelper {
       total REAL DEFAULT 0.0 NOT NULL,
       freightCharge REAL DEFAULT 0.0 NOT NULL,
       approveFlag INTEGER DEFAULT 0 NOT NULL,
+      isBilled INTEGER DEFAULT 0 NOT NULL,
       createdDateTime TEXT DEFAULT '' NOT NULL,
       updatedDateTime TEXT DEFAULT '' NOT NULL,
       flag INTEGER DEFAULT 0 NOT NULL,
@@ -452,7 +453,10 @@ class DatabaseHelper {
       updatedDateTime TEXT DEFAULT '' NOT NULL,
       isCheckedflag INTEGER DEFAULT 0 NOT NULL,
       flag INTEGER DEFAULT 0 NOT NULL,
-      checkerImage TEXT
+      checkerImage TEXT,
+      estimatedQty REAL DEFAULT 0.0 NOT NULL,
+      estimatedAvailableQty REAL DEFAULT 0.0 NOT NULL,
+      estimatedTotal REAL DEFAULT 0.0 NOT NULL
     );
   ''';
 

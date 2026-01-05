@@ -14,6 +14,7 @@ import 'create_order_screen.dart';
 import 'order_details_checker_screen.dart';
 import 'order_details_screen.dart';
 import 'order_details_salesman_screen.dart';
+import 'order_details_biller_screen.dart';
 
 /// Orders Screen
 /// Displays list of orders with search, route filter, and date filter
@@ -74,7 +75,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     final ordersProvider = Provider.of<OrdersProvider>(context);
 
     return Consumer<NotificationManager>(
-      builder: (context, notificationManager, _) {
+      builder: (context, notificationManager,_) {
         // Listen to notification trigger and refresh data
         if (notificationManager.notificationTrigger) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -223,20 +224,35 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                   homeProvider.refreshCounts();
                                 });
                               } else if (_userType == 3) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => OrderDetailsSalesmanScreen(
-                                        orderId: order.orderId),
-                                  ),
-                                ).then((_) {
-                                  // Refresh badge counts when returning from order details
-                                  final homeProvider = Provider.of<HomeProvider>(context, listen: false);
-                                  homeProvider.refreshCounts();
-                                });
+                                // Check if it's a draft order (flag = 3) - if so, navigate to CreateOrderScreen for editing
+                                // This matches KMP's behavior (BaseScreen.kt lines 394-397)
+                                if (order.orderFlag == 3) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => CreateOrderScreen(orderId: order.orderId.toString()),
+                                    ),
+                                  ).then((_) {
+                                    // Refresh badge counts when returning from order details
+                                    final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                                    homeProvider.refreshCounts();
+                                  });
+                                } else {
+                                  // For non-draft orders, navigate to OrderDetailsSalesmanScreen
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => OrderDetailsSalesmanScreen(orderId: order.orderId),
+                                    ),
+                                  ).then((_) {
+                                    // Refresh badge counts when returning from order details
+                                    final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                                    homeProvider.refreshCounts();
+                                  });
+                                }
                               } else if (_userType == 6) {
                                 // Checker flow: claim if unassigned, otherwise validate ownership
-                                if (order.orderCheckerId == -1) {
+                                if (order.orderCheckerId < 1 && order.orderCheckerId != _userId) {
                                   final success = await provider.claimOrderAsChecker(
                                     orderId: order.orderId,
                                     checkerId: _userId,
@@ -394,12 +410,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
       return;
     }
 
-    // Navigate to order details screen (same as admin/salesman)
-    // Billers use the same OrderDetailsScreen which shows freight charge and total
+    // Navigate to biller-specific order details screen with Estimated/Final Bill tabs
     if (!mounted) return;
     await navigator.push(
       MaterialPageRoute(
-        builder: (_) => OrderDetailsScreen(orderId: order.orderId),
+        builder: (_) => OrderDetailsBillerScreen(orderId: order.orderId),
       ),
     ).then((_) {
       // Refresh badge counts when returning from order details
@@ -519,7 +534,19 @@ class _OrderListItem extends StatelessWidget {
                         fontWeight: isPending ? FontWeight.bold : FontWeight.bold,
                       ),
                     ),
+                    
                   ),
+                  const SizedBox(width: 10),
+                  order.orderIsBilled == 1 ? Container(
+                    padding: EdgeInsets.symmetric(horizontal: 5,vertical: 2),
+                    width: 70,
+                    height: 20,
+                    decoration: BoxDecoration(
+                     border: Border.all(color: Colors.green),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text('Billed'),
+                  ):SizedBox.shrink(),
                   Text(
                     _formatDate(order.updatedAt),
                     style: TextStyle(
@@ -644,17 +671,40 @@ class _OrderListItem extends StatelessWidget {
       case 5: // CANCELLED
         return 'Order Cancelled';
       case 6: // SEND_TO_CHECKER
-        if (userType == 5) {
-          return 'Pending';
-        } else {
-          return 'Pending in Checker';
+        switch (userType){
+          case 5:
+            return 'Pending';
+          case 3:
+            return 'Send to Biller and Checker';
+          case 6:
+            return 'Pending';
+          default:
+            return 'Pending in Checker';
         }
+        // if (userType == 5) {
+        //   return 'Pending';
+        // } else {
+        //   return 'Pending in Checker';
+        // }
       case 7: // CHECKER_IS_CHECKING
-        if (userType == 5) {
+        switch (userType){
+          case 5:
           return 'Pending';
-        } else {
+          case 6:
+          if(order.orderCheckerId == userId){
+            return 'Waiting for your submission';
+          }else{
+            return 'Pending in Checker';
+          }
+          default:
           return 'Checker is checking';
         }
+        // if (userType == 5) {
+        //   return 'Pending';
+        
+        // } else {
+        //   return 'Checker is checking';
+        // }
       default:
         return 'Error 404';
     }

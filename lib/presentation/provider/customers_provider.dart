@@ -446,7 +446,7 @@ class CustomersProvider extends ChangeNotifier {
       (failure) => null,
       (order) {
         if (order != null) {
-          orderId = order.orderInvNo + 1;
+          orderId = order.orderId + 1; // Use orderId (int), not orderInvNo (String)
         }
       },
     );
@@ -455,7 +455,7 @@ class CustomersProvider extends ChangeNotifier {
     final tempOrder = Order(
       id: 0,
       uuid: '',
-      orderInvNo: orderId,
+      orderInvNo: 'ORDER$orderId',
       orderCustId: customer.customerId!,
       orderCustName: customer.name,
       orderSalesmanId: userId,
@@ -487,7 +487,7 @@ class CustomersProvider extends ChangeNotifier {
             // Find the order we just created by customer ID and invoiceNo
             // This ensures we get the correct order even if there are multiple temp orders
             order = orders.firstWhere(
-              (o) => o.orderCustId == customer.customerId! && o.orderInvNo == orderId,
+              (o) => o.orderCustId == customer.customerId! && o.orderInvNo == 'ORDER$orderId',
               orElse: () => tempOrder, // Fallback to tempOrder if not found
             );
           },

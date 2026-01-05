@@ -289,6 +289,7 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
       
                     // Rate Field
                     TextField(
+                      readOnly: true,
                       controller: _rateController,
                       decoration: const InputDecoration(
                         labelText: 'Rate',

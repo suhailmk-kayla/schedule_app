@@ -634,7 +634,9 @@ _setError(failure.message);
               notifyListeners();
             },
           );
-        } else {
+        }
+         else 
+        {
           // Create new temp order
           await createTempOrder();
         }
@@ -707,7 +709,7 @@ _setError(failure.message);
       orderId: nextOrderId,
       // id: nextOrderId,
       uuid: '${now.millisecondsSinceEpoch}$deviceToken$userId',
-      orderInvNo: 0,
+      orderInvNo: 'ORDER$nextOrderId',
       orderCustId: -1,
       orderCustName: '',
       orderSalesmanId: userId,
@@ -845,6 +847,7 @@ _setError(failure.message);
     final flagResult = await _ordersRepository.updateOrderFlag(
       orderId: _orderMaster!.id,
       flag: 3,
+      isDraft: true
     );
 
     if (flagResult.isLeft) {
@@ -853,11 +856,19 @@ _setError(failure.message);
       return false;
     }
 
+    final updateCustomerResult=await _ordersRepository.updateCustomer(
+      orderId: _orderMaster!.id,
+      customerId: _orderMaster!.orderCustId,
+      customerName: _orderMaster!.orderCustName,
+      isDraft: true
+    );
+
     // Update freight and total
     final updateResult = await _ordersRepository.updateFreightAndTotal(
-      orderId: _orderMaster!.orderId,
+      orderId: _orderMaster!.id,
       freightCharge: freightCharge,
       total: total,
+      isDraft: true,
     );
 
     if (updateResult.isLeft) {
@@ -868,9 +879,11 @@ _setError(failure.message);
 
     // Update updated date
     await _ordersRepository.updateUpdatedDate(
-      orderId: _orderMaster!.orderId,
+      orderId: _orderMaster!.id,
       updatedDateTime: dateTimeStr,
+      isDraft: true,
     );
+    loadOrders();
 
     _setLoading(false);
     return true;
@@ -1037,7 +1050,7 @@ _setError(failure.message);
           for (final admin in admins) {
             userIds.add({
               'user_id': admin.userId,
-              'silent_push': 1,
+              'silent_push': 0,
             });
           }
         },
@@ -1052,7 +1065,7 @@ _setError(failure.message);
             if (storekeeper.id != currentUserId) {
               userIds.add({
                 'user_id': storekeeper.userId,
-                'silent_push': 1,
+                'silent_push': 0,
               });
             }
           }
@@ -1068,7 +1081,7 @@ _setError(failure.message);
             for (final biller in billers) {
               userIds.add({
                 'user_id': biller.userId,
-                'silent_push': 1,
+                'silent_push': 0,
               });
             }
           },
@@ -1079,7 +1092,7 @@ _setError(failure.message);
       if (order.orderSalesmanId != -1) {
         userIds.add({
           'user_id': order.orderSalesmanId,
-          'silent_push': 1,
+          'silent_push': 0,
         });
       }
 
@@ -1686,7 +1699,7 @@ _setError(failure.message);
 
       // Build notification data
       final dataIds = [
-        {'table': 8, 'id': order.id}
+        {'table': 8, 'id': order.orderId}
       ];
 
       final notificationJsonObject = {
@@ -1719,7 +1732,7 @@ _setError(failure.message);
           // Update local DB for biller only if userId != 0 (meaning a specific user is being assigned)
           // When userId == 0, we're just notifying billers, not assigning anyone
           // Actual biller assignment happens when biller opens the order
-          if (isBiller && userId != 0) {
+          if (isBiller) {
             _ordersRepository.updateBillerLocal(
               orderId: order.orderId,
               billerId: userId,
@@ -1739,7 +1752,7 @@ _setError(failure.message);
           }
         },
       );
-
+      loadOrders();
       _setLoading(false);
       return success;
     } catch (e) {
@@ -1751,12 +1764,34 @@ _setError(failure.message);
 
   /// Send order to checkers
   /// Converted from KMP's sendToCheckers
+  /// Also populates estimated fields when order flag is updated to 6
   Future<bool> sendToCheckers(Order order) async {
     _setLoading(true);
     _clearError();
 
     try {
-      // Get users for notifications
+      // Step 1: Populate estimated fields by calling updateBillerOrChecker with approveFlag=6
+      // This triggers the backend to populate estimated_qty, estimated_available_qty, estimated_total
+      // We use is_biller=0 and user_Id=0 since we're just populating estimated fields
+      final populateEstimatedParams = {
+        'order_id': order.orderId,
+        'is_biller': 0,
+        'user_Id': 0,
+        'order_approve_flag': OrderApprovalFlag.sendToChecker,
+      };
+      
+      final populateResult = await _ordersRepository.updateBillerOrChecker(populateEstimatedParams);
+      populateResult.fold(
+        (failure) {
+          // Log error but continue - estimated fields population is not critical
+          developer.log('sendToCheckers: Failed to populate estimated fields: ${failure.message}');
+        },
+        (_) {
+          developer.log('sendToCheckers: Estimated fields populated successfully');
+        },
+      );
+
+      // Step 2: Get users for notifications
       final adminsResult = await _usersRepository.getUsersByCategory(1);
       final checkersResult = await _usersRepository.getUsersByCategory(6);
       final List<Map<String, dynamic>> userIds = [];
@@ -1785,7 +1820,7 @@ _setError(failure.message);
         },
       );
 
-      // Build notification data
+      // Step 3: Build notification data
       final dataIds = [
         {'table': 8, 'id': order.orderId}
       ];
@@ -1800,7 +1835,7 @@ _setError(failure.message);
         },
       };
 
-      // Call API
+      // Step 4: Update order approval flag and send notifications
       final result = await _ordersRepository.updateOrderApproveFlag(
         orderId: order.orderId,
         approveFlag: OrderApprovalFlag.sendToChecker,
@@ -2286,6 +2321,34 @@ _setError(failure.message);
         includeBillers: true,
       );
 
+      //get all billers for notifying the change
+      final billersResult = await _usersRepository.getUsersByCategory(5);
+      billersResult.fold(
+        (_) {},
+        (billers) {
+          for (final biller in billers) {
+            notificationIds.add({
+              'user_id': biller.userId,
+              'silent_push': 0,
+            });
+          }
+        },
+      );
+
+      //get all admins for notifying the change
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            notificationIds.add({
+              'user_id': admin.userId,
+              'silent_push': 0,
+            });
+          }
+        },
+      );
+
       if (order.orderSalesmanId != -1) {
         notificationIds.add({
           'user_id': order.orderSalesmanId,
@@ -2293,12 +2356,14 @@ _setError(failure.message);
         });
       }
 
+
       final notificationPayload = {
         'ids': notificationIds,
         'data_message': 'Order checked and completed',
         'data': {
           'data_ids': [
             {'table': 8, 'id': order.orderId},
+            //add table and id for ordersub items
           ],
           'show_notification': '0',
           'message': 'Order checked and completed',
@@ -2609,6 +2674,164 @@ _setError(failure.message);
       return success;
     } catch (e) {
       _setError('Error claiming order as checker: $e');
+      _setLoading(false);
+      return false;
+    }
+  }
+
+
+
+
+
+
+    Future<bool> sendToBiller({
+    required int userId,
+    required Order order,
+  }) async {
+    _setLoading(true);
+    _clearError();
+    try {
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      final List<Map<String, dynamic>> userIds = [];
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            userIds.add({
+              'user_id': admin.userId ?? -1,
+              'silent_push': 1,
+            });
+          }
+        },
+      );
+        final billersResult = await _usersRepository.getUsersByCategory(5);
+        billersResult.fold(
+          (_) {},
+          (billers) {
+            for (final biller in billers) {
+              // Exclude the claiming biller (matches pattern for checkers)
+              if (userId != biller.userId) {
+                userIds.add({
+                  'user_id': biller.userId ?? -1,
+                  'silent_push': 1, // Silent notification for billers
+                });
+              }
+            }
+          },
+        );
+      // Build notification data
+      final dataIds = [
+        {'table': 8, 'id': order.orderId}
+      ];
+      final notificationJsonObject = {
+        'ids': userIds,
+        'data_message': 'Order received',
+        'data': {
+          'data_ids': dataIds,
+          'show_notification': '0',
+          'message': 'Order received',
+        },
+      };
+      // Build API params
+      final params = {
+        'order_id': order.orderId,
+        'is_biller': 1,
+        'user_Id': userId,
+        'notification': notificationJsonObject,
+      };
+      //might be confusing but backend is desinged as the same api for both biller and checker
+      //so we are using the same api for both biller and checker
+      final result = await _ordersRepository.updateBillerOrChecker(params);
+      bool success = false;
+      result.fold(
+        (failure) => _setError(failure.message),
+        (_) {
+          success = true;
+            _ordersRepository.updateBillerLocal(
+              orderId: order.orderId,
+              billerId: userId,
+            );
+        },
+      );
+      _setLoading(false);
+      return success;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Mark order as billed
+  /// Calls API first, then updates local database
+  Future<bool> markOrderAsBilled({
+    required int orderId,
+    required int billerId,
+  }) async {
+    _setLoading(true);
+    _clearError();
+    final List<Map<String, dynamic>> userIds = [];
+    try {
+
+      //get all billers for notifying the change
+      final billersResult = await _usersRepository.getUsersByCategory(5);
+      billersResult.fold(
+        (_) {},
+        (billers) {
+          for (final biller in billers) {
+            userIds.add({
+              'user_id': biller.userId,
+              'silent_push': 0,
+            });
+          }
+        },
+      );
+      //get all admins for notifying the change
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            userIds.add({
+              'user_id': admin.userId,
+              'silent_push': 0,
+            });
+          }
+        },
+      );
+      final dataIds = [
+        {'table': 8, 'id': orderId}
+      ];
+      final notificationJsonObject = {
+        'ids': userIds,
+        'data_message': 'Order marked as billed',
+        'data': {
+          'data_ids': dataIds,
+          'show_notification': '0',
+          'message': 'Order marked as billed',
+        },
+      };
+      // Call API to mark order as billed
+      final result = await _ordersRepository.markOrderAsBilled(
+        orderId: orderId,
+        billerId: billerId,
+        notification: notificationJsonObject,
+      );
+
+      bool success = false;
+      result.fold(
+        (failure) => _setError(failure.message),
+        (_) {
+          success = true;
+          // Reload order details to reflect the updated state
+          loadOrderDetails(orderId);
+        },
+      );
+
+      _setLoading(false);
+      return success;
+    } catch (e) {
+      _setError(e.toString());
       _setLoading(false);
       return false;
     }

@@ -64,6 +64,7 @@ class ApiEndpoints {
   static const String updateBillerOrChecker = 'api/orders/update_biller_adn_checker';
   static const String updateOrderApproveFlag = 'api/orders/update_order_flag';
   static const String updateStoreKeeper = 'api/orders/update_store_keeper';
+  static const String markOrderAsBilled = 'api/orders/mark_as_billed';
 
   // OutOfStock
   static const String addOutOfStock = 'api/out_of_stocks/add';

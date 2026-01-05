@@ -127,10 +127,11 @@ class Order {
 
   @JsonKey(
     name: 'order_inv_no',
-    defaultValue: 0,
-    fromJson: _intFromJsonZero,
+    defaultValue: '0',
+    fromJson: _stringFromJsonZero,
+    toJson: _stringToJsonInt,
   )
-  final int orderInvNo;
+  final String orderInvNo;
 
   @JsonKey(
     name: 'order_cust_id',
@@ -198,6 +199,13 @@ class Order {
   final int orderApproveFlag;
 
   @JsonKey(
+    name: 'order_is_billed',
+    defaultValue: 0,
+    fromJson: _intFromJsonZero,
+  )
+  final int orderIsBilled;
+
+  @JsonKey(
     name: 'order_flag',
     defaultValue: 1,
     fromJson: _intFromJsonOne,
@@ -216,7 +224,7 @@ class Order {
     this.id = -1,
     this.orderId = -1,
     this.uuid = '',
-    this.orderInvNo = 0,
+    this.orderInvNo = '0',
     this.orderCustId = -1,
     this.orderCustName = '',
     this.orderSalesmanId = -1,
@@ -228,6 +236,7 @@ class Order {
     this.orderFreightCharge = 0.0,
     this.orderNote,
     this.orderApproveFlag = -1,
+    this.orderIsBilled = 0,
     this.orderFlag = 1,
     this.createdAt = '',
     this.updatedAt = '',
@@ -244,7 +253,7 @@ class Order {
       id: map['id'] as int? ?? -1, // Local DB PK
       orderId: map['orderId'] as int? ?? -1, // Server ID
       uuid: map['UUID'] as String? ?? '',
-      orderInvNo: int.tryParse(map['invoiceNo'] as String? ?? '0') ?? 0,
+      orderInvNo: map['invoiceNo'] as String? ?? '0', // Direct string, no parsing
       orderCustId: map['customerId'] as int? ?? -1,
       orderCustName: map['customerName'] as String? ?? '',
       orderSalesmanId: map['salesmanId'] as int? ?? -1,
@@ -256,6 +265,7 @@ class Order {
       orderFreightCharge: (map['freightCharge'] as num?)?.toDouble() ?? 0.0,
       orderNote: map['note'] as String?,
       orderApproveFlag: map['approveFlag'] as int? ?? -1,
+      orderIsBilled: map['isBilled'] as int? ?? 0,
       orderFlag: map['flag'] as int? ?? 1,
       createdAt: map['createdDateTime'] as String? ?? '',
       updatedAt: map['updatedDateTime'] as String? ?? '',
@@ -267,7 +277,7 @@ class Order {
   Map<String, dynamic> toMap() {
     return {
       'orderId': orderId,
-      'invoiceNo': orderInvNo.toString(),
+      'invoiceNo': orderInvNo,
       'UUID': uuid,
       'customerId': orderCustId,
       'customerName': orderCustName,
@@ -280,6 +290,7 @@ class Order {
       'total': orderTotal,
       'freightCharge': orderFreightCharge,
       'approveFlag': orderApproveFlag,
+      'isBilled': orderIsBilled,
       'createdDateTime': createdAt,
       'updatedDateTime': updatedAt,
       'flag': orderFlag,
@@ -300,10 +311,11 @@ class OrderSub {
 
   @JsonKey(
     name: 'order_sub_ordr_inv_id',
-    defaultValue: 0,
-    fromJson: _intFromJsonZero,
+    defaultValue: '0',
+    fromJson: _stringFromJsonZero,
+    toJson: _stringToJsonInt,
   )
-  final int orderSubOrdrInvId;
+  final String orderSubOrdrInvId;
 
   @JsonKey(
     name: 'order_sub_ordr_id',
@@ -428,12 +440,33 @@ class OrderSub {
   @JsonKey(name: 'order_sub_checker_image')
   final String? checkerImage;
 
+  @JsonKey(
+    name: 'estimated_qty',
+    defaultValue: 0.0,
+    fromJson: _doubleFromJsonZero,
+  )
+  final double estimatedQty;
+
+  @JsonKey(
+    name: 'estimated_available_qty',
+    defaultValue: 0.0,
+    fromJson: _doubleFromJsonZero,
+  )
+  final double estimatedAvailableQty;
+
+  @JsonKey(
+    name: 'estimated_total',
+    defaultValue: 0.0,
+    fromJson: _doubleFromJsonZero,
+  )
+  final double estimatedTotal;
+
   final List<OrderSubSuggestion>? suggestions;
 
   const OrderSub({
     this.id = -1,
     this.orderSubId = -1,
-    this.orderSubOrdrInvId = 0,
+    this.orderSubOrdrInvId = '0',
     this.orderSubOrdrId = -1,
     this.orderSubCustId = -1,
     this.orderSubSalesmanId = -1,
@@ -455,6 +488,9 @@ class OrderSub {
       this.createdAt = '',
       this.updatedAt = '',
       this.checkerImage,
+      this.estimatedQty = 0.0,
+      this.estimatedAvailableQty = 0.0,
+      this.estimatedTotal = 0.0,
       this.suggestions,
     });
 
@@ -468,7 +504,7 @@ class OrderSub {
     return OrderSub(
       id: map['id'] as int? ?? -1, // Local DB PK
       orderSubId: map['orderSubId'] as int? ?? -1, // Server ID
-      orderSubOrdrInvId: int.tryParse(map['invoiceNo'] as String? ?? '0') ?? 0,
+      orderSubOrdrInvId: map['invoiceNo'] as String? ?? '0', // Direct string, no parsing
       orderSubOrdrId: map['orderId'] as int? ?? -1,
       orderSubCustId: map['customerId'] as int? ?? -1,
       orderSubSalesmanId: map['salesmanId'] as int? ?? -1,
@@ -490,6 +526,9 @@ class OrderSub {
       createdAt: map['createdDateTime'] as String? ?? '',
       updatedAt: map['updatedDateTime'] as String? ?? '',
       checkerImage: map['checkerImage'] as String?,
+      estimatedQty: (map['estimatedQty'] as num?)?.toDouble() ?? 0.0,
+      estimatedAvailableQty: (map['estimatedAvailableQty'] as num?)?.toDouble() ?? 0.0,
+      estimatedTotal: (map['estimatedTotal'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -499,7 +538,7 @@ class OrderSub {
     return {
       'orderSubId': orderSubId,
       'orderId': orderSubOrdrId,
-      'invoiceNo': orderSubOrdrInvId.toString(),
+      'invoiceNo': orderSubOrdrInvId, // Direct string, no .toString() needed
       'UUID': '',
       'customerId': orderSubCustId,
       'salesmanId': orderSubSalesmanId,
@@ -521,6 +560,9 @@ class OrderSub {
       'isCheckedflag': orderSubIsCheckedFlag,
       'flag': orderSubFlag,
       'checkerImage': checkerImage,
+      'estimatedQty': estimatedQty,
+      'estimatedAvailableQty': estimatedAvailableQty,
+      'estimatedTotal': estimatedTotal,
     };
   }
 }
@@ -618,3 +660,17 @@ int _intFromJsonZero(dynamic value) => _parseInt(value, 0);
 int _intFromJsonOne(dynamic value) => _parseInt(value, 1);
 double _doubleFromJsonZero(dynamic value) => _parseDouble(value, 0.0);
 
+ String _stringFromJsonZero(dynamic value) {
+  if (value == null) return '0';
+  // API sends int, convert to String
+  return value.toString();
+}
+
+ int _stringToJsonInt(String value) {
+  // For API, convert String to int
+  // If it's "ORDER1" format, return 0 (server will generate proper invoice number)
+  if (value.startsWith('ORDER')) {
+    return 0; // Server generates invoice number when creating order
+  }
+  return int.tryParse(value) ?? 0;
+}

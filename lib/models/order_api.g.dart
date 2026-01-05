@@ -78,8 +78,8 @@ Order _$OrderFromJson(Map<String, dynamic> json) => Order(
   orderId: (json['id'] as num?)?.toInt() ?? -1,
   uuid: json['uuid'] as String? ?? '',
   orderInvNo: json['order_inv_no'] == null
-      ? 0
-      : _intFromJsonZero(json['order_inv_no']),
+      ? '0'
+      : _stringFromJsonZero(json['order_inv_no']),
   orderCustId: json['order_cust_id'] == null
       ? -1
       : _intFromJsonNegOne(json['order_cust_id']),
@@ -107,6 +107,9 @@ Order _$OrderFromJson(Map<String, dynamic> json) => Order(
   orderApproveFlag: json['order_approve_flag'] == null
       ? -1
       : _intFromJsonNegOne(json['order_approve_flag']),
+  orderIsBilled: json['order_is_billed'] == null
+      ? 0
+      : _intFromJsonZero(json['order_is_billed']),
   orderFlag: json['order_flag'] == null
       ? 1
       : _intFromJsonOne(json['order_flag']),
@@ -120,7 +123,7 @@ Order _$OrderFromJson(Map<String, dynamic> json) => Order(
 Map<String, dynamic> _$OrderToJson(Order instance) => <String, dynamic>{
   'id': instance.orderId,
   'uuid': instance.uuid,
-  'order_inv_no': instance.orderInvNo,
+  'order_inv_no': _stringToJsonInt(instance.orderInvNo),
   'order_cust_id': instance.orderCustId,
   'order_cust_name': instance.orderCustName,
   'order_salesman_id': instance.orderSalesmanId,
@@ -132,6 +135,7 @@ Map<String, dynamic> _$OrderToJson(Order instance) => <String, dynamic>{
   'order_freight_charge': instance.orderFreightCharge,
   'order_note': instance.orderNote,
   'order_approve_flag': instance.orderApproveFlag,
+  'order_is_billed': instance.orderIsBilled,
   'order_flag': instance.orderFlag,
   'created_at': instance.createdAt,
   'updated_at': instance.updatedAt,
@@ -141,8 +145,8 @@ Map<String, dynamic> _$OrderToJson(Order instance) => <String, dynamic>{
 OrderSub _$OrderSubFromJson(Map<String, dynamic> json) => OrderSub(
   orderSubId: (json['id'] as num?)?.toInt() ?? -1,
   orderSubOrdrInvId: json['order_sub_ordr_inv_id'] == null
-      ? 0
-      : _intFromJsonZero(json['order_sub_ordr_inv_id']),
+      ? '0'
+      : _stringFromJsonZero(json['order_sub_ordr_inv_id']),
   orderSubOrdrId: json['order_sub_ordr_id'] == null
       ? -1
       : _intFromJsonNegOne(json['order_sub_ordr_id']),
@@ -194,6 +198,15 @@ OrderSub _$OrderSubFromJson(Map<String, dynamic> json) => OrderSub(
   createdAt: json['created_at'] as String? ?? '',
   updatedAt: json['updated_at'] as String? ?? '',
   checkerImage: json['order_sub_checker_image'] as String?,
+  estimatedQty: json['estimated_qty'] == null
+      ? 0.0
+      : _doubleFromJsonZero(json['estimated_qty']),
+  estimatedAvailableQty: json['estimated_available_qty'] == null
+      ? 0.0
+      : _doubleFromJsonZero(json['estimated_available_qty']),
+  estimatedTotal: json['estimated_total'] == null
+      ? 0.0
+      : _doubleFromJsonZero(json['estimated_total']),
   suggestions: (json['suggestions'] as List<dynamic>?)
       ?.map((e) => OrderSubSuggestion.fromJson(e as Map<String, dynamic>))
       .toList(),
@@ -201,7 +214,7 @@ OrderSub _$OrderSubFromJson(Map<String, dynamic> json) => OrderSub(
 
 Map<String, dynamic> _$OrderSubToJson(OrderSub instance) => <String, dynamic>{
   'id': instance.orderSubId,
-  'order_sub_ordr_inv_id': instance.orderSubOrdrInvId,
+  'order_sub_ordr_inv_id': _stringToJsonInt(instance.orderSubOrdrInvId),
   'order_sub_ordr_id': instance.orderSubOrdrId,
   'order_sub_cust_id': instance.orderSubCustId,
   'order_sub_salesman_id': instance.orderSubSalesmanId,
@@ -223,6 +236,9 @@ Map<String, dynamic> _$OrderSubToJson(OrderSub instance) => <String, dynamic>{
   'created_at': instance.createdAt,
   'updated_at': instance.updatedAt,
   'order_sub_checker_image': instance.checkerImage,
+  'estimated_qty': instance.estimatedQty,
+  'estimated_available_qty': instance.estimatedAvailableQty,
+  'estimated_total': instance.estimatedTotal,
   'suggestions': instance.suggestions,
 };
 

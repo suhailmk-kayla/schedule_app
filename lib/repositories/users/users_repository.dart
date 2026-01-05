@@ -206,6 +206,28 @@ class UsersRepository {
     }
   }
 
+
+   Future<Either<Failure, bool>> checkPhoneNumberTaken(String phone) async {
+    try {
+      final db = await _database;
+      final maps = await db.query(
+        'Users',
+        where: 'flag = 1 AND phone = ?',
+        whereArgs: [phone],
+        orderBy: 'name ASC',
+      );
+
+      final users = maps.map((map) => User.fromMap(map)).toList();
+      developer.log('checkPhoneNumberTaken users: ${users.isNotEmpty}');
+      return Right(users.isNotEmpty);
+    } catch (e) {
+      developer.log('checkPhoneNumberTaken error: $e');
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+
+
   /// Get salesman by phone number (categoryId = 3)
   Future<Either<Failure, List<User>>> getSalesmanByPhone(String phone) async {
     try {
@@ -440,6 +462,23 @@ class UsersRepository {
       await db.update(
         'Users',
         {'flag': flag},
+        where: 'userId = ?',
+        whereArgs: [userId],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Clear device token for user in local DB
+  /// Used after logout to sync local DB with server state
+  Future<Either<Failure, void>> clearUserDeviceToken(int userId) async {
+    try {
+      final db = await _database;
+      await db.update(
+        'Users',
+        {'deviceToken': ''},
         where: 'userId = ?',
         whereArgs: [userId],
       );

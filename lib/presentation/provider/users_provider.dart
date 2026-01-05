@@ -120,15 +120,17 @@ class UsersProvider extends ChangeNotifier {
       confirmPassword: confirmPassword,
     );
 
-    return result.fold(
-      (failure) {
+    return await result.fold(
+      (failure) async {
         _errorMessage = failure.message;
         _isLoading = false;
         notifyListeners();
         return false;
       },
-      (_) {
+      (_) async {
         _isLoading = false;
+        // Reload user data after password change to ensure UI is updated
+        await loadUserById(userId);
         notifyListeners();
         return true;
       },
@@ -144,17 +146,21 @@ class UsersProvider extends ChangeNotifier {
 
     final result = await _usersRepository.logoutFromDevices(userId: userId);
 
-    return result.fold(
-      (failure) {
+    return await result.fold(
+      (failure) async {
         _errorMessage = failure.message;
         _isLoading = false;
         notifyListeners();
         return false;
       },
-      (_) {
+      (_) async {
         _isLoading = false;
+        // Clear deviceToken in local DB after logout
+        await _usersRepository.clearUserDeviceToken(userId);
         // After logout, check if user is still active
-        checkUserActive(userId);
+        await checkUserActive(userId);
+        // Reload user data to ensure UI is updated
+        await loadUserById(userId);
         notifyListeners();
         return true;
       },
@@ -345,6 +351,15 @@ class UsersProvider extends ChangeNotifier {
     return result.fold(
       (failure) => false,
       (users) => users.isNotEmpty,
+    );
+  }
+
+/// Check if phone number already exists for any user
+  Future<bool> checkPhoneNumberTaken(String phone) async {
+    final result = await _usersRepository.checkPhoneNumberTaken(phone);
+    return result.fold(
+      (failure) => false,
+      (isTaken) => isTaken,
     );
   }
 
