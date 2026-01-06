@@ -88,14 +88,14 @@ class _OrderDetailsSalesmanScreenState
     }
   }
 
-  void _handleEdit() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => CreateOrderScreen(orderId: widget.orderId.toString()),
-      ),
-    );
-  }
+  // void _handleEdit() {
+  //   Navigator.push(
+  //     context,
+  //     MaterialPageRoute(
+  //       builder: (_) => CreateOrderScreen(orderId: widget.orderId.toString()),
+  //     ),
+  //   );
+  // }
 
   Future<void> _handleSendToBillerAndChecker() async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
@@ -236,17 +236,17 @@ class _OrderDetailsSalesmanScreenState
         return Scaffold(
           appBar: AppBar(
             title: const Text('Order Details'),
-            actions: [
-              if (order != null &&
-                  order.order.orderApproveFlag !=
-                      OrderApprovalFlag.sendToStorekeeper &&
-                  order.order.orderApproveFlag != OrderApprovalFlag.completed &&
-                  order.order.orderApproveFlag != OrderApprovalFlag.cancelled)
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  onPressed: _handleEdit,
-                ),
-            ],
+            // actions: [
+              // if (order != null &&
+              //     order.order.orderApproveFlag !=
+              //         OrderApprovalFlag.sendToStorekeeper &&
+              //     order.order.orderApproveFlag != OrderApprovalFlag.completed &&
+              //     order.order.orderApproveFlag != OrderApprovalFlag.cancelled)
+              //   IconButton(
+              //     icon: const Icon(Icons.edit),
+              //     onPressed: _handleEdit,
+              //   ),
+            // ],
           ),
           body: RefreshIndicator(
             onRefresh: _refresh,
