@@ -461,7 +461,12 @@ class OrderSub {
   )
   final double estimatedTotal;
 
-  final List<OrderSubSuggestion>? suggestions;
+@JsonKey(fromJson: _suggestionsFromJson)
+final List<OrderSubSuggestion>? suggestions;
+
+  // In-memory only field - not serialized to JSON or stored in DB
+  @JsonKey(includeFromJson: false, includeToJson: false, defaultValue: false)
+  final bool isReplaced; // Indicates if this order sub was replaced from a suggestion
 
   const OrderSub({
     this.id = -1,
@@ -492,6 +497,7 @@ class OrderSub {
       this.estimatedAvailableQty = 0.0,
       this.estimatedTotal = 0.0,
       this.suggestions,
+      this.isReplaced = false,
     });
 
   factory OrderSub.fromJson(Map<String, dynamic> json) =>
@@ -529,6 +535,7 @@ class OrderSub {
       estimatedQty: (map['estimatedQty'] as num?)?.toDouble() ?? 0.0,
       estimatedAvailableQty: (map['estimatedAvailableQty'] as num?)?.toDouble() ?? 0.0,
       estimatedTotal: (map['estimatedTotal'] as num?)?.toDouble() ?? 0.0,
+      isReplaced: false, // Always false when loading from DB/map
     );
   }
 
@@ -673,4 +680,32 @@ double _doubleFromJsonZero(dynamic value) => _parseDouble(value, 0.0);
     return 0; // Server generates invoice number when creating order
   }
   return int.tryParse(value) ?? 0;
+}
+
+List<OrderSubSuggestion>? _suggestionsFromJson(dynamic value) {
+  if (value == null) return null;
+
+  if (value is List<OrderSubSuggestion>) {
+    // Already parsed (in-memory or DB flow)
+    return value;
+  }
+
+  if (value is List) {
+    return value
+        .where((e) => e != null)
+        .map((e) {
+          if (e is OrderSubSuggestion) return e;
+          if (e is Map<String, dynamic>) {
+            return OrderSubSuggestion.fromJson(e);
+          }
+          throw ArgumentError(
+            'Invalid suggestion type: ${e.runtimeType}',
+          );
+        })
+        .toList();
+  }
+
+  throw ArgumentError(
+    'Invalid suggestions field type: ${value.runtimeType}',
+  );
 }

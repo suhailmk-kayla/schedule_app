@@ -102,6 +102,9 @@ class OrdersProvider extends ChangeNotifier {
   final Map<int, OrderItemDetail> _replacedOrderItems = {};
   Map<int, OrderItemDetail> get replacedOrderItems => _replacedOrderItems;
 
+  // Track original order sub IDs when order is first loaded (to identify new items)
+  final Set<int> _originalOrderSubIds = {};
+
   List<Route> _routeList = [];
   List<Route> get routeList => _routeList;
 
@@ -304,8 +307,11 @@ class OrdersProvider extends ChangeNotifier {
 
     final details = itemsResult.right;
     final List<OrderItemDetail> builtItems = [];
-    final Map<int, int> replacementIds = {};
-    final Map<int, OrderItemDetail> replacementItems = {};
+    
+    // DON'T clear _replacedOrderSubIds - preserve in-memory tracking
+    // Only collect replacements from DB notes if any (for merge), but preserve existing tracking
+    final Map<int, int> replacementIdsFromDb = {};
+    final Map<int, OrderItemDetail> replacementItemsFromDb = {};
 
     for (final detail in details) {
       final suggestionsResult =
@@ -328,21 +334,28 @@ class OrdersProvider extends ChangeNotifier {
       );
       builtItems.add(item);
 
+      // Only extract from notes for DB tracking (but don't clear existing tracking)
       final replacedId = _extractReplacedOrderSubId(detail.orderSub.orderSubNote);
       if (replacedId != null) {
-        replacementIds[replacedId] = detail.orderSub.orderSubId;
-        replacementItems[detail.orderSub.orderSubId] = item;
+        replacementIdsFromDb[replacedId] = detail.orderSub.orderSubId;
+        replacementItemsFromDb[detail.orderSub.orderSubId] = item;
       }
     }
 
     _orderDetails = orderWithName;
     _orderDetailItems = builtItems;
-    _replacedOrderSubIds
-      ..clear()
-      ..addAll(replacementIds);
-    _replacedOrderItems
-      ..clear()
-      ..addAll(replacementItems);
+    
+    // CRITICAL: Store original order sub IDs to identify new items later
+    // This prevents sending existing items as "new" which causes duplicates
+    _originalOrderSubIds.clear();
+    for (final item in builtItems) {
+      _originalOrderSubIds.add(item.orderSub.orderSubId);
+    }
+    
+    // Merge DB replacements with existing in-memory tracking (preserve in-memory over DB)
+    // Don't clear - this preserves tracking set by addProductToExistingOrder
+    _replacedOrderSubIds.addAll(replacementIdsFromDb);
+    _replacedOrderItems.addAll(replacementItemsFromDb);
     _orderDetailsLoading = false;
     notifyListeners();
   }
@@ -352,6 +365,7 @@ class OrdersProvider extends ChangeNotifier {
     _orderDetailItems = [];
     _replacedOrderSubIds.clear();
     _replacedOrderItems.clear();
+    _originalOrderSubIds.clear();
     _orderDetailsError = null;
     notifyListeners();
   }
@@ -856,7 +870,7 @@ _setError(failure.message);
       return false;
     }
 
-    final updateCustomerResult=await _ordersRepository.updateCustomer(
+    await _ordersRepository.updateCustomer(
       orderId: _orderMaster!.id,
       customerId: _orderMaster!.orderCustId,
       customerName: _orderMaster!.orderCustName,
@@ -1583,6 +1597,236 @@ _setError(failure.message);
 
       _setLoading(false);
       return success;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Add product to existing order (for sent orders, not drafts)
+  /// This function only updates in-memory state, does NOT save to DB or call API
+  /// API is called only when "Check Stock" button is clicked
+  /// Converted from KMP's ProductViewModel.addProductToOrder with isEdit=true
+  Future<bool> addProductToExistingOrder({
+    required int orderId,
+    required int productId,
+    required double productPrice,
+    required double rate,
+    required double quantity,
+    required String narration,
+    required int unitId,
+    OrderSub? replaceOrderSub,
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      // 1. Ensure order details are loaded
+      if (_orderDetails == null || _orderDetailItems.isEmpty) {
+        await loadOrderDetails(orderId);
+      }
+
+      if (_orderDetails == null) {
+        _setError('Order details not loaded');
+        _setLoading(false);
+        return false;
+      }
+
+      final order = _orderDetails!.order;
+
+      // 2. Get last order sub entry for generating new ID
+      final lastEntryResult = await _ordersRepository.getLastOrderSubEntry();
+      int defaultOrderSubId = 100000000; // Default starting ID
+      lastEntryResult.fold(
+        (_) {},
+        (lastOrderSub) {
+          if (lastOrderSub != null) {
+            defaultOrderSubId = (lastOrderSub.orderSubId + 100000000) + 1;
+          }
+        },
+      );
+      int orderSubId = defaultOrderSubId;
+
+      // 3. Get unit to get baseQty
+      double baseQty = 1.0;
+      String? unitName;
+      String? unitDispName;
+      if (_unitsRepository != null) {
+        final unitResult = await _unitsRepository.getUnitByUnitId(unitId);
+        unitResult.fold(
+          (_) {},
+          (unit) {
+            if (unit != null) {
+              baseQty = unit.baseQty > 0 ? unit.baseQty : 1.0;
+              unitName = unit.name;
+              unitDispName = unit.displayName;
+            }
+          },
+        );
+      }
+
+      // 4. Check if product already exists in current in-memory items (only if not replacing)
+      OrderItemDetail? existingItem;
+      if (replaceOrderSub == null) {
+        // Only check for existing items if we're not replacing
+        for (final item in _orderDetailItems) {
+          if (item.orderSub.orderSubPrdId == productId &&
+              item.orderSub.orderSubUnitId == unitId &&
+              item.orderSub.orderSubUpdateRate == rate) {
+            existingItem = item;
+            break;
+          }
+        }
+      }
+
+      double newQuantity = quantity;
+      String noteSt = '';
+      int isChecked = 0;
+
+      if (replaceOrderSub != null) {
+        // This is a replacement - KEEP THE ORIGINAL ID (backend updates in place)
+        // Don't generate new ID - backend will update the existing order sub
+        orderSubId = replaceOrderSub.orderSubId; // Use original ID
+        noteSt = 'Product replaced from suggestion';
+        isChecked = 1;
+      } else if (existingItem != null) {
+        // Merge with existing item
+        orderSubId = existingItem.orderSub.orderSubId;
+        newQuantity += existingItem.orderSub.orderSubQty;
+        if (existingItem.orderSub.orderSubIsCheckedFlag == 1) {
+          isChecked = 1;
+        }
+      }
+
+      // 6. Create OrderSub with flag=0 (temp/edit flag for existing orders)
+      final now = DateTime.now();
+      final dateTimeStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
+
+      final newOrderSub = OrderSub(
+        orderSubId: orderSubId,
+        orderSubOrdrInvId: order.orderInvNo,
+        orderSubOrdrId: order.orderId,
+        orderSubCustId: order.orderCustId,
+        orderSubSalesmanId: order.orderSalesmanId,
+        orderSubStockKeeperId: order.orderStockKeeperId,
+        orderSubDateTime: order.orderDateTime,
+        orderSubPrdId: productId,
+        orderSubUnitId: unitId,
+        orderSubCarId: -1,
+        orderSubRate: productPrice,
+        orderSubUpdateRate: rate,
+        orderSubQty: newQuantity,
+        orderSubAvailableQty: 0.0,
+        orderSubUnitBaseQty: baseQty,
+        orderSubNote: noteSt.isEmpty ? null : noteSt,
+        orderSubNarration: narration.isEmpty ? null : narration,
+        orderSubOrdrFlag: 0, // Temp order flag
+        orderSubIsCheckedFlag: isChecked,
+        orderSubFlag: 0, // Temp flag for edited orders
+        createdAt: dateTimeStr,
+        updatedAt: dateTimeStr,
+        isReplaced: replaceOrderSub != null, // Set to true if this is a replacement
+      );
+
+      // 7. Get product details for OrderSubWithDetails
+      String productName = '';
+      String productPhoto = '';
+      String productBrand = '';
+      String productSubBrand = '';
+      
+      if (_productsRepository != null) {
+        final productResult = await _productsRepository.getProductById(productId);
+        productResult.fold(
+          (_) {},
+          (product) {
+            if (product != null) {
+              productName = product.name;
+              productPhoto = product.photo;
+              productBrand = product.brand;
+              productSubBrand = product.sub_brand;
+            }
+          },
+        );
+      }
+
+      // 8. Create OrderSubWithDetails
+      final orderSubWithDetails = OrderSubWithDetails(
+        unitName: unitName,
+        unitDispName: unitDispName,
+        productName: productName,
+        productPhoto: productPhoto,
+        productBrand: productBrand,
+        productSubBrand: productSubBrand,
+        orderSub: newOrderSub,
+      );
+
+      // 9. Create OrderItemDetail
+      final newItem = OrderItemDetail(
+        details: orderSubWithDetails,
+        suggestions: existingItem?.suggestions ?? [],
+        isPacked: existingItem?.isPacked ?? false,
+      );
+
+      // 10. Update in-memory state only (NO DB, NO API)
+      if (replaceOrderSub != null) {
+        // This is a replacement - find and replace the original item in the list
+        final originalItemIndex = _orderDetailItems.indexWhere(
+          (item) => item.orderSub.orderSubId == replaceOrderSub.orderSubId,
+        );
+        
+        if (originalItemIndex != -1) {
+          // Replace the original item with the new replacement item
+          _orderDetailItems[originalItemIndex] = newItem;
+        } else {
+          // Original item not found - add as new item (shouldn't happen, but handle gracefully)
+          developer.log('Warning: Original item ${replaceOrderSub.orderSubId} not found in _orderDetailItems, adding as new item');
+          _orderDetailItems.add(newItem);
+        }
+        
+        // Track that this order sub was replaced (for API call)
+        // The ID stays the same, so we just mark it as replaced
+        _replacedOrderSubIds[replaceOrderSub.orderSubId] = replaceOrderSub.orderSubId; // Same ID
+        _replacedOrderItems[replaceOrderSub.orderSubId] = newItem;
+        
+        // Keep the ID in original set (it's still the same ID, just updated)
+        // No need to remove/add since ID doesn't change
+      } else if (existingItem != null) {
+        // Update existing item in list (quantity merge, etc.)
+        final index = _orderDetailItems.indexOf(existingItem);
+        if (index != -1) {
+          _orderDetailItems[index] = newItem;
+        }
+      } else {
+        // Add new item to list
+        _orderDetailItems.add(newItem);
+        // Note: We don't add it to _originalOrderSubIds because it's truly new
+      }
+
+      // 11. Rebuild replacement mappings from notes (to ensure consistency)
+      // Clear and rebuild to include any existing replacements from DB
+      final Map<int, int> newReplacedIds = {};
+      final Map<int, OrderItemDetail> newReplacedItems = {};
+      
+      for (final item in _orderDetailItems) {
+        final replacedId = _extractReplacedOrderSubId(item.orderSub.orderSubNote);
+        if (replacedId != null) {
+          newReplacedIds[replacedId] = item.orderSub.orderSubId;
+          newReplacedItems[item.orderSub.orderSubId] = item;
+        }
+      }
+      
+      // Update the mappings (this preserves any manually set mappings from replacements)
+      _replacedOrderSubIds.clear();
+      _replacedOrderSubIds.addAll(newReplacedIds);
+      _replacedOrderItems.clear();
+      _replacedOrderItems.addAll(newReplacedItems);
+
+      // 13. Notify listeners to update UI
+      notifyListeners();
+
+      _setLoading(false);
+      return true;
     } catch (e) {
       _setError(e.toString());
       _setLoading(false);
@@ -2824,6 +3068,160 @@ _setError(failure.message);
         (_) {
           success = true;
           // Reload order details to reflect the updated state
+          loadOrderDetails(orderId);
+        },
+      );
+
+      _setLoading(false);
+      return success;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Check Stock - Updates order with all items from in-memory state, calls API, and updates local DB
+  /// Uses the new replaceOrAddOrderItems endpoint which handles replacements and new items
+  Future<bool> checkStock(int orderId) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      // 1. Ensure order details are loaded
+      if (_orderDetails == null) {
+        _setError('Order details not loaded');
+        _setLoading(false);
+        return false;
+      }
+
+      // Validate order ID matches
+      if (_orderDetails!.order.orderId != orderId) {
+        _setError('Order ID mismatch');
+        _setLoading(false);
+        return false;
+      }
+
+      // 2. Build items array from in-memory _orderDetailItems (not from DB)
+      // Only send items that are replacements or new items (not unchanged items)
+      final List<Map<String, dynamic>> itemsArray = [];
+
+      for (final itemDetail in _orderDetailItems) {
+        final sub = itemDetail.orderSub;
+        
+        // Determine if this is a replacement or new item
+        // Check the isReplaced flag on the OrderSub object itself
+        bool isReplacement = sub.isReplaced;
+        developer.log('OrderSub ${sub.orderSubId} - isReplaced: ${sub.isReplaced}, inOriginalSet: ${_originalOrderSubIds.contains(sub.orderSubId)}');
+        
+        bool isNewItem = !isReplacement && !_originalOrderSubIds.contains(sub.orderSubId);
+        
+        // Only send items that are replacements or new items
+        // Unchanged items are not sent (they remain in the database)
+        if (!isReplacement && !isNewItem) {
+          continue; // Skip unchanged items
+        }
+        
+        // Build item payload
+        final itemPayload = {
+          'order_sub_prd_id': sub.orderSubPrdId,
+          'order_sub_unit_id': sub.orderSubUnitId,
+          'order_sub_car_id': sub.orderSubCarId,
+          'order_sub_rate': sub.orderSubRate,
+          'order_sub_date_time': sub.orderSubDateTime,
+          'order_sub_update_rate': sub.orderSubUpdateRate,
+          'order_sub_qty': sub.orderSubQty,
+          'order_sub_available_qty': sub.orderSubAvailableQty,
+          'order_sub_unit_base_qty': sub.orderSubUnitBaseQty,
+          'order_sub_ordr_flag': 1, // Normal flag
+          'order_sub_is_checked_flag': sub.orderSubIsCheckedFlag,
+          'order_sub_note': sub.orderSubNote ?? '',
+          'order_sub_narration': sub.orderSubNarration ?? '',
+        };
+
+        // Set is_replacement flag and order_sub_id for replacements
+        if (isReplacement) {
+          itemPayload['is_replacement'] = true;
+          itemPayload['order_sub_id'] = sub.orderSubId; // Same ID (backend updates in place)
+          developer.log('OrderSub ${sub.orderSubId} marked as replacement - is_replacement: true, order_sub_id: ${sub.orderSubId}');
+        } else if (isNewItem) {
+          // New item - explicitly set is_replacement to false
+          itemPayload['is_replacement'] = false;
+          developer.log('OrderSub ${sub.orderSubId} marked as new item - is_replacement: false');
+        }
+
+        // Add checker_image if present
+        if (sub.checkerImage != null && sub.checkerImage!.isNotEmpty) {
+          itemPayload['checker_image'] = sub.checkerImage!;
+        }
+
+        itemsArray.add(itemPayload);
+      }
+
+      // 3. Build notification payload
+      final userId = await StorageHelper.getUserId();
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      final List<Map<String, dynamic>> userIds = [];
+
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            userIds.add({
+              'user_id': admin.userId ?? -1,
+              'silent_push': 1,
+            });
+          }
+        },
+      );
+
+      // Get storekeepers
+      final storekeepersResult = await _usersRepository.getUsersByCategory(2);
+      storekeepersResult.fold(
+        (_) {},
+        (storekeepers) {
+          for (final storekeeper in storekeepers) {
+            if (storekeeper.id != userId) {
+              userIds.add({
+                'user_id': storekeeper.userId ?? -1,
+                'silent_push': 1,
+              });
+            }
+          }
+        },
+      );
+
+      final notificationPayload = {
+        'ids': userIds,
+        'data_message': 'Order Updated',
+        'data': {
+          'data_ids': [
+            {'table': 8, 'id': orderId} // Order table
+          ],
+          'show_notification': '1',
+          'message': 'Order Updated',
+        },
+      };
+
+      // 4. Build payload for replaceOrAddOrderItems API
+      // Note: The endpoint only needs order_id and items array
+      // It handles workflow reset internally (approve_flag = 1, reset biller/checker)
+      final payload = {
+        'order_id': orderId,
+        'items': itemsArray,
+        'notification': notificationPayload,
+      };
+
+      // 5. Call replaceOrAddOrderItems API
+      // No need to delete order subs - backend updates replacements in place (same ID)
+      final result = await _ordersRepository.replaceOrAddOrderItems(payload);
+
+      bool success = false;
+      result.fold(
+        (failure) => _setError(failure.message),
+        (updatedOrder) {
+          success = true;
+          // Reload order details to reflect changes from API response
           loadOrderDetails(orderId);
         },
       );

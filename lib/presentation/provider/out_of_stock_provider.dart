@@ -1074,7 +1074,7 @@ class OutOfStockProvider extends ChangeNotifier {
 
     try {
       // Get order sub by sub ID - need to find order sub with matching orderSubId
-      final orderResult = await _ordersRepository.getOrderWithNamesById(master.orderSubId);
+      final orderResult = await _ordersRepository.getOrderWithNamesById(master.oospMasterId);
       if (orderResult.isLeft || orderResult.right == null) {
         _setError('Order not found');
         _setLoading(false);
@@ -1084,7 +1084,7 @@ class OutOfStockProvider extends ChangeNotifier {
 
       final orderWithName = orderResult.right!;
       final orderSubsResult = await _ordersRepository.getAllOrderSubAndDetails(
-        orderWithName.order.id,
+        orderWithName.order.orderId,
       );
 
       if (orderSubsResult.isLeft) {
@@ -1172,7 +1172,7 @@ class OutOfStockProvider extends ChangeNotifier {
 
       // Build order sub update payload
       final orderSubPayload = {
-        'id': orderSub.orderSub.id,
+        'id': orderSub.orderSub.orderSubId,
         'order_sub_prd_id': orderSub.orderSub.orderSubPrdId,
         'order_sub_unit_id': orderSub.orderSub.orderSubUnitId,
         'order_sub_car_id': orderSub.orderSub.orderSubCarId,

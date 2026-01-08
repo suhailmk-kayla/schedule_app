@@ -1460,6 +1460,64 @@ class OrdersRepository {
     }
   }
 
+  /// Replace or add order items via API and update local DB
+  /// Uses the new replaceOrAddOrderItems endpoint
+  /// Backend now updates replacements in place (same ID), so no deletion needed
+  Future<Either<Failure, Order>> replaceOrAddOrderItems(
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      // 1. Call API
+      final response = await _dio.post(
+        ApiEndpoints.replaceOrAddProductSuggestion,
+        data: payload,
+      );
+
+      // 2. Parse response
+      final orderApi = OrderApi.fromJson(response.data);
+      if (orderApi.status != 1) {
+        developer.log('Failed to replace/add order items: ${orderApi.message}');
+        return Left(ServerFailure.fromError(
+          'Failed to replace/add order items: ${orderApi.message}',
+        ));
+      }
+
+      // 3. Store order in local DB
+      final addResult = await addOrder(orderApi.data);
+      if (addResult.isLeft) {
+        return addResult.map((_) => orderApi.data);
+      }
+
+      // 4. Store order subs in local DB
+      // Backend updates replacements in place (same ID), so INSERT OR REPLACE works correctly
+      // No need to delete anything - the IDs stay the same for replacements
+      if (orderApi.data.items != null && orderApi.data.items!.isNotEmpty) {
+        final orderSubs = orderApi.data.items!.map((sub) {
+          return OrderSub.fromJson(sub.toJson());
+        }).toList();
+
+        await addOrderSubs(orderSubs);
+
+        // 5. Handle suggestions if present
+        for (int i = 0; i < orderApi.data.items!.length; i++) {
+          final sub = orderApi.data.items![i];
+          if (sub.suggestions != null && sub.suggestions!.isNotEmpty) {
+            // Suggestions are handled by the repository
+            // The repository should handle this
+          }
+        }
+      }
+
+      return Right(orderApi.data);
+    } on DioException catch (e) {
+      developer.log('Failed to replace/add order items: ${e.response?.data}');
+      return Left(NetworkFailure.fromDioError(e));
+    } catch (e) {
+      developer.log('Failed to replace/add order items: $e');
+      return Left(UnknownFailure.fromError(e));
+    }
+  }
+
   /// Update order sub via API and update local DB
   Future<Either<Failure, OrderSub>> updateOrderSub(OrderSub orderSub) async {
     try {

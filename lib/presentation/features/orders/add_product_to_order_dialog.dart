@@ -13,13 +13,17 @@ class AddProductToOrderDialog extends StatefulWidget {
   final Product product;
   final String orderId;
   final OrderSub? orderSub; // If provided, editing existing order sub
-  final Function(double rate, double quantity, String narration, int unitId) onSave;
+  final double? initialRate; // Optional initial rate (for suggestions)
+  final OrderSub? replaceOrderSub; // If provided, shows replace option
+  final Function(double rate, double quantity, String narration, int unitId, {bool replace}) onSave;
 
   const AddProductToOrderDialog({
     super.key,
     required this.product,
     required this.orderId,
     this.orderSub,
+    this.initialRate, // Optional initial rate (for suggestions)
+    this.replaceOrderSub, // If provided, shows replace option
     required this.onSave,
   });
 
@@ -47,7 +51,8 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
       _selectedUnitId = widget.orderSub!.orderSubUnitId;
     } else {
       _quantityController.text = '1.0';
-      _rateController.text = widget.product.price.toString();
+      // Use initialRate if provided (for suggestions), otherwise use product price
+      _rateController.text = (widget.initialRate ?? widget.product.price).toString();
     }
     
     // Load units for the product
@@ -172,7 +177,53 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
       return;
     }
 
-    widget.onSave(rate, quantity, narration, _selectedUnitId);
+    widget.onSave(rate, quantity, narration, _selectedUnitId, replace: false);
+  }
+
+  void _handleSaveAsNew() {
+    final quantity = double.tryParse(_quantityController.text) ?? 0.0;
+    final rate = double.tryParse(_rateController.text) ?? 0.0;
+    final narration = _narrationController.text;
+
+    if (quantity <= 0) {
+      ToastHelper.showWarning('Please enter a valid quantity');
+      return;
+    }
+
+    if (rate <= 0) {
+      ToastHelper.showWarning('Please enter a valid rate');
+      return;
+    }
+
+    if (_selectedUnitId == -1) {
+      ToastHelper.showWarning('Please select a unit');
+      return;
+    }
+
+    widget.onSave(rate, quantity, narration, _selectedUnitId, replace: false);
+  }
+
+  void _handleSaveReplace() {
+    final quantity = double.tryParse(_quantityController.text) ?? 0.0;
+    final rate = double.tryParse(_rateController.text) ?? 0.0;
+    final narration = _narrationController.text;
+
+    if (quantity <= 0) {
+      ToastHelper.showWarning('Please enter a valid quantity');
+      return;
+    }
+
+    if (rate <= 0) {
+      ToastHelper.showWarning('Please enter a valid rate');
+      return;
+    }
+
+    if (_selectedUnitId == -1) {
+      ToastHelper.showWarning('Please select a unit');
+      return;
+    }
+
+    widget.onSave(rate, quantity, narration, _selectedUnitId, replace: true);
   }
 
   @override
@@ -329,19 +380,49 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
                     ),
                     const SizedBox(height: 24),
       
-                    // Save Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _handleSave,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                        ),
-                        child: Text(widget.orderSub != null ? 'Update Item' : 'Add to Order'),
+                    // Save Button(s)
+                    if (widget.replaceOrderSub != null) ...[
+                      // Two buttons when replace option is available
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: _handleSaveAsNew,
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                              ),
+                              child: const Text('Add as New'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: _handleSaveReplace,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                              ),
+                              child: const Text('Replace Existing'),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
+                    ] else ...[
+                      // Single button for normal flow
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _handleSave,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                          child: Text(widget.orderSub != null ? 'Update Item' : 'Add to Order'),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

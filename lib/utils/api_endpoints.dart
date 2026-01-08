@@ -98,6 +98,7 @@ class ApiEndpoints {
   static const String orderSubSuggestionDownload = 'api/orders/download_order_sub_suggestions';
   static const String outOfStockDownload = 'api/out_of_stock/download_out_of_stocks';
   static const String outOfStockSubDownload = 'api/out_of_stock/download_out_of_stock_sub';
+  static const String replaceOrAddProductSuggestion = 'api/orders/replace_or_add_items';
 
   /// Helper method to build full URL
   static String buildUrl(String endpoint) => '${ApiConfig.baseUrl}$endpoint';

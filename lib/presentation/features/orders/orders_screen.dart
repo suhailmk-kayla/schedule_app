@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -195,19 +197,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                     final msg = provider.errorMessage ??
                                         'Failed to claim order. Please try again.';
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text(msg)),
-                                      );
+                                      ToastHelper.showError(msg);
                                     }
                                     return;
                                   }
                                 } else if (order.orderStockKeeperId != _userId) {
                                   if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Another storekeeper is checking this order.'),
-                                      ),
-                                    );
+                                    ToastHelper.showSuccess('Another storekeeper is checking this order.');
                                   }
                                   return;
                                 }
@@ -567,7 +563,9 @@ class _OrderListItem extends StatelessWidget {
               // Salesman (if exists and not salesman user)
               if (order.orderSalesmanId != -1 && userType != 3) ...[
                 const SizedBox(height: 4),
+                // developer.log('salesman name: ${_getSalesmanName(orderWithName, userType, userId)}');
                 Text(
+                  // 'Salesman: ${orderWithName.salesManName.isNotEmpty ? orderWithName.salesManName : "N/A"}',
                   'Salesman: ${_getSalesmanName(orderWithName, userType, userId)}',
                   style: TextStyle(
                     fontWeight: isPending ? FontWeight.bold : FontWeight.normal,
@@ -628,6 +626,7 @@ class _OrderListItem extends StatelessWidget {
     if (userType == 1 && orderWithName.order.orderSalesmanId == userId) {
       return '${orderWithName.salesManName}(SELF ORDER)';
     }
+    developer.log('salesman name: ${orderWithName.salesManName}');
     return orderWithName.salesManName.isNotEmpty
         ? orderWithName.salesManName
         : 'N/A';

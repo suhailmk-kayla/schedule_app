@@ -423,16 +423,37 @@ class _ProductsScreenState extends State<ProductsScreen> {
       builder: (context) => AddProductToOrderDialog(
         product: product,
         orderId: widget.orderId!,
-        onSave: (rate, quantity, narration, unitId) async {
+        onSave: (rate, quantity, narration, unitId, {bool replace = false}) async {
           final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
-          final success = await ordersProvider.addProductToOrder(
-            productId: product.productId,
-            productPrice: product.price, // Product's base price
-            rate: rate, // User-entered rate
-            quantity: quantity,
-            narration: narration,
-            unitId: unitId,
-          );
+          
+          // Check if orderMaster is set (draft order) or null (existing order)
+          final bool isDraftOrder = ordersProvider.orderMaster != null;
+          final int orderIdInt = int.tryParse(widget.orderId!) ?? -1;
+          
+          bool success;
+          if (isDraftOrder) {
+            // Use addProductToOrder for draft orders (requires orderMaster)
+            success = await ordersProvider.addProductToOrder(
+              productId: product.productId,
+              productPrice: product.price, // Product's base price
+              rate: rate, // User-entered rate
+              quantity: quantity,
+              narration: narration,
+              unitId: unitId,
+            );
+          } else {
+            // Use addProductToExistingOrder for existing sent orders
+            success = await ordersProvider.addProductToExistingOrder(
+              orderId: orderIdInt,
+              productId: product.productId,
+              productPrice: product.price,
+              rate: rate,
+              quantity: quantity,
+              narration: narration,
+              unitId: unitId,
+            );
+          }
+          
           if (success && mounted) {
             Navigator.pop(context); // Close bottom sheet
             // Don't pop ProductsScreen - let user add more products

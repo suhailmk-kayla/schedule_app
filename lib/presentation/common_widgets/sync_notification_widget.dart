@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import 'dart:async';
 import 'dart:developer' as developer;
 import '../../utils/background_sync_worker.dart';
@@ -118,12 +119,8 @@ class _SyncNotificationWidgetState extends State<SyncNotificationWidget> {
       developer.log('SyncNotificationWidget: Error triggering sync: $e');
       // Show error snackbar
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error starting sync: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ToastHelper.showError('Error starting sync: $e');
+
       }
     }
   }

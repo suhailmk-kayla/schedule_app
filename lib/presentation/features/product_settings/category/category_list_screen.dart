@@ -117,10 +117,10 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
       // Refresh list
       ToastHelper.showSuccess('Category saved successfully');
       provider.getCategories(searchKey: _searchController.text);
-      if (!isEdit) {
-        _errorMessage = 'Category Added successfully';
-        _showErrorDialog();
-      }
+      // if (!isEdit) {
+      //   _errorMessage = 'Category Added successfully';
+      //   _showErrorDialog();
+      // }
     } else {
       _errorMessage = provider.errorMessage ?? 'Failed to save category';
       _showErrorDialog();

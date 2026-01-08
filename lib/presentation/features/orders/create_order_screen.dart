@@ -230,7 +230,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           product: product,
           orderId: ordersProvider.orderMaster!.id.toString(),
           orderSub: item.orderSub, // Pass existing orderSub for edit mode
-          onSave: (rate, quantity, narration, unitId) async {
+          onSave: (rate, quantity, narration, unitId, {bool replace = false}) async {
             // Update the order sub
             final updatedOrderSub = OrderSub(
               id: item.orderSub.id, // Keep local DB ID

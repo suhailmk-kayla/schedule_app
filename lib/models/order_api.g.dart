@@ -207,9 +207,7 @@ OrderSub _$OrderSubFromJson(Map<String, dynamic> json) => OrderSub(
   estimatedTotal: json['estimated_total'] == null
       ? 0.0
       : _doubleFromJsonZero(json['estimated_total']),
-  suggestions: (json['suggestions'] as List<dynamic>?)
-      ?.map((e) => OrderSubSuggestion.fromJson(e as Map<String, dynamic>))
-      .toList(),
+  suggestions: _suggestionsFromJson(json['suggestions']),
 );
 
 Map<String, dynamic> _$OrderSubToJson(OrderSub instance) => <String, dynamic>{

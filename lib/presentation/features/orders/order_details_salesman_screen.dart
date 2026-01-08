@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -12,7 +13,9 @@ import '../../../utils/config.dart';
 import '../../../utils/order_flags.dart';
 import '../../../utils/notification_manager.dart';
 import '../../provider/orders_provider.dart';
-import 'create_order_screen.dart';
+import '../../provider/products_provider.dart';
+import '../products/products_screen.dart';
+import 'add_product_to_order_dialog.dart';
 
 /// Order Details Screen for Salesman
 /// Displays order details with salesman-specific features
@@ -203,6 +206,166 @@ class _OrderDetailsSalesmanScreenState
       //     backgroundColor: Colors.red,
       //   ),
       // );
+    }
+  }
+
+  /// Check if order has edits (any OrderSub with flag == 0)
+  bool _hasEdits(List<OrderItemDetail> items) {
+    return items.any((item) => item.orderSub.orderSubFlag == 0);
+  }
+
+  /// Handle adding any product to order (plus button)
+  Future<void> _handleAddProduct(OrdersProvider ordersProvider) async {
+    // Navigate to products screen for selection
+    // The ProductsScreen will use addProductToExistingOrder for existing orders
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProductsScreen(
+          orderId: widget.orderId.toString(),
+          orderSubId: '',
+          isOutOfStock: false,
+        ),
+      ),
+    ).then((_) {
+      // Don't refresh from DB - edits are kept in memory
+      // ProductsScreen already updated the in-memory state via addProductToExistingOrder
+      // The notifyListeners() call in addProductToExistingOrder already updated the UI
+    });
+  }
+
+  /// Handle adding suggested product to order (tapping on suggestion)
+  Future<void> _handleAddSuggestionToOrder(OrderSubSuggestion suggestion) async {
+    final productsProvider = Provider.of<ProductsProvider>(context, listen: false);
+    final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+    
+    // Find the parent OrderSub that has this suggestion
+    final items = ordersProvider.orderDetailItems;
+    OrderSub? parentOrderSub;
+    try {
+      final parentItem = items.firstWhere(
+        (item) => item.orderSub.orderSubId == suggestion.orderSubId,
+      );
+      parentOrderSub = parentItem.orderSub;
+    } catch (e) {
+      // Parent OrderSub not found
+      if (!mounted) return;
+      if (mounted) {
+        developer.log('Parent order item not found');
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   const SnackBar(
+        //     content: Text('Parent order item not found'),
+        //     backgroundColor: Colors.red,
+        //   ),
+        // );
+      }
+      return;
+    }
+    
+    // Show loading indicator
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      // Fetch full product details by prodId
+      final product = await productsProvider.loadProductByIdWithDetails(suggestion.prodId);
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      if (product == null) {
+        if (!mounted) return;
+        if (mounted) {
+          developer.log('Product not found');
+          // ScaffoldMessenger.of(context).showSnackBar(
+          //   const SnackBar(
+          //     content: Text('Product not found'),
+          //     backgroundColor: Colors.red,
+          //   ),
+          // );
+        }
+        return;
+      }
+
+      // Show AddProductToOrderDialog bottom sheet with suggestion price pre-filled
+      if (!mounted) return;
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => AddProductToOrderDialog(
+          product: product.product,
+          orderId: widget.orderId.toString(),
+          initialRate: suggestion.price, // Pre-fill with suggestion price
+          replaceOrderSub: parentOrderSub, // Pass parent OrderSub for replace option
+          onSave: (rate, quantity, narration, unitId, {bool replace = false}) async {
+            final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+            
+            // Use the new dedicated function for existing orders
+            final success = await ordersProvider.addProductToExistingOrder(
+              orderId: widget.orderId,
+              productId: suggestion.prodId,
+              productPrice: suggestion.price, // Use suggestion price as base
+              rate: rate,
+              quantity: quantity,
+              narration: narration,
+              unitId: unitId,
+              replaceOrderSub: replace ? parentOrderSub : null, // Pass if replace
+            );
+
+            if (!mounted) return;
+            Navigator.pop(context); // Close dialog
+
+            if (success) {
+              // Don't refresh from DB - we're keeping edits in memory
+              // The notifyListeners() in addProductToExistingOrder already updated the UI
+              if (!mounted) return;
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      replace 
+                        ? 'Product replaced successfully' 
+                        : 'Product added to order successfully',
+                    ),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            } else {
+              if (!mounted) return;
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      ordersProvider.errorMessage ?? 'Failed to add product to order',
+                    ),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            }
+          },
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -398,8 +561,23 @@ class _OrderDetailsSalesmanScreenState
                   color: Colors.grey,
                 ),
               ),
+              const Spacer(),
+              // Plus button to add any product to order
+              Visibility(
+                visible: order.orderApproveFlag != OrderApprovalFlag.sendToStorekeeper &&
+                    order.orderApproveFlag != OrderApprovalFlag.completed &&
+                    order.orderApproveFlag != OrderApprovalFlag.cancelled && 
+                    order.orderApproveFlag != OrderApprovalFlag.checkerIsChecking
+                    && order.orderApproveFlag != OrderApprovalFlag.sendToChecker,
+                child: IconButton(
+                  icon: const Icon(Icons.add_circle_outline),
+                  color: Theme.of(context).primaryColor,
+                  tooltip: 'Add Product',
+                  onPressed: () => _handleAddProduct(ordersProvider),
+                ),
+              ),
               if (_isHaveReportItem) ...[
-                const Spacer(),
+                const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: _handleReportAll,
                   style: ElevatedButton.styleFrom(
@@ -438,6 +616,9 @@ class _OrderDetailsSalesmanScreenState
               items: items,
               order: order,
               onReportItem: _handleReportItem,
+              onAddSuggestion: _handleAddSuggestionToOrder,
+              replacedIds: ordersProvider.replacedOrderSubIds,
+              replacedItems: ordersProvider.replacedOrderItems,
             ),
 
           // Bottom padding for fixed bottom bar
@@ -448,11 +629,18 @@ class _OrderDetailsSalesmanScreenState
   }
 
   Widget? _buildBottomBar(Order order, OrdersProvider ordersProvider) {
+    final items = ordersProvider.orderDetailItems;
+    final hasEdits = _hasEdits(items);
+    
     final shouldShowButton = order.orderApproveFlag !=
             OrderApprovalFlag.sendToStorekeeper &&
         order.orderApproveFlag != OrderApprovalFlag.completed &&
         order.orderApproveFlag != OrderApprovalFlag.cancelled &&
         _showSendButton;
+
+    // Show "Check Stock" if there are edits, otherwise show "Send to Biller & Checker"
+    final showCheckStock = hasEdits && shouldShowButton;
+    final showSendToBillerChecker = !hasEdits && shouldShowButton;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -504,7 +692,28 @@ class _OrderDetailsSalesmanScreenState
               ),
             ],
           ),
-          if (shouldShowButton) ...[
+          if (showCheckStock) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _handleCheckStock,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: const Text(
+                  'Check Stock',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
+          if (showSendToBillerChecker) ...[
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
@@ -528,6 +737,68 @@ class _OrderDetailsSalesmanScreenState
         ],
       ),
     );
+  }
+
+  /// Handle Check Stock button - Updates order with all items, resets flags, and sends notifications
+  Future<void> _handleCheckStock() async {
+    final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+    final order = ordersProvider.orderDetails?.order;
+    if (order == null) return;
+
+    // Show loading
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      // Call checkStock method in OrdersProvider
+      final success = await ordersProvider.checkStock(order.orderId);
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+
+      if (success) {
+        // Refresh order details
+        await _refresh();
+        if (!mounted) return;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Order updated successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (!mounted) return;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                ordersProvider.errorMessage ?? 'Failed to update order',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading dialog
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 
@@ -659,41 +930,69 @@ class _OrderItemsList extends StatelessWidget {
   final List<OrderItemDetail> items;
   final Order order;
   final Function(OrderSub) onReportItem;
+  final Function(OrderSubSuggestion) onAddSuggestion;
+  final Map<int, int> replacedIds;
+  final Map<int, OrderItemDetail> replacedItems;
 
   const _OrderItemsList({
     required this.items,
     required this.order,
     required this.onReportItem,
+    required this.onAddSuggestion,
+    required this.replacedIds,
+    required this.replacedItems,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: items.asMap().entries.map((entry) {
-        final index = entry.key;
-        final item = entry.value;
-        
-        // Show completed card if order is completed
-        if (order.orderApproveFlag == OrderApprovalFlag.completed) {
-          return Padding(
+    final widgets = <Widget>[];
+    int index = 1;
+
+    for (final item in items) {
+      // Check if this item was replaced (for items loaded from DB that have replacements)
+      // Note: For in-memory replacements, we replace in place, so no mapping needed
+      OrderItemDetail? replacement;
+      if (replacedIds.containsKey(item.orderSub.orderSubId)) {
+        final replacementId = replacedIds[item.orderSub.orderSubId];
+        if (replacementId != null) {
+          replacement = replacedItems[replacementId];
+        }
+      }
+
+      // Use replacement item if available, otherwise use original
+      // If item has replacement note but no mapping, it means it was replaced in place - show it directly
+      final displayItem = replacement ?? item;
+      
+      // Show completed card if order is completed
+      if (order.orderApproveFlag == OrderApprovalFlag.completed) {
+        widgets.add(
+          Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: _CompletedOrderItemCard(
-              index: index + 1,
-              item: item,
+              index: index,
+              item: displayItem,
             ),
-          );
-        }
-        
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: _OrderItemCard(
-            index: index + 1,
-            item: item,
-            onReport: () => onReportItem(item.orderSub),
           ),
         );
-      }).toList(),
-    );
+        index++;
+        continue;
+      }
+      
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _OrderItemCard(
+            index: index,
+            item: displayItem,
+            onReport: () => onReportItem(displayItem.orderSub),
+            onAddSuggestion: onAddSuggestion,
+          ),
+        ),
+      );
+      index++;
+    }
+
+    return Column(children: widgets);
   }
 }
 
@@ -701,11 +1000,13 @@ class _OrderItemCard extends StatefulWidget {
   final int index;
   final OrderItemDetail item;
   final VoidCallback onReport;
+  final Function(OrderSubSuggestion) onAddSuggestion;
 
   const _OrderItemCard({
     required this.index,
     required this.item,
     required this.onReport,
+    required this.onAddSuggestion,
   });
 
   @override
@@ -970,7 +1271,7 @@ class _OrderItemCardState extends State<_OrderItemCard> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            suggestion.note?.isNotEmpty == true
+                            suggestion.productName?.isNotEmpty == true
                                 ? suggestion.productName!
                                 : 'Suggestion',
                             style: const TextStyle(
@@ -985,7 +1286,15 @@ class _OrderItemCardState extends State<_OrderItemCard> {
                           ),
                         ],
                       ),
-                      onSelected: (_) {},
+                      onSelected: (_) {
+                        // Handle adding suggestion to order
+                        widget.onAddSuggestion(suggestion);
+                      },
+                      deleteIcon: const Icon(Icons.add_circle, size: 18),
+                      onDeleted: () {
+                        // Same action as onSelected - add to order
+                        widget.onAddSuggestion(suggestion);
+                      },
                     ),
                   )),
             ],
