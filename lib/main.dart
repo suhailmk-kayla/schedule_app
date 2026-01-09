@@ -159,7 +159,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               );
             });
           }
-          
+
           return SyncNotificationWidget(
             child: MaterialApp(
               builder: (context, child) {

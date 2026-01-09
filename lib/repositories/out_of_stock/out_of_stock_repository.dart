@@ -897,6 +897,35 @@ class OutOfStockRepository {
     }
   }
 
+  /// Reject available quantity (matching KMP's rejectAvailableQty)
+  /// Updates availQty, note, oospFlag, and isCheckedflag in one operation
+  Future<Either<Failure, void>> rejectAvailableQty({
+    required int oospId,
+    required double availQty,
+    required String note,
+    required int oospFlag,
+  }) async {
+    try {
+      final db = await _database;
+      final now = DateTime.now().toIso8601String();
+      await db.update(
+        'OutOfStockProducts',
+        {
+          'availQty': availQty,
+          'note': note,
+          'oospFlag': oospFlag,
+          'isCheckedflag': 1,
+          'updatedDateTime': now,
+        },
+        where: 'oospId = ?',
+        whereArgs: [oospId],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
   /// Update is viewed flag for product by sub ID (matching KMP's updateIsSubViewedFlag by oospId)
   Future<Either<Failure, void>> updateIsSubViewedFlagBySubId({
     required int oospId,

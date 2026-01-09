@@ -213,31 +213,79 @@ class _OutOfStockDetailsAdminScreenState
         break;
 
       case 3: // Not Available
-        // Store error message before calling
-        final errorBefore = provider.errorMessage;
-        provider.notAvailable(
-          oospId: _selectedSubItem!.oospId,
-          masterId: _selectedSubItem!.oospMasterId,
-          onSuccess: () {
-            setState(() {
-              _isLoading = false;
-            });
-            ToastHelper.showInfo('Marked as not available');
-            _loadData();
-          },
-        );
-        // Check for errors after a short delay (since notAvailable doesn't have onFailure)
-        // If error message changed, there was an error
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted && provider.errorMessage != null && 
-              provider.errorMessage != errorBefore && 
-              provider.errorMessage!.isNotEmpty) {
-            setState(() {
-              _isLoading = false;
-            });
-            ToastHelper.showError(provider.errorMessage!);
-          }
-        });
+        // Match KMP behavior: if orderSubId != -1, use notAvailable + informSalesman
+        // If orderSubId == -1, use notAvailableQty (full API workflow)
+        if (_selectedSubItem!.orderSubId != -1) {
+          // Has order sub: use simple notAvailable, then informSalesman
+          final errorBefore = provider.errorMessage;
+          provider.notAvailable(
+            oospId: _selectedSubItem!.oospId,
+            masterId: _selectedSubItem!.oospMasterId,
+            onSuccess: () async {
+              // After marking as not available, inform salesman
+              if (_masterWithDetails != null) {
+                // Calculate available qty from subs with flag 2
+                double availableQty = 0.0;
+                for (final sub in provider.oospSubList) {
+                  if (sub.oospFlag == 2) {
+                    availableQty += sub.qty;
+                  }
+                }
+
+                provider.informSalesman(
+                  master: _masterWithDetails!,
+                  availableQty: availableQty,
+                  onFailure: (error) {
+                    setState(() => _isLoading = false);
+                    ToastHelper.showError(error);
+                  },
+                  onSuccess: () {
+                    setState(() {
+                      _isLoading = false;
+                    });
+                    ToastHelper.showInfo('Informed successfully');
+                    _loadData();
+                  },
+                );
+              } else {
+                setState(() {
+                  _isLoading = false;
+                });
+                ToastHelper.showInfo('Marked as not available');
+                _loadData();
+              }
+            },
+          );
+          // Check for errors after a short delay (since notAvailable doesn't have onFailure)
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted && provider.errorMessage != null && 
+                provider.errorMessage != errorBefore && 
+                provider.errorMessage!.isNotEmpty) {
+              setState(() {
+                _isLoading = false;
+              });
+              ToastHelper.showError(provider.errorMessage!);
+            }
+          });
+        } else {
+          // No order sub: use notAvailableQty (full API workflow)
+          provider.notAvailableQty(
+            subItem: _selectedSubItem!,
+            note: '',
+            onFailure: (error) {
+              setState(() => _isLoading = false);
+              ToastHelper.showError(error);
+            },
+            onSuccess: () {
+              setState(() {
+                _isLoading = false;
+                _selectedSubItem = null;
+              });
+              ToastHelper.showInfo('Informed successfully');
+              _loadData();
+            },
+          );
+        }
         break;
     }
   }

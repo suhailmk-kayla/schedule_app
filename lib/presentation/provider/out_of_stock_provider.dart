@@ -1003,14 +1003,21 @@ class OutOfStockProvider extends ChangeNotifier {
         oospMasterId: subItem.oospMasterId,
         onFailure: onFailure,
         onSuccess: () async {
-          await _outOfStockRepository.updateOospFlag(
+          // Update local DB: availQty, note, oospFlag, and isCheckedflag together
+          // Matching KMP's rejectAvailableQty SQL query
+          final updateResult = await _outOfStockRepository.rejectAvailableQty(
             oospId: subItem.oospId,
+            availQty: 0.0,
+            note: note,
             oospFlag: 4,
           );
-          await _outOfStockRepository.updateIsCheckedFlag(
-            oospId: subItem.oospId,
-            isCheckedFlag: 1,
-          );
+
+          if (updateResult.isLeft) {
+            _setError(updateResult.left.message);
+            _setLoading(false);
+            onFailure(updateResult.left.message);
+            return;
+          }
 
           await getOopsSub(subItem.oospMasterId);
 
