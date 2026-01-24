@@ -38,8 +38,8 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
   final TextEditingController _mrpController = TextEditingController();
   final TextEditingController _retailPriceController = TextEditingController();
   final TextEditingController _fittingChargeController = TextEditingController();
+  final TextEditingController _minimumPriceController = TextEditingController();
   final TextEditingController _noteController = TextEditingController();
-
   bool _isLoadingProduct = false;
 
   @override
@@ -73,6 +73,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
     _mrpController.text = provider.mrpSt;
     _retailPriceController.text = provider.retailPriceSt;
     _fittingChargeController.text = provider.fittingChargeSt;
+    _minimumPriceController.text = provider.minimumPriceSt;
     _noteController.text = provider.noteSt;
   }
 
@@ -116,6 +117,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
     _mrpController.dispose();
     _retailPriceController.dispose();
     _fittingChargeController.dispose();
+    _minimumPriceController.dispose();
     _noteController.dispose();
     super.dispose();
   }
@@ -149,6 +151,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
         (_mrpController.text.isNotEmpty && _mrpController.text != '0.00') ||
         (_retailPriceController.text.isNotEmpty && _retailPriceController.text != '0.00') ||
         (_fittingChargeController.text.isNotEmpty && _fittingChargeController.text != '0.00') ||
+        (_minimumPriceController.text.isNotEmpty && _minimumPriceController.text != '0.00') ||
         _noteController.text.isNotEmpty ||
         provider.imageBytes != null ||
         (widget.productId != null && provider.photoUrl != null)) {
@@ -567,6 +570,30 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                         ),
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         onChanged: (value) => provider.setFittingCharge(value),
+                      ),
+                      const SizedBox(height: 16),
+                      // Minimum Rate Field
+                      TextFormField(
+                        controller: _minimumPriceController,
+                        decoration: const InputDecoration(
+                          labelText: 'Minimum Rate',
+                          border: OutlineInputBorder(),
+                          helperText: 'Minimum price a salesman can sell this product',
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        onChanged: (value) => provider.setMinimumPrice(value),
+                        validator: (value) {
+                          if (value != null && value.isNotEmpty) {
+                            final minPrice = double.tryParse(value);
+                            if (minPrice == null) {
+                              return 'Enter a valid number';
+                            }
+                            if (minPrice < 0) {
+                              return 'Minimum price must be >= 0';
+                            }
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 16),
                       // Note Field

@@ -77,7 +77,7 @@ class HomeProvider extends ChangeNotifier {
       );
 
       // Initialize menu items based on user type
-      _menuItems = _initMenu(_newOrdersCount, _newOutOfStockCount, userType);
+      _menuItems = await _initMenu(_newOrdersCount, _newOutOfStockCount, userType);
     } catch (e) {
       _errorMessage = 'Failed to load counts: ${e.toString()}';
     } finally {
@@ -97,7 +97,7 @@ class HomeProvider extends ChangeNotifier {
 
   /// Initialize menu items based on user type
   /// Converted from KMP's initMenu function
-  List<MenuItem> _initMenu(int newOrders, int newOutOfStock, int userType) {
+  Future<List<MenuItem>> _initMenu(int newOrders, int newOutOfStock, int userType) async {
     final menuList = <MenuItem>[];
 
     // Orders - All except Supplier (userType != 4)
@@ -108,6 +108,24 @@ class HomeProvider extends ChangeNotifier {
         title: 'Orders',
         icon: Icons.shopping_cart,
         count: newOrders,
+      ));
+    }
+
+    // Draft Orders - Admin only (1)
+    if (userType == 1) {
+      // Get draft orders count
+      final draftCountResult = await _ordersRepository.getDraftOrderCount();
+      final draftCount = draftCountResult.fold(
+        (failure) => 0,
+        (count) => count,
+      );
+      
+      menuList.add(MenuItem(
+        imagePath: AssetImages.imagesOrder,
+        type: MenuType.draftOrders,
+        title: 'Draft Orders',
+        icon: Icons.edit_note,
+        count: draftCount,
       ));
     }
 
@@ -242,5 +260,6 @@ enum MenuType {
   syncDetails,
   settings,
   about,
+  draftOrders,
 }
 

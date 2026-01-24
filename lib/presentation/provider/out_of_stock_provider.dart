@@ -435,27 +435,116 @@ class OutOfStockProvider extends ChangeNotifier {
   }
 
   /// Mark as not available (matching KMP's notAvailable)
+  /// Calls API first to update server, then updates local DB
+  /// Server is the source of truth - fixes KMP's design flaw
   Future<void> notAvailable({
     required int oospId,
     required int masterId,
+    required OutOfStockSubWithDetails subItem,
+    required Function(String) onFailure,
     required Function() onSuccess,
   }) async {
+    _setLoading(true);
+    _clearError();
+
     try {
-      // Update flag to 4 (not available) and isCheckedFlag to 1
-      await _outOfStockRepository.updateOospFlag(
-        oospId: oospId,
-        oospFlag: 4,
+      // Call API first to update server (flag 5 = not available)
+      final payload = _buildUpdateOutOfStockSubParams(
+        subItem: subItem,
+        flag: OutOfStockFlag.notAvailable,
+        isChecked: 1,
+        note: subItem.note,
+        availQty: 0.0,
       );
-      await _outOfStockRepository.updateIsCheckedFlag(
+
+      final response = await _dio.post(
+        ApiEndpoints.updateOutOfStockSub,
+        data: payload,
+      );
+
+      final responseData = response.data as Map<String, dynamic>;
+      if (responseData['status'] != 1) {
+        final errorMsg = responseData['message']?.toString() ??
+            responseData['data']?.toString() ??
+            'Failed to mark as not available';
+        _setError(errorMsg);
+        _setLoading(false);
+        onFailure(errorMsg);
+        return;
+      }
+
+      // Update local DB after successful API call (server is source of truth)
+      await _outOfStockRepository.rejectAvailableQty(
         oospId: oospId,
-        isCheckedFlag: 1,
+        availQty: 0.0,
+        note: subItem.note,
+        oospFlag: OutOfStockFlag.notAvailable, // Not available flag
       );
 
       await getOopsSub(masterId);
+
+      // Send push notifications to admins, storekeepers, and salesman
+      final currentUserId = await StorageHelper.getUserId();
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      final storekeepersResult = await _usersRepository.getUsersByCategory(2);
+      final List<Map<String, dynamic>> userIds = [];
+
+      // Add admins (silent push, excluding current user)
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            if (admin.userId != currentUserId) {
+              userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
+            }
+          }
+        },
+      );
+
+      // Add storekeepers (silent push, excluding current user)
+      storekeepersResult.fold(
+        (_) {},
+        (storekeepers) {
+          for (final storekeeper in storekeepers) {
+            if (storekeeper.userId != currentUserId) {
+              userIds.add({'user_id': storekeeper.userId ?? -1, 'silent_push': 1});
+            }
+          }
+        },
+      );
+
+      // Add salesman (visible notification)
+      if (subItem.salesmanId != -1) {
+        userIds.add({'user_id': subItem.salesmanId, 'silent_push': 0});
+      } else if (subItem.storekeeperId != -1) {
+        // If no salesman, notify storekeeper (visible notification)
+        userIds.add({'user_id': subItem.storekeeperId, 'silent_push': 0});
+      }
+
+      // Fire-and-forget: don't await, just trigger in background
+      _pushNotificationSender.sendPushNotification(
+        dataIds: [
+          PushData(table: 11, id: subItem.oospMasterId),
+          PushData(table: 12, id: subItem.oospId),
+        ],
+        customUserIds: userIds,
+        message: 'Order cancelled',
+      ).catchError((e) {
+        developer.log('OutOfStockProvider: Error sending push notification in notAvailable: $e');
+      });
+
+      _setLoading(false);
       onSuccess();
+    } on DioException catch (e) {
+      final errorMsg = e.response?.data?.toString() ?? e.message ?? 'Network error';
+      _setError(errorMsg);
+      _setLoading(false);
+      onFailure(errorMsg);
     } catch (e) {
-      _setError('Error marking as not available: $e');
-      notifyListeners();
+      final errorMsg = 'Error marking as not available: $e';
+      _setError(errorMsg);
+      _setLoading(false);
+      onFailure(errorMsg);
     }
   }
 
@@ -1175,7 +1264,7 @@ class OutOfStockProvider extends ChangeNotifier {
       final updateOrderFlag = (availableQty == neededQty &&
               order.orderApproveFlag != OrderApprovalFlag.completed)
           ? OrderSubFlag.inStock
-          : OrderSubFlag.outOfStock;
+          : OrderSubFlag.notAvailable;
 
       // Build order sub update payload
       final orderSubPayload = {
@@ -1224,7 +1313,7 @@ class OutOfStockProvider extends ChangeNotifier {
 
           // Fire-and-forget: don't await, just trigger in background
           _pushNotificationSender.sendPushNotification(
-            dataIds: [PushData(table: 9, id: orderSubApi.data.id)],
+            dataIds: [PushData(table: 9, id: orderSubApi.data.orderSubId)],
             customUserIds: userIds,
             message: 'Update from admin',
           ).catchError((e) {

@@ -216,15 +216,20 @@ class _OutOfStockDetailsAdminScreenState
         // Match KMP behavior: if orderSubId != -1, use notAvailable + informSalesman
         // If orderSubId == -1, use notAvailableQty (full API workflow)
         if (_selectedSubItem!.orderSubId != -1) {
-          // Has order sub: use simple notAvailable, then informSalesman
-          final errorBefore = provider.errorMessage;
+          // Has order sub: use notAvailable (calls API), then informSalesman
           provider.notAvailable(
             oospId: _selectedSubItem!.oospId,
             masterId: _selectedSubItem!.oospMasterId,
+            subItem: _selectedSubItem!,
+            onFailure: (error) {
+              setState(() => _isLoading = false);
+              ToastHelper.showError(error);
+            },
             onSuccess: () async {
               // After marking as not available, inform salesman
+              // This reads from local DB (now synced with server) and updates ORDER SUB
               if (_masterWithDetails != null) {
-                // Calculate available qty from subs with flag 2
+                // Calculate available qty from subs with flag 2 (available)
                 double availableQty = 0.0;
                 for (final sub in provider.oospSubList) {
                   if (sub.oospFlag == 2) {
@@ -256,17 +261,6 @@ class _OutOfStockDetailsAdminScreenState
               }
             },
           );
-          // Check for errors after a short delay (since notAvailable doesn't have onFailure)
-          Future.delayed(const Duration(milliseconds: 300), () {
-            if (mounted && provider.errorMessage != null && 
-                provider.errorMessage != errorBefore && 
-                provider.errorMessage!.isNotEmpty) {
-              setState(() {
-                _isLoading = false;
-              });
-              ToastHelper.showError(provider.errorMessage!);
-            }
-          });
         } else {
           // No order sub: use notAvailableQty (full API workflow)
           provider.notAvailableQty(
@@ -296,7 +290,7 @@ class _OutOfStockDetailsAdminScreenState
     final provider = Provider.of<OutOfStockProvider>(context, listen: false);
     setState(() => _isLoading = true);
 
-    provider.updateSupplier(
+     provider.updateSupplier(
       oospId: _selectedSubItem!.oospId,
       supplierId: supplierId,
     ).then((success) {
@@ -443,7 +437,7 @@ class _OutOfStockDetailsAdminScreenState
                       const SizedBox(height: 16),
 
                       // Compatible Cars
-                      _buildCompatibleCars(productsProvider),
+                      // _buildCompatibleCars(productsProvider),
                       const SizedBox(height: 16),
 
                       // Sub Items List
@@ -587,34 +581,34 @@ class _OutOfStockDetailsAdminScreenState
     );
   }
 
-  Widget _buildCompatibleCars(ProductsProvider productsProvider) {
-    final productCars = productsProvider.productCars;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Compatible cars', style: TextStyle(fontSize: 14)),
-        const SizedBox(height: 8),
-        Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: 4,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: productCars.isEmpty
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Text('All Cars Compatible', style: TextStyle(color: Colors.grey)),
-                    ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: _buildCarList(productCars),
-                  ),
-          ),
-        ),
-      ],
-    );
-  }
+  // Widget _buildCompatibleCars(ProductsProvider productsProvider) {
+  //   final productCars = productsProvider.productCars;
+  //   return Column(
+  //     crossAxisAlignment: CrossAxisAlignment.start,
+  //     children: [
+  //       const Text('Compatible cars', style: TextStyle(fontSize: 14)),
+  //       const SizedBox(height: 8),
+  //       Card(
+  //         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  //         elevation: 4,
+  //         child: Padding(
+  //           padding: const EdgeInsets.all(12),
+  //           child: productCars.isEmpty
+  //               ? const Center(
+  //                   child: Padding(
+  //                     padding: EdgeInsets.all(8),
+  //                     child: Text('All Cars Compatible', style: TextStyle(color: Colors.grey)),
+  //                   ),
+  //                 )
+  //               : Column(
+  //                   crossAxisAlignment: CrossAxisAlignment.start,
+  //                   children: _buildCarList(productCars),
+  //                 ),
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
 
   List<Widget> _buildCarList(Map<String, Map<String, Map<String, List<String>>>> cars) {
     final widgets = <Widget>[];

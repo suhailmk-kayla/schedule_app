@@ -10,6 +10,7 @@ import '../../../utils/order_flags.dart';
 import '../../../utils/notification_manager.dart';
 import '../../../utils/storage_helper.dart';
 import '../../provider/orders_provider.dart';
+import '../../common_widgets/small_product_image.dart';
 
 class OrderDetailsScreen extends StatefulWidget {
   final int orderId;
@@ -470,13 +471,32 @@ class _OrderItemCard extends StatelessWidget {
           children: [
             Row(
               children: [
+                SmallProductImage(
+                  imageUrl: item.productPhoto,
+                  size: 40,
+                  borderRadius: 5,
+                ),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    '#$index  ${item.productName}',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '#$index  ${item.productName}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (item.productCode.isNotEmpty)
+                        Text(
+                          'Code: ${item.productCode}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 if (item.isPacked)
@@ -712,9 +732,21 @@ class _ReplacementSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                SmallProductImage(
+                  imageUrl: item.productPhoto,
+                  size: 40,
+                  borderRadius: 5,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
             if (item.orderSub.orderSubNarration?.isNotEmpty == true)
               Padding(
@@ -929,12 +961,24 @@ class _CompletedOrderItemCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '#$index  ${item.productName}',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                SmallProductImage(
+                  imageUrl: item.productPhoto,
+                  size: 40,
+                  borderRadius: 5,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '#$index  ${item.productName}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             _InfoRow(label: 'Brand', value: item.productBrand),

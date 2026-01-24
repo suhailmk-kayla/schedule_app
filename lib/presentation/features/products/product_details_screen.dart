@@ -245,6 +245,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               _buildFieldRow('Base Unit:', productWithDetails.baseUnitName ?? ''),
                               _buildFieldRow('Price:', product.price.toStringAsFixed(2)),
                               _buildFieldRow('MRP:', product.mrp.toStringAsFixed(2)),
+                              _buildFieldRow('Minimum price to sell', product.minimumPrice!=null ? product.minimumPrice!.toStringAsFixed(2) : 'Not available'),
                               _buildFieldRow('Fitting Charge:', product.fitting_charge.toStringAsFixed(2)),
                               _buildFieldRow('Note:', product.note),
                             ],

@@ -1,6 +1,7 @@
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/background_sync_worker.dart';
+import 'package:workmanager/workmanager.dart';
 import 'dart:developer' as developer;
 import 'di.dart';
 import 'utils/push_notification_helper.dart';
@@ -23,6 +24,7 @@ import 'presentation/provider/sub_categories_provider.dart';
 import 'presentation/provider/cars_provider.dart';
 import 'presentation/common_widgets/sync_notification_widget.dart';
 //TODO:change to production server before sending apk
+//
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -36,16 +38,19 @@ void main() async {
   }
   // Initialize dependencies (database, dio, repositories, providers)
   await setupDependencies();
-  
   // Initialize WorkManager for background sync
-  // try {
-  //   await BackgroundSyncWorker.initialize();
-  //   await BackgroundSyncWorker.registerPeriodicTask();
-  //   developer.log('Background sync worker initialized');
-  // } catch (e) {
-  //   // Log error but don't block app startup
-  //   developer.log('Background sync worker initialization failed: $e');
-  // }
+  try {
+    await Workmanager().initialize(
+      callbackDispatcher, // Imported from background_sync_worker.dart
+      isInDebugMode: true,
+    );
+    await BackgroundSyncWorker.registerPeriodicTask();
+    developer.log('Background sync worker initialized');
+  } catch (e) {
+    // Log error but don't block app startup
+    developer.log('Background sync worker initialization failed: $e');
+  }
+  // await BackgroundSyncWorker.registerTestTask();
   runApp(const MyApp());
 }
 
@@ -159,24 +164,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               );
             });
           }
-
-          return SyncNotificationWidget(
-            child: MaterialApp(
-              builder: (context, child) {
-                return MediaQuery(
-                  data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(1.0)),
-                   child: child!
-                   );
-              },
-              navigatorKey: _navigatorKey,
-              title: 'Schedule App',
-              debugShowCheckedModeBanner: false,
-              theme: ThemeData(
-                colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-                useMaterial3: true,
-              ),
-              home: const SplashScreen(),
+          
+          return MaterialApp(
+            builder: (context, child) {
+              return MediaQuery(
+                data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(1.0)),
+                child: SyncNotificationWidget(
+                  child: child!,
+                ),
+              );
+            },
+            navigatorKey: _navigatorKey,
+            title: 'Schedule App',
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+              useMaterial3: true,
             ),
+            home: const SplashScreen(),
           );
         },
       ),

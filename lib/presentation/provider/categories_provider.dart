@@ -99,7 +99,7 @@ class CategoriesProvider extends ChangeNotifier {
       (createdCategory) {
         // Send push notification (matches KMP lines 60-62)
         final dataIds = [
-          PushData(table: NotificationId.category, id: createdCategory.id),
+          PushData(table: NotificationId.category, id: createdCategory.categoryId),
         ];
         _pushNotificationSender.sendPushNotification(
           dataIds: dataIds,

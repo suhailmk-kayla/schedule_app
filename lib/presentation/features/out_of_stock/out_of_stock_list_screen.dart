@@ -184,119 +184,124 @@ class _OutOfStockListScreenState extends State<OutOfStockListScreen> {
               ),
             ],
           ),
-          body: Column(
-            children: [
-              // Date filter card
-              Card(
-                margin: const EdgeInsets.all(8.0),
-                child: InkWell(
-                  onTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      builder: (context) => _buildDateFilterBottomSheet(provider),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          _dateSt,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.black,
+          body: RefreshIndicator(
+            onRefresh: () async {
+              provider.getAllOosp();
+            },
+            child: Column(
+              children: [
+                // Date filter card
+                Card(
+                  margin: const EdgeInsets.all(8.0),
+                  child: InkWell(
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        builder: (context) => _buildDateFilterBottomSheet(provider),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            _dateSt,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.black,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              // List
-              Expanded(
-                child: Consumer<OutOfStockProvider>(
-                  builder: (context, provider, child) {
-                    if (provider.isLoading && provider.oospList.isEmpty) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-        
-                    if (provider.errorMessage != null && provider.oospList.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              provider.errorMessage!,
-                              style: const TextStyle(color: Colors.red),
-                            ),
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: () => provider.getAllOosp(),
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-        
-                    if (provider.oospList.isEmpty) {
-                      final noText = _userType == 1 ? 'No products found' : 'No orders';
-                      return Center(
-                        child: Text(
-                          noText,
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 14,
+                // List
+                Expanded(
+                  child: Consumer<OutOfStockProvider>(
+                    builder: (context, provider, child) {
+                      if (provider.isLoading && provider.oospList.isEmpty) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                    
+                      if (provider.errorMessage != null && provider.oospList.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                provider.errorMessage!,
+                                style: const TextStyle(color: Colors.red),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: () => provider.getAllOosp(),
+                                child: const Text('Retry'),
+                              ),
+                            ],
                           ),
-                        ),
-                      );
-                    }
-        
-                    return ListView.builder(
-                      itemCount: provider.oospList.length,
-                      itemBuilder: (context, index) {
-                        final item = provider.oospList[index];
-                        return _OutOfStockListItem(
-                          item: item,
-                          userType: _userType,
-                          userId: _userId,
-                          onTap: () {
-                            // Navigate to details screen based on user type
-                            if (_userType == 1) {
-                              // Admin
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => OutOfStockDetailsAdminScreen(
-                                    oospMasterId: item.oospMasterId,
-                                  ),
-                                ),
-                              ).then((_) {
-                                // Refresh badge counts when returning from detail screen
-                                // This ensures badge count updates after viewing an item
-                                final homeProvider = Provider.of<HomeProvider>(context, listen: false);
-                                homeProvider.refreshCounts();
-                              });
-                            } else if (_userType == 4) {
-                              Navigator.push(context, 
-                              MaterialPageRoute(builder: (_)=>OutOfStockDetailsSupplierScreen(oospId: item.oospMasterId)
-                              )
-                              );
-                              // Supplier - need to get the sub ID from the master
-                              // For supplier, we need to find the sub item for this supplier
-                              // This will be handled differently - supplier sees their own list
-                              // For now, navigate to supplier screen with master's first sub
-                              // TODO: Implement supplier-specific navigation
-                            }
-                          },
                         );
-                      },
-                    );
-                  },
+                      }
+                    
+                      if (provider.oospList.isEmpty) {
+                        final noText = _userType == 1 ? 'No products found' : 'No orders';
+                        return Center(
+                          child: Text(
+                            noText,
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 14,
+                            ),
+                          ),
+                        );
+                      }
+                    
+                      return ListView.builder(
+                        itemCount: provider.oospList.length,
+                        itemBuilder: (context, index) {
+                          final item = provider.oospList[index];
+                          return _OutOfStockListItem(
+                            item: item,
+                            userType: _userType,
+                            userId: _userId,
+                            onTap: () {
+                              // Navigate to details screen based on user type
+                              if (_userType == 1) {
+                                // Admin
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => OutOfStockDetailsAdminScreen(
+                                      oospMasterId: item.oospMasterId,
+                                    ),
+                                  ),
+                                ).then((_) {
+                                  // Refresh badge counts when returning from detail screen
+                                  // This ensures badge count updates after viewing an item
+                                  final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                                  homeProvider.refreshCounts();
+                                });
+                              } else if (_userType == 4) {
+                                Navigator.push(context, 
+                                MaterialPageRoute(builder: (_)=>OutOfStockDetailsSupplierScreen(oospId: item.oospMasterId)
+                                )
+                                );
+                                // Supplier - need to get the sub ID from the master
+                                // For supplier, we need to find the sub item for this supplier
+                                // This will be handled differently - supplier sees their own list
+                                // For now, navigate to supplier screen with master's first sub
+                                // TODO: Implement supplier-specific navigation
+                              }
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           floatingActionButton: FloatingActionButton(
             onPressed: () {

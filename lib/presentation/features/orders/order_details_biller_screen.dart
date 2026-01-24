@@ -9,6 +9,7 @@ import '../../../utils/order_flags.dart';
 import '../../../utils/notification_manager.dart';
 import '../../../utils/storage_helper.dart';
 import '../../provider/orders_provider.dart';
+import '../../common_widgets/small_product_image.dart';
 
 /// Order Details Screen for Biller
 /// Displays order details with two tabs: Estimated Bill and Final Bill
@@ -224,18 +225,38 @@ class _EstimatedBillTab extends StatelessWidget {
   }
 
   /// Calculate total price using estimated fields
-  double _calculateEstimatedTotal(List<OrderItemDetail> items) {
+  // double _calculateEstimatedTotal(List<OrderItemDetail> items) {
+  //   double total = 0.0;
+  //   for (final item in items) {
+  //     // Use estimatedTotal if available, otherwise calculate from estimatedQty
+  //     if (item.orderSub.estimatedTotal > 0) {
+  //       total += item.orderSub.estimatedTotal;
+  //     } else if (item.orderSub.estimatedQty > 0) {
+  //       total += item.orderSub.orderSubUpdateRate * item.orderSub.estimatedQty;
+  //     }
+  //   }
+  //   return total;
+  // }
+
+   double _calculateEstimatedTotal(List<OrderItemDetail> items) {
     double total = 0.0;
     for (final item in items) {
-      // Use estimatedTotal if available, otherwise calculate from estimatedQty
-      if (item.orderSub.estimatedTotal > 0) {
-        total += item.orderSub.estimatedTotal;
-      } else if (item.orderSub.estimatedQty > 0) {
-        total += item.orderSub.orderSubUpdateRate * item.orderSub.estimatedQty;
-      }
+      final orderSub = item.orderSub;
+      // Use same logic as _EstimatedItemCard:
+      // Use estimatedQty if > 0, otherwise use orderSubQty
+      final qty = orderSub.estimatedQty > 0
+          ? orderSub.estimatedQty
+          : orderSub.orderSubQty;
+      // Use estimatedTotal if > 0, otherwise calculate from qty
+      final itemTotal = orderSub.estimatedTotal > 0
+          ? orderSub.estimatedTotal
+          : orderSub.orderSubUpdateRate * qty;
+      total += itemTotal;
     }
     return total;
   }
+
+
 }
 
 /// Final Bill Tab
@@ -483,12 +504,8 @@ class _FinalBillTabState extends State<_FinalBillTab> {
   double _calculateFinalTotal(List<OrderItemDetail> items) {
     double total = 0.0;
     for (final item in items) {
-      final flag = item.orderSub.orderSubOrdrFlag;
-      // Only include items that are in stock (flag <= OrderSubFlag.inStock)
-      if (flag <= OrderSubFlag.inStock) {
         // Formula: updateRate * quantity
         total += item.orderSub.orderSubUpdateRate * item.orderSub.orderSubQty;
-      }
     }
     return total;
   }
@@ -623,6 +640,8 @@ class _EstimatedItemsList extends StatelessWidget {
         final index = entry.key;
         final item = entry.value;
 
+
+
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: _EstimatedItemCard(
@@ -668,16 +687,41 @@ class _EstimatedItemCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '#$index  ${item.productName}',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                SmallProductImage(
+                  imageUrl: item.productPhoto,
+                  size: 40,
+                  borderRadius: 5,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '#$index  ${item.productName}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (item.productCode.isNotEmpty)
+                        Text(
+                          'Code: ${item.productCode}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
-            _InfoRow(label: 'Brand', value: item.productBrand),
-            _InfoRow(label: 'Sub Brand', value: item.productSubBrand),
+            // _InfoRow(label: 'Brand', value: item.productBrand),
+            // _InfoRow(label: 'Sub Brand', value: item.productSubBrand),
             _InfoRow(label: 'Unit', value: item.unitDisplayName),
             Row(
               children: [
@@ -694,6 +738,14 @@ class _EstimatedItemCard extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+              ],
+            ),
+            //checker uploaded images
+            if (item.orderSub.checkerImages != null && item.orderSub.checkerImages!.isNotEmpty)
+            Row(
+              children: [
+                Text('Checker Uploaded Images:'),
+                ...item.orderSub.checkerImages!.map((image) => SmallProductImage(imageUrl: image, size: 40, borderRadius: 5)),
               ],
             ),
             const Divider(height: 16),
@@ -738,8 +790,10 @@ class _FinalItemsList extends StatelessWidget {
         final index = entry.key;
         final item = entry.value;
 
-        // Only show items that are in stock or have available quantity
         final flag = item.orderSub.orderSubOrdrFlag;
+
+
+        // Only show items that are in stock or have available quantity
         if (flag > OrderSubFlag.inStock &&
             item.orderSub.orderSubAvailableQty <= 0) {
           return const SizedBox.shrink();
@@ -788,12 +842,24 @@ class _FinalItemCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '#$index  ${item.productName}',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                SmallProductImage(
+                  imageUrl: item.productPhoto,
+                  size: 40,
+                  borderRadius: 5,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '#$index  ${item.productName}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             _InfoRow(label: 'Brand', value: item.productBrand),

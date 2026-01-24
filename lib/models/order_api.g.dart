@@ -197,7 +197,7 @@ OrderSub _$OrderSubFromJson(Map<String, dynamic> json) => OrderSub(
       : _intFromJsonOne(json['order_sub_flag']),
   createdAt: json['created_at'] as String? ?? '',
   updatedAt: json['updated_at'] as String? ?? '',
-  checkerImage: json['order_sub_checker_image'] as String?,
+  checkerImages: _checkerImagesFromJson(json['order_sub_checker_images']),
   estimatedQty: json['estimated_qty'] == null
       ? 0.0
       : _doubleFromJsonZero(json['estimated_qty']),
@@ -233,7 +233,7 @@ Map<String, dynamic> _$OrderSubToJson(OrderSub instance) => <String, dynamic>{
   'order_sub_flag': instance.orderSubFlag,
   'created_at': instance.createdAt,
   'updated_at': instance.updatedAt,
-  'order_sub_checker_image': instance.checkerImage,
+  'order_sub_checker_images': _checkerImagesToJson(instance.checkerImages),
   'estimated_qty': instance.estimatedQty,
   'estimated_available_qty': instance.estimatedAvailableQty,
   'estimated_total': instance.estimatedTotal,

@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/presentation/provider/out_of_stock_provider.dart';
 import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 
 import '../../../helpers/image_url_handler.dart';
@@ -16,6 +17,7 @@ import '../../provider/orders_provider.dart';
 import '../../provider/products_provider.dart';
 import '../products/products_screen.dart';
 import 'add_product_to_order_dialog.dart';
+import '../../common_widgets/small_product_image.dart';
 
 /// Order Details Screen for Salesman
 /// Displays order details with salesman-specific features
@@ -121,14 +123,8 @@ class _OrderDetailsSalesmanScreenState
       
       if (!billerSuccess) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Failed to send to biller: ${ordersProvider.errorMessage ?? "Unknown error"}',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ToastHelper.showError('failed to send to biller');
+     
         return; // Stop here if biller notification failed
       }
     }
@@ -371,14 +367,12 @@ class _OrderDetailsSalesmanScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<OrdersProvider>(
-      builder: (context, ordersProvider, _) {
-        final notificationManager = NotificationManager();
+    return Consumer3<OrdersProvider,NotificationManager,OutOfStockProvider>(
+      builder: (context, ordersProvider, notificationManager, outOfStockProvider, _) {
         if (notificationManager.notificationTrigger) {
           WidgetsBinding.instance.addPostFrameCallback((_) async {
-            await ordersProvider.loadOrderDetails(widget.orderId);
             notificationManager.resetTrigger();
-            
+            await ordersProvider.loadOrderDetails(widget.orderId);        
             // Update button visibility after notification refresh (matching KMP lines 86-87)
             final refreshedOrder = ordersProvider.orderDetails?.order;
             if (refreshedOrder != null && mounted) {
@@ -456,9 +450,12 @@ class _OrderDetailsSalesmanScreenState
     final items = ordersProvider.orderDetailItems;
 
     // Check if any item has orderFlag == 3 (out of stock) and not already reported
-    final hasReportItem = items.any(
-      (item) => item.orderSub.orderSubOrdrFlag == OrderSubFlag.outOfStock,
-    );
+    // Around line 452-455, update:
+final hasReportItem = items.any(
+  (item) => item.orderSub.orderSubOrdrFlag == OrderSubFlag.outOfStock ||
+            item.orderSub.orderSubOrdrFlag == OrderSubFlag.notAvailable,
+);
+
     if (hasReportItem != _isHaveReportItem) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -642,6 +639,14 @@ class _OrderDetailsSalesmanScreenState
     final showCheckStock = hasEdits && shouldShowButton;
     final showSendToBillerChecker = !hasEdits && shouldShowButton;
 
+
+    // With this (check for both outOfStock AND notAvailable):
+// With this (check for both outOfStock AND notAvailable):
+final hasUnreportedOutOfStock = items.any(
+  (item) => item.orderSub.orderSubOrdrFlag == OrderSubFlag.outOfStock ||
+            item.orderSub.orderSubOrdrFlag == OrderSubFlag.notAvailable,
+);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: const BoxDecoration(
@@ -718,9 +723,16 @@ class _OrderDetailsSalesmanScreenState
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _handleSendToBillerAndChecker,
+                onPressed: hasUnreportedOutOfStock
+                    ? () {
+                        // Show toast when button is disabled due to unreported items
+                        ToastHelper.showInfo('Please report all out of stock items before sending to biller and checker');
+                      }
+                    : _handleSendToBillerAndChecker,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).primaryColor,
+                  backgroundColor: hasUnreportedOutOfStock
+                      ? Colors.grey // Disabled color
+                      : Theme.of(context).primaryColor,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
                 child: const Text(
@@ -856,9 +868,9 @@ class _OrderHeader extends StatelessWidget {
         if (order.orderBillerId != -1)
           _InfoRow(
             label: 'Biller',
-            value: orderWithName.billerName.isNotEmpty
+            value: orderWithName.billerName.isNotEmpty&&order.orderBillerId!=-1
                 ? orderWithName.billerName
-                : 'Biller #${order.orderBillerId}',
+                : 'Not assigned',
           ),
         if (order.orderCheckerId != -1)
           _InfoRow(
@@ -1052,44 +1064,34 @@ class _OrderItemCardState extends State<_OrderItemCard> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: Colors.black12),
                   ),
-                  child: item.productPhoto.isNotEmpty
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            item.productPhoto,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Icon(
-                              Icons.image,
-                              size: 30,
-                              color: Colors.grey,
-                            ),
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return const Center(
-                                child: SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                              );
-                            },
-                          ),
-                        )
-                      : const Icon(
-                          Icons.image,
-                          size: 30,
-                          color: Colors.grey,
-                        ),
+                  child: SmallProductImage(
+                    imageUrl: item.productPhoto,
+                    size: 40,
+                    borderRadius: 5,
+                  ),
                 ),
                 const SizedBox(width: 12),
-                // Product name
+                // Product name + code
                 Expanded(
-                  child: Text(
-                    '#${widget.index}  ${item.productName}',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '#${widget.index}  ${item.productName}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (item.productCode.isNotEmpty)
+                        Text(
+                          'Code: ${item.productCode}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ],
@@ -1200,7 +1202,7 @@ class _OrderItemCardState extends State<_OrderItemCard> {
                         Text(
                           _showSuggestions ? 'Hide Suggestions' : 'Show Suggestions',
                           style: TextStyle(
-                            color: Theme.of(context).primaryColor,
+                            color: Colors.blue,
                             fontSize: 12,
                           ),
                         ),
@@ -1337,42 +1339,42 @@ class _OrderItemCardState extends State<_OrderItemCard> {
                   ],
                   const Spacer(),
                   // Show "Reported" text if already reported, otherwise show Report button
-                  if (orderSub.orderSubOrdrFlag == OrderSubFlag.reported)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.check_circle,
-                          color: Colors.green,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 4),
-                        const Text(
-                          'Reported',
-                          style: TextStyle(
-                            color: Colors.green,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    )
-                  else if (orderSub.orderSubOrdrFlag == OrderSubFlag.outOfStock)
-                    ElevatedButton(
-                      onPressed: widget.onReport,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      ),
-                      child: const Text(
-                        'Report',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+                  // if (orderSub.orderSubOrdrFlag == OrderSubFlag.reported)
+                    // Row(
+                    //   mainAxisSize: MainAxisSize.min,
+                    //   children: [
+                    //     const Icon(
+                    //       Icons.check_circle,
+                    //       color: Colors.green,
+                    //       size: 18,
+                    //     ),
+                    //     const SizedBox(width: 4),
+                    //     const Text(
+                    //       'Reported',
+                    //       style: TextStyle(
+                    //         color: Colors.green,
+                    //         fontSize: 14,
+                    //         fontWeight: FontWeight.w600,
+                    //       ),
+                    //     ),
+                    //   ],
+                    // )
+                  // else if (orderSub.orderSubOrdrFlag == OrderSubFlag.outOfStock)
+                  //   ElevatedButton(
+                  //     onPressed: widget.onReport,
+                  //     style: ElevatedButton.styleFrom(
+                  //       backgroundColor: Colors.red,
+                  //       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  //     ),
+                  //     child: const Text(
+                  //       'Report',
+                  //       style: TextStyle(
+                  //         color: Colors.white,
+                  //         fontSize: 14,
+                  //         fontWeight: FontWeight.w600,
+                  //       ),
+                  //     ),
+                  //   ),
                 ],
               ),
             ],
@@ -1402,35 +1404,73 @@ class _OrderItemCardState extends State<_OrderItemCard> {
     }
     return 'Checked';
   }
-
+  
   ({String text, Color color}) _getStockStatus(OrderSub orderSub) {
-    if (orderSub.orderSubOrdrFlag < OrderSubFlag.outOfStock) {
-      return (text: 'Available', color: Colors.green);
-    }
-
-    final orderFlag = orderSub.orderSubOrdrFlag;
-    if (orderFlag == OrderSubFlag.outOfStock || orderFlag == OrderSubFlag.reported) {
-      String status;
-      if (orderSub.orderSubAvailableQty > 0) {
-        status = 'Only ${orderSub.orderSubAvailableQty.toInt()} is left';
-      } else {
-        status = 'Out of Stock';
-      }
-      if (orderFlag == OrderSubFlag.reported) {
-        status = '$status (Reported)';
-      }
-      return (text: status, color: Colors.red);
-    } else {
-      // Not Available
-      String status;
-      if (orderSub.orderSubAvailableQty > 0) {
-        status = '${orderSub.orderSubAvailableQty.toInt()} Not Available';
-      } else {
-        status = 'Not Available';
-      }
-      return (text: status, color: Colors.red);
-    }
+  final orderFlag = orderSub.orderSubOrdrFlag;
+  
+  // Flag < 3 (inStock = 2, notChecked = 1, newItem = 0) = Available
+  if (orderFlag < OrderSubFlag.outOfStock) {
+    return (text: 'Available', color: Colors.green);
   }
+  
+  // Flag == 3 (outOfStock) or 4 (reported)
+  if (orderFlag == OrderSubFlag.outOfStock || orderFlag == OrderSubFlag.reported) {
+    String status;
+    if (orderSub.orderSubAvailableQty > 0) {
+      status = 'Only ${orderSub.orderSubAvailableQty.toInt()} is left';
+    } else {
+      status = 'Out of Stock';
+    }
+    // Add "(Reported)" suffix if flag is 4
+    if (orderFlag == OrderSubFlag.reported) {
+      status = '$status (Reported)';
+    }
+    return (text: status, color: Colors.red);
+  }
+  
+  // Flag == 5 (notAvailable) or other flags
+  // Not Available
+  String status;
+  if (orderSub.orderSubAvailableQty > 0) {
+    status = '${orderSub.orderSubAvailableQty.toInt()} Not Available';
+  } else {
+    status = 'Not Available';
+  }
+  return (text: status, color: Colors.red);
+}
+
+  // ({String text, Color color}) _getStockStatus(OrderSub orderSub) {
+  //   if (orderSub.orderSubOrdrFlag < OrderSubFlag.outOfStock) {
+  //     return (text: 'Available', color: Colors.green);
+  //   }
+
+  //   final orderFlag = orderSub.orderSubOrdrFlag;
+  //   if (orderFlag == OrderSubFlag.outOfStock || orderFlag == OrderSubFlag.reported) {
+  //     String status;
+  //     if (orderSub.orderSubAvailableQty > 0) {
+  //       status = 'Only ${orderSub.orderSubAvailableQty.toInt()} is left';
+  //     } else {
+  //       status = 'Out of Stock';
+  //     }
+  //     if (orderFlag == OrderSubFlag.reported) {
+  //       status = '$status (Reported)';
+  //     }
+  //     if (orderFlag == OrderSubFlag.inStock) {
+  //       status = '$status (Available)';
+  //     }
+  //     return (text: status, color: Colors.red);
+  //   } else {
+  //     // Not Available
+  //     String status;
+  //     if (orderSub.orderSubAvailableQty > 0) {
+  //       status = '${orderSub.orderSubAvailableQty.toInt()} Not Available';
+  //     } else {
+  //       status = 'Not Available';
+  //     }
+  //     return (text: status, color: Colors.red);
+  //   }
+  // }
+
 }
 
 class _ErrorState extends StatelessWidget {
@@ -1495,39 +1535,129 @@ class _CompletedOrderItemCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '#$index  ${item.productName}',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 6),
-            _InfoRow(label: 'Brand', value: item.productBrand),
-            _InfoRow(label: 'Sub Brand', value: item.productSubBrand),
             Row(
               children: [
-                Expanded(
-                  child: _InfoRow(
-                    label: 'Unit',
-                    value: item.unitDisplayName,
-                  ),
+                SmallProductImage(
+                  imageUrl: item.productPhoto,
+                  size: 40,
+                  borderRadius: 5,
                 ),
-                Text(
-                  qtyLabel,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${item.productName}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (item.productCode.isNotEmpty)
+                        Text(
+                          'Code: ${item.productCode}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ],
             ),
-            // Checker Image (only for completed orders)
-            if (item.orderSub.checkerImage != null &&
-                item.orderSub.checkerImage!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            // Header row with labels
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'brand',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    'unit',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    'qty',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            // Data row with values
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    item.productBrand,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    item.unitDisplayName,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    qtyLabel,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            // Checker Images (only for completed orders)
+            if (item.orderSub.checkerImages != null &&
+                item.orderSub.checkerImages!.isNotEmpty) ...[
               const SizedBox(height: 12),
               const Text(
-                'Checked Image',
+                'Checked Images',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -1535,7 +1665,16 @@ class _CompletedOrderItemCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              _buildCheckerImage(item.orderSub.checkerImage!),
+
+              Row(
+                children: [
+                  ...item.orderSub.checkerImages!.map((imageUrl) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8, right: 8),
+                    child: _buildCheckerImage(context, imageUrl),
+                  )),
+                ],
+              ),
+              
             ],
           ],
         ),
@@ -1545,27 +1684,31 @@ class _CompletedOrderItemCard extends StatelessWidget {
 
   /// Build checker image widget
   /// Handles base64 data URIs and URL paths (local vs production)
-  Widget _buildCheckerImage(String imageData) {
+  Widget _buildCheckerImage(BuildContext context, String imageData) {
     // Check if it's a base64 data URI
     if (imageData.startsWith('data:image')) {
       try {
         final base64String = imageData.split(',').last;
         final imageBytes = base64Decode(base64String);
-        return Container(
-          width: double.infinity,
-          height: 200,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.memory(
-              imageBytes,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return _buildPlaceholder();
-              },
+        return InkWell(
+          onTap: () => _showCheckerImagePreview(context, imageData),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.memory(
+                imageBytes,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildPlaceholder();
+                },
+              ),
             ),
           ),
         );
@@ -1578,37 +1721,135 @@ class _CompletedOrderItemCard extends StatelessWidget {
     // (removes /LaravelProject and /public for local dev URLs)
     final imageUrl = ImageUrlFixer.fix(imageData);
 
-    return Container(
-      width: double.infinity,
-      height: 200,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.network(
-          imageUrl,
-          fit: BoxFit.cover,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return const Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
-            );
-          },
-          errorBuilder: (context, error, stackTrace) {
-            return _buildPlaceholder();
-          },
+    return InkWell(
+      onTap: () => _showCheckerImagePreview(context, imageData),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(
+            imageUrl,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return const Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return _buildPlaceholder();
+            },
+          ),
         ),
       ),
     );
   }
 
+  /// Show image preview dialog
+  /// Handles both base64 data URIs and network URLs
+  void _showCheckerImagePreview(BuildContext context, String imageData) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          backgroundColor: Colors.black,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 4,
+                  child: _buildPreviewImage(imageData),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Build preview image widget
+  /// Handles both base64 data URIs and network URLs
+  Widget _buildPreviewImage(String imageData) {
+    // Check if it's a base64 data URI
+    if (imageData.startsWith('data:image')) {
+      try {
+        final base64String = imageData.split(',').last;
+        final imageBytes = base64Decode(base64String);
+        return Image.memory(
+          imageBytes,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => const Center(
+            child: Icon(
+              Icons.broken_image,
+              color: Colors.white70,
+              size: 48,
+            ),
+          ),
+        );
+      } catch (e) {
+        return const Center(
+          child: Icon(
+            Icons.broken_image,
+            color: Colors.white70,
+            size: 48,
+          ),
+        );
+      }
+    }
+
+    // It's a URL path - use ImageUrlFixer to clean up the URL
+    final imageUrl = ImageUrlFixer.fix(imageData);
+
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) => const Center(
+        child: Icon(
+          Icons.broken_image,
+          color: Colors.white70,
+          size: 48,
+        ),
+      ),
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return const Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white70,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Show image preview dialog
   /// Build placeholder widget for missing images
   Widget _buildPlaceholder() {
     return Container(
-      width: double.infinity,
-      height: 200,
+      width: 50,
+      height: 50,
       decoration: BoxDecoration(
         color: Colors.grey.shade200,
         borderRadius: BorderRadius.circular(8),
@@ -1620,7 +1861,7 @@ class _CompletedOrderItemCard extends StatelessWidget {
           children: [
             Icon(
               Icons.image_not_supported,
-              size: 48,
+              size: 50,
               color: Colors.grey,
             ),
             SizedBox(height: 8),

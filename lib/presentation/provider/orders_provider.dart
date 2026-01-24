@@ -241,6 +241,41 @@ class OrdersProvider extends ChangeNotifier {
     _setLoading(false);
   }
 
+  /// Load draft orders (flag = 3) only
+  /// Used by DraftOrdersScreen for admin
+  Future<void> loadDraftOrders({bool toRefresh = false}) async {
+    if (toRefresh) {
+      developer.log('loadDraftOrders: loading draft orders from local database to refresh');
+    } else {
+      developer.log('loadDraftOrders: loading draft orders from local database');
+    }
+    _setLoading(true);
+    _clearError();
+
+    final userType = await StorageHelper.getUserType();
+    final userId = await StorageHelper.getUserId();
+
+    // Use filterSalesmanId if set, otherwise use userId if userType == 3 (salesman)
+    final int? salesmanId = _filterSalesmanId ?? (userType == 3 ? userId : null);
+
+    final result = await _ordersRepository.getAllDraftOrdersWithNames(
+      searchKey: _searchKey,
+      routeId: _routeId == -1 ? -1 : _routeId,
+      date: _date,
+      salesmanId: salesmanId,
+    );
+
+    result.fold(
+      (failure) => _setError(failure.message),
+      (ordersWithNames) {
+        _orderList = ordersWithNames;
+        notifyListeners();
+      },
+    );
+
+    _setLoading(false);
+  }
+
   /// Load order by ID
   Future<void> loadOrderById(int orderId) async {
     _setLoading(true);
@@ -494,6 +529,17 @@ class OrdersProvider extends ChangeNotifier {
       (_) => success = true,
     );
 
+    // Refresh order details so UI updates `isPacked` immediately.
+    // `isPacked` is derived during `loadOrderDetails()` by checking the PackedSubs table.
+    if (success) {
+      final orderId = _orderDetails?.order.orderId ?? _currentOrder?.orderId;
+      if (orderId != null) {
+        await loadOrderDetails(orderId);
+      } else {
+        notifyListeners();
+      }
+    }
+
     return success;
   }
 
@@ -506,6 +552,16 @@ class OrdersProvider extends ChangeNotifier {
       (failure) => _setError(failure.message),
       (_) => success = true,
     );
+
+    // Refresh order details so UI updates `isPacked` immediately.
+    if (success) {
+      final orderId = _orderDetails?.order.orderId ?? _currentOrder?.orderId;
+      if (orderId != null) {
+        await loadOrderDetails(orderId);
+      } else {
+        notifyListeners();
+      }
+    }
 
     return success;
   }
@@ -1731,6 +1787,7 @@ _setError(failure.message);
 
       // 7. Get product details for OrderSubWithDetails
       String productName = '';
+      String productCode = '';
       String productPhoto = '';
       String productBrand = '';
       String productSubBrand = '';
@@ -1742,6 +1799,7 @@ _setError(failure.message);
           (product) {
             if (product != null) {
               productName = product.name;
+              productCode = product.code;
               productPhoto = product.photo;
               productBrand = product.brand;
               productSubBrand = product.sub_brand;
@@ -1755,6 +1813,7 @@ _setError(failure.message);
         unitName: unitName,
         unitDispName: unitDispName,
         productName: productName,
+        productCode: productCode,
         productPhoto: productPhoto,
         productBrand: productBrand,
         productSubBrand: productSubBrand,
@@ -2485,10 +2544,21 @@ _setError(failure.message);
             },
           );
 
+             // Build data IDs from all out of stock sub items
+          // This allows notification listeners to know what data to download
+          final List<PushData> dataIds = [];
+          for (final outOfStock in outOfStockList) {
+            if (outOfStock.items != null && outOfStock.items!.isNotEmpty) {
+              for (final subItem in outOfStock.items!) {
+                dataIds.add(PushData(table: 12, id: subItem.outOfStockSubId));
+              }
+            }
+          }
+
           // Send notification with empty data_ids (matching KMP pattern)
           // Fire-and-forget: don't await, just trigger in background
           _pushNotificationSender.sendPushNotification(
-            dataIds: [], // Empty array as per KMP pattern
+            dataIds: dataIds, // Empty array as per KMP pattern
             message: 'Product out of stock reported',
             customUserIds: userIds,
           ).catchError((e) {
@@ -2525,7 +2595,7 @@ _setError(failure.message);
   Future<bool> sendCheckedReport({
     required Map<int, double> updatedQtyMap,
     required Map<int, String> noteMap,
-    Map<int, String> imageMap = const {}, // orderSubId -> base64 data URI
+    Map<int, List<String>> imageMap = const {}, // orderSubId -> list of base64 data URIs
   }) async {
     if (_orderDetails == null) {
       _setError('Order not loaded');
@@ -2683,7 +2753,7 @@ _setError(failure.message);
     required OrderSubWithDetails detail,
     required Map<int, double> updatedQtyMap,
     required Map<int, String> noteMap,
-    Map<int, String> imageMap = const {},
+    Map<int, List<String>> imageMap = const {},
     bool markAsReplaced = false,
   }) {
     final sub = detail.orderSub;
@@ -2722,9 +2792,9 @@ _setError(failure.message);
       'order_sub_narration': sub.orderSubNarration ?? '',
     };
     
-    // Add checker_image if image is provided for this order sub
+    // Add checker_images if images are provided for this order sub
     if (imageMap.containsKey(sub.orderSubId) && imageMap[sub.orderSubId]!.isNotEmpty) {
-      payload['checker_image'] = imageMap[sub.orderSubId]!;
+      payload['checker_images'] = imageMap[sub.orderSubId]!;
     }
     
     return payload;
@@ -2734,7 +2804,7 @@ _setError(failure.message);
     required OrderSubWithDetails detail,
     required Map<int, double> updatedQtyMap,
     required Map<int, String> noteMap,
-    Map<int, String> imageMap = const {},
+    Map<int, List<String>> imageMap = const {},
   }) {
     final sub = detail.orderSub;
     double qty = sub.orderSubQty;
@@ -2765,9 +2835,9 @@ _setError(failure.message);
       'order_sub_narration': sub.orderSubNarration ?? '',
     };
     
-    // Add checker_image if image is provided for this order sub
+    // Add checker_images if images are provided for this order sub
     if (imageMap.containsKey(sub.orderSubId) && imageMap[sub.orderSubId]!.isNotEmpty) {
-      payload['checker_image'] = imageMap[sub.orderSubId]!;
+      payload['checker_images'] = imageMap[sub.orderSubId]!;
     }
     
     return payload;
@@ -3150,9 +3220,9 @@ _setError(failure.message);
           developer.log('OrderSub ${sub.orderSubId} marked as new item - is_replacement: false');
         }
 
-        // Add checker_image if present
-        if (sub.checkerImage != null && sub.checkerImage!.isNotEmpty) {
-          itemPayload['checker_image'] = sub.checkerImage!;
+        // Add checker_images if present
+        if (sub.checkerImages != null && sub.checkerImages!.isNotEmpty) {
+          itemPayload['checker_images'] = sub.checkerImages!;
         }
 
         itemsArray.add(itemPayload);

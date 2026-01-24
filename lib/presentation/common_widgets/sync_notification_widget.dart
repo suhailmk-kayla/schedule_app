@@ -35,6 +35,7 @@ class _SyncNotificationWidgetState extends State<SyncNotificationWidget> {
     // Check every 30 seconds when app is in foreground
     _checkTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) {
+        developer.log('SyncNotificationWidget: Checking sync needed');
         _checkSyncNeeded();
       }
     });

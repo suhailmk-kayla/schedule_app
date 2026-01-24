@@ -367,13 +367,13 @@ class ProductsRepository {
         INSERT OR REPLACE INTO Product(
           productId, code, barcode, name, subName, brand, subBrand, 
           categoryId, subCategoryId, defaultSuppId, autoSend, baseUnitId, defaultUnitId,
-          photoUrl, price, mrp, retailPrice, fittingCharge, note, outtOfStockFlag, flag
+          photoUrl, price, mrp, retailPrice, fittingCharge, minimumPrice, note, outtOfStockFlag, flag
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
-          product.productId ?? -1, // productId (from API)
+          product.productId, // productId (from API)
           product.code,
           product.barcode,
           product.name,
@@ -391,6 +391,7 @@ class ProductsRepository {
           product.mrp,
           product.retail_price,
           product.fitting_charge,
+          product.minimumPrice,
           product.note,
           1, // outtOfStockFlag (default 1, matching KMP)
           1, // flag (default 1, matching KMP)
@@ -425,13 +426,13 @@ class ProductsRepository {
             INSERT OR REPLACE INTO Product(
               productId, code, barcode, name, subName, brand, subBrand, 
               categoryId, subCategoryId, defaultSuppId, autoSend, baseUnitId, defaultUnitId,
-              photoUrl, price, mrp, retailPrice, fittingCharge, note, outtOfStockFlag, flag
+              photoUrl, price, mrp, retailPrice, fittingCharge, minimumPrice, note, outtOfStockFlag, flag
             ) VALUES (
-              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             ''',
             [
-              product.productId ?? -1, // productId (from API)
+              product.productId, // productId (from API)
               product.code,
               product.barcode,
               product.name,
@@ -449,6 +450,7 @@ class ProductsRepository {
               product.mrp,
               product.retail_price,
               product.fitting_charge,
+              product.minimumPrice,
               product.note,
               1, // outtOfStockFlag (default 1, matching KMP line 33)
               1, // flag (default 1, matching KMP line 33)
@@ -578,6 +580,10 @@ class ProductsRepository {
       if (product.fitting_charge > 0) {
         requestData['fitting_charge'] = product.fitting_charge.toString();
       }
+      // Add minimum_price if provided (nullable, optional)
+      if (product.minimumPrice != null) {
+        requestData['minimum_price'] = product.minimumPrice!.toString();
+      }
       if (product.note.isNotEmpty) {
         requestData['note'] = product.note;
       }
@@ -625,7 +631,7 @@ class ProductsRepository {
       // Matches KMP's sentPushNotification pattern (ProductViewModel.kt lines 206-212)
       if (_pushNotificationSender != null) {
         final dataIds = <PushData>[
-          PushData(table: NotificationId.product, id: productApi.product.productId ?? -1),
+          PushData(table: NotificationId.product, id: productApi.product.productId),
         ];
         
         // Include productUnit if it exists (matches KMP line 208-211)
@@ -679,10 +685,11 @@ class ProductsRepository {
           'mrp': product.mrp,
           'retailPrice': product.retail_price,
           'fittingCharge': product.fitting_charge,
+          'minimumPrice': product.minimumPrice,
           'note': product.note,
         },
         where: 'productId = ?',
-        whereArgs: [product.productId ?? -1],
+        whereArgs: [product.productId],
       );
       return const Right(null);
     } catch (e) {
@@ -694,7 +701,6 @@ class ProductsRepository {
   /// Update product via API and update local DB
   Future<Either<Failure, Product>> updateProduct(Product product) async {
     try {
-      final testtojson=product.toJson();
       // 1. Call API
       final response = await _dio.post(
         ApiEndpoints.updateProduct,
@@ -733,7 +739,7 @@ class ProductsRepository {
       // Matches KMP's sentPushNotification pattern (ProductViewModel.kt lines 255-257)
       if (_pushNotificationSender != null) {
         final dataIds = <PushData>[
-          PushData(table: NotificationId.product, id: updateProductApi.product.productId ?? -1),
+          PushData(table: NotificationId.product, id: updateProductApi.product.productId),
         ];
         
         // Fire-and-forget: don't await, just trigger in background

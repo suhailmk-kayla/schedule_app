@@ -262,6 +262,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       ),
                     ),
                   )
+                  else if (provider.productList.isEmpty)
+                  Expanded(
+                    child: Center(
+                      child: Text('No products found'),
+                    ),
+                  )
                 else
                   Expanded(
                     child: ListView.separated(
@@ -319,6 +325,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
+                                      Text('Code: ${p.code}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(fontSize: 14, color: Colors.blue,fontWeight: FontWeight.w600),
+                                          ),
+
                                       Text('Brand: ${p.brand}',
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis),

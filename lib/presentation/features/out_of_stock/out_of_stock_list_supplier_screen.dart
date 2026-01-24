@@ -222,31 +222,38 @@ class _OutOfStockListSupplierScreenState
           body: Column(
             children: [
               // Date filter card
-              Card(
-                margin: const EdgeInsets.all(8.0),
-                child: InkWell(
-                  onTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      builder: (context) => _buildDateFilterBottomSheet(provider),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          _dateSt,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.black,
+              Row(
+                children: [
+                  Expanded(
+                    child: Card(
+                      margin: const EdgeInsets.all(8.0),
+                      child: InkWell(
+                        onTap: () {
+                          showModalBottomSheet(
+                            context: context,
+                            builder: (context) => _buildDateFilterBottomSheet(provider),
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                _dateSt,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
+                  Expanded(child: SizedBox()),
+                ],
               ),
               // List
               Expanded(
@@ -307,7 +314,15 @@ class _OutOfStockListSupplierScreenState
                                   oospId: item.oospId,
                                 ),
                               ),
-                            );
+                            ).then((_){
+                               // Refresh list when returning
+  final provider = Provider.of<OutOfStockProvider>(context, listen: false);
+  provider.getAllOospSub(
+    supplierId: widget.userId,
+    searchKey: provider.searchKey,
+    date: provider.date,
+  );
+                            });
                           },
                           onPackedChanged: (isPacked) {
                             if (isPacked) {
@@ -571,7 +586,7 @@ class _OutOfStockSupplierListItemState
                     style: TextStyle(
                       fontWeight: isNew ? FontWeight.bold : FontWeight.normal,
                       color: Colors.grey.shade700,
-                      fontSize: 12,
+                      fontSize: 13,
                     ),
                   ),
                   Text(
@@ -579,7 +594,7 @@ class _OutOfStockSupplierListItemState
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: statusColor,
-                      fontSize: 14,
+                      fontSize: 18,
                     ),
                   ),
                 ],
@@ -604,7 +619,7 @@ class _OutOfStockSupplierListItemState
                           fontWeight: FontWeight.w600,
                           color: _isPacked 
                               ? Colors.green.shade700 
-                              : Theme.of(context).primaryColor,
+                              : Colors.blue,
                         ),
                       ),
                       avatar: _isPacked
@@ -616,7 +631,7 @@ class _OutOfStockSupplierListItemState
                           : Icon(
                               Icons.shopping_cart,
                               size: 16,
-                              color: Theme.of(context).primaryColor,
+                              color: Colors.blue,
                             ),
                     ),
                   ],

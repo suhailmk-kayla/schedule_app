@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/asset_images.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/routes_provider.dart';
 import '../../../models/master_data_api.dart';
 import '../../../utils/toast_helper.dart';
@@ -182,8 +183,15 @@ class _RoutesScreenState extends State<RoutesScreen> {
           ),
         ],
       ),
-      body: Consumer<RoutesProvider>(
-        builder: (context, provider, _) {
+      body: Consumer2<RoutesProvider,NotificationManager>(
+        builder: (context, provider, notificationManager, _) {
+          if(notificationManager.notificationTrigger){
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              notificationManager.resetTrigger();
+              provider.loadRoutes();
+              provider.loadSalesmen();
+            });
+          }
           if (provider.isLoading && provider.routesList.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }

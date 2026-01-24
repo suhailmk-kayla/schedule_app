@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/presentation/provider/users_provider.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/suppliers_provider.dart';
 import '../../../models/supplier_model.dart';
 import '../../../utils/asset_images.dart';
@@ -75,8 +77,15 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           ),
         ],
       ),
-      body: Consumer<SuppliersProvider>(
-        builder: (context, provider, child) {
+      body: Consumer3<SuppliersProvider,UsersProvider,NotificationManager>(
+        builder: (context, provider, usersProvider, notificationManager, child) {
+          if(notificationManager.notificationTrigger){
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              notificationManager.resetTrigger();
+              provider.getSuppliers();
+              usersProvider.loadUsers();
+            });
+          }
           if (provider.isLoading && provider.suppliersList.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }

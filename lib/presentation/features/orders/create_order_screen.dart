@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
@@ -8,6 +10,7 @@ import '../../../models/order_api.dart';
 import '../customers/customers_screen.dart';
 import '../products/products_screen.dart';
 import 'add_product_to_order_dialog.dart';
+import '../../common_widgets/small_product_image.dart';
 
 /// Create Order Screen
 /// Allows creating new orders with customer selection, products, and notes
@@ -37,35 +40,39 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadOrder();
-      if (widget.customerId != null && widget.customerName != null) {
-        final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
-        // ordersProvider.setCustomer(widget.customerId!, widget.customerName!);
-        ordersProvider.updateCustomer(widget.customerId!, widget.customerName!);
-      }
     });
   }
 
   Future<void> _loadOrder() async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     if (widget.orderId != null && widget.orderId!.isNotEmpty) {
-      // Load draft order
+      developer.log('Loading draft order: ${widget.orderId}');
+      // Load draft order (only when explicitly editing a draft via orderId)
       await ordersProvider.getDraftOrder(int.parse(widget.orderId!));
       if (ordersProvider.orderMaster != null) {
         _noteController.text = ordersProvider.orderMaster!.orderNote ?? '';
         _freightChargeController.text = ordersProvider.orderMaster!.orderFreightCharge.toStringAsFixed(2);
       }
     } else {
-      // Get or create temp order
-      await ordersProvider.getTempOrder();
+      // Creating a NEW order - always start completely fresh
+      // Skip loading any existing orders (temp or draft)
+      // Just create a new temp order directly
+      await ordersProvider.createTempOrder();
+      
       if (ordersProvider.orderMaster != null) {
         _noteController.text = ordersProvider.orderMaster!.orderNote ?? '';
       }
     }
     
-    // If customerId is provided, automatically set the customer
+    // If customerId is provided, automatically set the customer AFTER order is loaded
+    // This ensures _orderMaster is not null when updateCustomer is called
     // This matches KMP's behavior when clicking order icon from customers screen
     if (widget.customerId != null && widget.customerName != null) {
-      await ordersProvider.updateCustomer(widget.customerId!, widget.customerName!);
+      // Only update customer if order doesn't already have a customer set
+      // This prevents overwriting an existing customer selection
+      if (ordersProvider.orderMaster?.orderCustId == -1) {
+        await ordersProvider.updateCustomer(widget.customerId!, widget.customerName!);
+      }
     }
   }
 
@@ -144,7 +151,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       ToastHelper.showError(ordersProvider.errorMessage ?? 'Failed to send order');
     }
   }
-
+  
   void _showError(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -170,12 +177,13 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           orderId: ordersProvider.orderMaster!.id.toString(),
         ),
       ),
-    ).then((_) {
-      // Refresh order subs after customer selection
-      if (mounted) {
-        ordersProvider.getAllOrderSubAndDetails();
-      }
-    });
+    );
+    // .then((_) {
+    //   // Refresh order subs after customer selection
+    //   if (mounted) {
+    //     ordersProvider.getAllOrderSubAndDetails();
+    //   }
+    // });
   }
 
   void _addProduct() {
@@ -256,7 +264,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
               orderSubFlag: item.orderSub.orderSubFlag,
               createdAt: item.orderSub.createdAt,
               updatedAt: DateTime.now().toIso8601String(),
-              checkerImage: item.orderSub.checkerImage,
+              checkerImages: item.orderSub.checkerImages,
               suggestions: item.orderSub.suggestions, // Preserve suggestions
             );
 
@@ -284,34 +292,72 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        // Show discard confirmation dialog (matches KMP behavior)
-        // Converted from KMP's showDiscardAlert (CreateOrderScreen.kt line 188-204)
-        final shouldPop = await showDialog<bool>(
+        final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+        
+        // Check if there are any changes (items added, customer selected, etc.)
+        final hasChanges = ordersProvider.orderSubsWithDetails.isNotEmpty ||
+            (ordersProvider.orderMaster?.orderCustId != -1) ||
+            (_noteController.text.trim().isNotEmpty);
+        
+        // If no changes, allow back navigation without dialog
+        if (!hasChanges) {
+          return true;
+        }
+        
+        // Show dialog with Save/Discard options
+        final result = await showDialog<String>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Discard Changes?'),
-            content: const Text('Are you sure you want to discard this order?'),
+            title: const Text('Save Order?'),
+            content: const Text('You have unsaved changes. What would you like to do?'),
             actions: [
+              // Cancel - stay on screen
               TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('No'),
+                onPressed: () => Navigator.of(context).pop('cancel'),
+                child: const Text('Cancel'),
               ),
+              // Discard - delete order and go back
               TextButton(
                 onPressed: () async {
-                  // Delete order and subs, then allow pop
                   final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
                   final success = await ordersProvider.deleteOrderAndSub();
-                  if (mounted) {
-                    Navigator.of(context).pop(success);
+                  if (context.mounted && success) {
+                    Navigator.of(context).pop('discard');
                   }
                 },
-                child: const Text('Yes'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.red,
+                ),
+                child: const Text('Discard'),
+              ),
+              // Save as Draft - save and go back
+              ElevatedButton(
+                onPressed: () async {
+                  final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+                  
+                  // Update note first
+                  await ordersProvider.updateOrderNote(_noteController.text);
+                  
+                  final total = _calculateTotal(ordersProvider);
+                  final freight = double.tryParse(_freightChargeController.text) ?? 0.0;
+                  
+                  final success = await ordersProvider.saveAsDraft(freight, total);
+                  if (context.mounted && success) {
+                    Navigator.of(context).pop('save');
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Save as Draft'),
               ),
             ],
           ),
         );
 
-        return shouldPop ?? false;
+        // Return true to allow navigation if user chose save or discard
+        return result == 'save' || result == 'discard';
       },
       child: Scaffold(
         appBar: AppBar(
@@ -591,14 +637,39 @@ class _OrderItemCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Item number and product name (bold)
-                Text(
-                  '#$slNo  ${item.productName ?? 'Unknown Product'}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
+                // Product image and item number with product name
+                Row(
+                  children: [
+                    SmallProductImage(
+                      imageUrl: item.productPhoto,
+                      size: 40,
+                      borderRadius: 5,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '#$slNo  ${item.productName ?? 'Unknown Product'}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                          ),
+                          if (item.productCode?.isNotEmpty == true)
+                            Text(
+                              'Code: ${item.productCode!}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
                 // Narration (if not empty)
                 if (item.orderSub.orderSubNarration != null &&

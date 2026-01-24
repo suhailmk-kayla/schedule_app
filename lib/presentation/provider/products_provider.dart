@@ -100,6 +100,8 @@ class ProductsProvider extends ChangeNotifier {
   String get retailPriceSt => _retailPriceSt;
   String _fittingChargeSt = '0.00';
   String get fittingChargeSt => _fittingChargeSt;
+  String _minimumPriceSt = '';
+  String get minimumPriceSt => _minimumPriceSt;
   String _noteSt = '';
   String get noteSt => _noteSt;
   int _formCategoryId = -1;
@@ -502,6 +504,14 @@ class ProductsProvider extends ChangeNotifier {
     }
   }
 
+  /// Set minimum price
+  void setMinimumPrice(String minimumPrice) {
+    if (RegExp(r'^\d*\.?\d*$').hasMatch(minimumPrice)) {
+      _minimumPriceSt = minimumPrice;
+      notifyListeners();
+    }
+  }
+
   /// Set note
   void setNote(String note) {
     _noteSt = note;
@@ -566,6 +576,7 @@ class ProductsProvider extends ChangeNotifier {
     _mrpSt = '0.00';
     _retailPriceSt = '0.00';
     _fittingChargeSt = '0.00';
+    _minimumPriceSt = '';
     _noteSt = '';
     _formCategoryId = -1;
     _formCategorySt = 'Select Category';
@@ -600,6 +611,9 @@ class ProductsProvider extends ChangeNotifier {
     _mrpSt = product.mrp.toString();
     _retailPriceSt = product.retail_price.toString();
     _fittingChargeSt = product.fitting_charge.toString();
+    _minimumPriceSt = product.minimumPrice != null 
+        ? product.minimumPrice!.toStringAsFixed(2) 
+        : '';
     _noteSt = product.note;
     
     // Populate category
@@ -754,6 +768,9 @@ class ProductsProvider extends ChangeNotifier {
       mrp: double.tryParse(_mrpSt) ?? 0.0,
       retail_price: double.tryParse(_retailPriceSt) ?? 0.0,
       fitting_charge: double.tryParse(_fittingChargeSt) ?? 0.0,
+      minimumPrice: _minimumPriceSt.isNotEmpty 
+          ? double.tryParse(_minimumPriceSt) 
+          : null,
       note: _noteSt,
       photo: photoBase64,
     );
@@ -839,6 +856,9 @@ class ProductsProvider extends ChangeNotifier {
       mrp: double.tryParse(_mrpSt) ?? 0.0,
       retail_price: double.tryParse(_retailPriceSt) ?? 0.0,
       fitting_charge: double.tryParse(_fittingChargeSt) ?? 0.0,
+      minimumPrice: _minimumPriceSt.isNotEmpty 
+          ? double.tryParse(_minimumPriceSt) 
+          : null,
       note: _noteSt,
       photo: photoBase64,
     );

@@ -8,7 +8,7 @@ import 'dart:developer' as developer;
 /// Converted from KMP's SQLDelight implementation
 class DatabaseHelper {
   static const String _databaseName = 'Database.db';
-  static const int _databaseVersion = 1; 
+  static const int _databaseVersion = 1; // ✅ Keep at 1 - checker images handled in table creation 
 
   Database? _database;
 
@@ -28,7 +28,7 @@ class DatabaseHelper {
       path,
       version: _databaseVersion,
       onCreate: _onCreate,
-      // onUpgrade: _onUpgrade,
+      onUpgrade: _onUpgrade, // ✅ Uncommented for migrations
       onDowngrade: _onDowngrade,
     );
   }
@@ -330,6 +330,7 @@ class DatabaseHelper {
       mrp REAL DEFAULT 0.0 NOT NULL,
       retailPrice REAL DEFAULT 0.0 NOT NULL,
       fittingCharge REAL DEFAULT 0.0 NOT NULL,
+      minimumPrice REAL,
       note TEXT DEFAULT '' NOT NULL,
       outtOfStockFlag INTEGER DEFAULT 1 NOT NULL,
       flag INTEGER DEFAULT 1 NOT NULL

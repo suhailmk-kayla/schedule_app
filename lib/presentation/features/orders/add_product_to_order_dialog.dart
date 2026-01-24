@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/presentation/features/products/products_screen.dart';
 import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../provider/products_provider.dart';
 import '../../../models/product_api.dart';
@@ -131,6 +132,22 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
     super.dispose();
   }
 
+  /// Validates that the entered rate is not below the product's minimum rate.
+  /// If product.minimumPrice is null, no validation is required.
+  bool _validateMinimumRate(double rate) {
+    final double? minimumRate = widget.product.minimumPrice;
+    if (minimumRate == null) return true;
+
+    if (rate < minimumRate) {
+      ToastHelper.showWarning(
+        'Rate cannot be below the minimum rate (${minimumRate.toStringAsFixed(2)})',
+      );
+      return false;
+    }
+
+    return true;
+  }
+
   void _showUnitSelection() {
     showModalBottomSheet(
       context: context,
@@ -169,6 +186,10 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
       return;
     }
 
+    if (!_validateMinimumRate(rate)) {
+      return;
+    }
+
     if (_selectedUnitId == -1) {
       ToastHelper.showWarning('Please select a unit');
       // ScaffoldMessenger.of(context).showSnackBar(
@@ -195,6 +216,10 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
       return;
     }
 
+    if (!_validateMinimumRate(rate)) {
+      return;
+    }
+
     if (_selectedUnitId == -1) {
       ToastHelper.showWarning('Please select a unit');
       return;
@@ -215,6 +240,10 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
 
     if (rate <= 0) {
       ToastHelper.showWarning('Please enter a valid rate');
+      return;
+    }
+
+    if (!_validateMinimumRate(rate)) {
       return;
     }
 
@@ -289,14 +318,15 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: widget.product.photo.isNotEmpty
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.network(
-                                  widget.product.photo,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const Icon(Icons.image),
-                                ),
-                              )
+                            ? ProductImage(url: widget.product.photo)
+                            // ClipRRect(
+                            //     borderRadius: BorderRadius.circular(8),
+                            //     child: Image.network(
+                            //       widget.product.photo,
+                            //       fit: BoxFit.cover,
+                            //       errorBuilder: (_, __, ___) => const Icon(Icons.image),
+                            //     ),
+                            //   )
                             : const Icon(Icons.image, size: 50),
                       ),
                     ),
@@ -340,7 +370,10 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
       
                     // Rate Field
                     TextField(
-                      readOnly: true,
+                      inputFormatters: [
+
+                      ],
+                      
                       controller: _rateController,
                       decoration: const InputDecoration(
                         labelText: 'Rate',

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../../../utils/asset_images.dart';
 import '../../../provider/cars_provider.dart';
 import '../../../../models/cars.dart';
@@ -128,8 +129,16 @@ class _CarsListScreenState extends State<CarsListScreen> {
         children: [
           // Cars list
           Expanded(
-            child: Consumer<CarsProvider>(
-              builder: (context, provider, _) {
+            child: Consumer2<CarsProvider,NotificationManager>(
+              builder: (context, provider, notificationManager, _) {
+                if(notificationManager.notificationTrigger){
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    notificationManager.resetTrigger();
+                    provider.getCars();
+                    provider.getAllCarBrands();
+                    ;
+                  });
+                }
                 if (provider.isLoading && provider.carsList.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }

@@ -206,8 +206,8 @@ class _OutOfStockDetailsSupplierScreenState
                       const SizedBox(height: 16),
 
                       // Compatible Cars
-                      _buildCompatibleCars(productsProvider),
-                      const SizedBox(height: 16),
+                      // _buildCompatibleCars(productsProvider),
+                      // const SizedBox(height: 16),
 
                       // Sub Item Card
                       _SubItemCard(
@@ -287,6 +287,7 @@ class _OutOfStockDetailsSupplierScreenState
             const SizedBox(height: 12),
             if (subItem.supplierId != -1)
               _buildDetailRow('Supplier:', subItem.supplierName),
+          
             if (product.sub_name.isNotEmpty) _buildDetailRow('Sub Name:', product.sub_name),
             if (product.brand.isNotEmpty) _buildDetailRow('Brand:', product.brand),
             if (product.sub_brand.isNotEmpty) _buildDetailRow('Sub Brand:', product.sub_brand),
@@ -322,74 +323,74 @@ class _OutOfStockDetailsSupplierScreenState
     );
   }
 
-  Widget _buildCompatibleCars(ProductsProvider productsProvider) {
-    final productCars = productsProvider.productCars;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Compatible cars', style: TextStyle(fontSize: 14)),
-        const SizedBox(height: 8),
-        Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: 4,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: productCars.isEmpty
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Text('All Cars Compatible', style: TextStyle(color: Colors.grey)),
-                    ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: _buildCarList(productCars),
-                  ),
-          ),
-        ),
-      ],
-    );
-  }
+  // Widget _buildCompatibleCars(ProductsProvider productsProvider) {
+  //   final productCars = productsProvider.productCars;
+  //   return Column(
+  //     crossAxisAlignment: CrossAxisAlignment.start,
+  //     children: [
+  //       const Text('Compatible cars', style: TextStyle(fontSize: 14)),
+  //       const SizedBox(height: 8),
+  //       Card(
+  //         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  //         elevation: 4,
+  //         child: Padding(
+  //           padding: const EdgeInsets.all(12),
+  //           child: productCars.isEmpty
+  //               ? const Center(
+  //                   child: Padding(
+  //                     padding: EdgeInsets.all(8),
+  //                     child: Text('All Cars Compatible', style: TextStyle(color: Colors.grey)),
+  //                   ),
+  //                 )
+  //               : Column(
+  //                   crossAxisAlignment: CrossAxisAlignment.start,
+  //                   children: _buildCarList(productCars),
+  //                 ),
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
 
-  List<Widget> _buildCarList(Map<String, Map<String, Map<String, List<String>>>> cars) {
-    final widgets = <Widget>[];
-    cars.forEach((brand, nameMap) {
-      nameMap.forEach((name, modelMap) {
-        widgets.add(
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$brand $name',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                ...modelMap.entries.map((modelEntry) {
-                  final model = modelEntry.key;
-                  final versions = modelEntry.value;
-                  final versionsText = versions.isEmpty
-                      ? 'All Versions'
-                      : versions.join(', ');
-                  return Text(
-                    '$model: $versionsText',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.normal,
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
-        );
-      });
-    });
-    return widgets;
-  }
+  // List<Widget> _buildCarList(Map<String, Map<String, Map<String, List<String>>>> cars) {
+  //   final widgets = <Widget>[];
+  //   cars.forEach((brand, nameMap) {
+  //     nameMap.forEach((name, modelMap) {
+  //       widgets.add(
+  //         Padding(
+  //           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+  //           child: Column(
+  //             crossAxisAlignment: CrossAxisAlignment.start,
+  //             children: [
+  //               Text(
+  //                 '$brand $name',
+  //                 style: const TextStyle(
+  //                   fontSize: 14,
+  //                   fontWeight: FontWeight.bold,
+  //                 ),
+  //               ),
+  //               ...modelMap.entries.map((modelEntry) {
+  //                 final model = modelEntry.key;
+  //                 final versions = modelEntry.value;
+  //                 final versionsText = versions.isEmpty
+  //                     ? 'All Versions'
+  //                     : versions.join(', ');
+  //                 return Text(
+  //                   '$model: $versionsText',
+  //                   style: const TextStyle(
+  //                     fontSize: 14,
+  //                     fontWeight: FontWeight.normal,
+  //                   ),
+  //                 );
+  //               }),
+  //             ],
+  //           ),
+  //         ),
+  //       );
+  //     });
+  //   });
+  //   return widgets;
+  // }
 }
 
 class _SubItemCard extends StatelessWidget {

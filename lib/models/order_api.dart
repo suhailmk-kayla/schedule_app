@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'order_api.g.dart';
@@ -437,8 +439,12 @@ class OrderSub {
   @JsonKey(name: 'updated_at', defaultValue: '')
   final String updatedAt;
 
-  @JsonKey(name: 'order_sub_checker_image')
-  final String? checkerImage;
+  @JsonKey(
+    name: 'order_sub_checker_images',
+    fromJson: _checkerImagesFromJson,
+    toJson: _checkerImagesToJson,
+  )
+  final List<String>? checkerImages;
 
   @JsonKey(
     name: 'estimated_qty',
@@ -492,7 +498,7 @@ final List<OrderSubSuggestion>? suggestions;
       this.orderSubFlag = 1,
       this.createdAt = '',
       this.updatedAt = '',
-      this.checkerImage,
+      this.checkerImages,
       this.estimatedQty = 0.0,
       this.estimatedAvailableQty = 0.0,
       this.estimatedTotal = 0.0,
@@ -531,7 +537,7 @@ final List<OrderSubSuggestion>? suggestions;
       orderSubFlag: map['flag'] as int? ?? 1,
       createdAt: map['createdDateTime'] as String? ?? '',
       updatedAt: map['updatedDateTime'] as String? ?? '',
-      checkerImage: map['checkerImage'] as String?,
+      checkerImages: _checkerImagesFromMap(map['checkerImage']),
       estimatedQty: (map['estimatedQty'] as num?)?.toDouble() ?? 0.0,
       estimatedAvailableQty: (map['estimatedAvailableQty'] as num?)?.toDouble() ?? 0.0,
       estimatedTotal: (map['estimatedTotal'] as num?)?.toDouble() ?? 0.0,
@@ -566,7 +572,9 @@ final List<OrderSubSuggestion>? suggestions;
       'updatedDateTime': updatedAt,
       'isCheckedflag': orderSubIsCheckedFlag,
       'flag': orderSubFlag,
-      'checkerImage': checkerImage,
+      'checkerImage': checkerImages != null && checkerImages!.isNotEmpty
+          ? jsonEncode(checkerImages)
+          : null,
       'estimatedQty': estimatedQty,
       'estimatedAvailableQty': estimatedAvailableQty,
       'estimatedTotal': estimatedTotal,
@@ -680,6 +688,57 @@ double _doubleFromJsonZero(dynamic value) => _parseDouble(value, 0.0);
     return 0; // Server generates invoice number when creating order
   }
   return int.tryParse(value) ?? 0;
+}
+
+List<String>? _checkerImagesFromJson(dynamic json) {
+  if (json == null) return null;
+  if (json is String) {
+    // Handle single image (backward compatibility) or JSON string
+    if (json.isEmpty) return null;
+    try {
+      // Try parsing as JSON array
+      final decoded = jsonDecode(json) as List;
+      return decoded.map((e) => e.toString()).toList();
+    } catch (_) {
+      // If not JSON, treat as single image (backward compatibility)
+      return [json];
+    }
+  }
+  if (json is List) {
+    return json.map((e) => e.toString()).toList();
+  }
+  return null;
+}
+
+dynamic _checkerImagesToJson(List<String>? images) {
+  if (images == null || images.isEmpty) return null;
+  // Backend expects array, so return as List
+  return images;
+}
+
+List<String>? _checkerImagesFromMap(dynamic checkerImageData) {
+  if (checkerImageData == null) return null;
+  
+  // Handle Uint8List (BLOB) from SQLite - convert to String
+  String? imageString;
+  if (checkerImageData is Uint8List) {
+    imageString = utf8.decode(checkerImageData);
+  } else if (checkerImageData is String) {
+    imageString = checkerImageData;
+  } else {
+    // Try to convert to string
+    imageString = checkerImageData.toString();
+  }
+  
+  if (imageString.isEmpty) return null;
+  
+  try {
+    final decoded = jsonDecode(imageString) as List;
+    return decoded.map((e) => e.toString()).toList();
+  } catch (_) {
+    // Backward compatibility: single image stored as plain string
+    return [imageString];
+  }
 }
 
 List<OrderSubSuggestion>? _suggestionsFromJson(dynamic value) {

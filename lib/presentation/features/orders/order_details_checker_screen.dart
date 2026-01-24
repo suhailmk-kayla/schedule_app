@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -12,6 +13,7 @@ import '../../../utils/config.dart';
 import '../../../utils/order_flags.dart';
 import '../../../utils/notification_manager.dart';
 import '../../provider/orders_provider.dart';
+import '../../common_widgets/small_product_image.dart';
 
 class OrderDetailsCheckerScreen extends StatefulWidget {
   final int orderId;
@@ -32,7 +34,7 @@ class _OrderDetailsCheckerScreenState
   final Map<int, TextEditingController> _noteControllers = {};
   final Map<int, double> _qtyChanges = {};
   final Map<int, String> _noteChanges = {};
-  final Map<int, String> _imageMap = {}; // orderSubId -> base64 data URI
+  final Map<int, List<String>> _imageMap = {}; // orderSubId -> list of base64 data URIs
   final Set<int> _checkedItems = {};
   final ImagePicker _imagePicker = ImagePicker();
 
@@ -100,6 +102,11 @@ class _OrderDetailsCheckerScreenState
       );
       final note = _baseNote(item.orderSub.orderSubNote);
       _noteControllers[id] = TextEditingController(text: note);
+      
+      // ✅ Load existing checker images from database
+      if (item.orderSub.checkerImages != null && item.orderSub.checkerImages!.isNotEmpty) {
+        _imageMap[id] = List<String>.from(item.orderSub.checkerImages!);
+      }
     }
   }
 
@@ -140,17 +147,33 @@ class _OrderDetailsCheckerScreenState
     return _checkedItems.length == totalCount;
   }
 
-  /// Calculate total price for in-stock items only
-  /// Excludes out-of-stock items (flag > OrderSubFlag.inStock)
-  double _calculateInStockTotal(List<OrderItemDetail> items) {
+  /// Calculate total price using updated quantities from text fields
+  /// Uses updated quantities from _qtyChanges if available, otherwise base quantity
+  /// Only includes checked items
+  double _calculateTotalWithUpdatedQuantities(
+    List<OrderItemDetail> items,
+    Map<int, double> qtyChanges,
+    Set<int> checkedItems,
+    OrderWithName orderWithName,
+  ) {
     double total = 0.0;
     for (final item in items) {
-      final flag = item.orderSub.orderSubOrdrFlag;
-      // Only include items that are in stock (flag <= OrderSubFlag.inStock)
-      if (flag <= OrderSubFlag.inStock) {
-        // Formula: updateRate * quantity
-        total += item.orderSub.orderSubUpdateRate * item.orderSub.orderSubQty;
-      }
+      final id = item.orderSub.orderSubId;
+      
+      // Only include checked items
+      if (orderWithName.order.orderApproveFlag != OrderApprovalFlag.completed) {
+  if (!checkedItems.contains(id)) {
+    developer.log('OrderDetailsCheckerScreen: Item $id not checked');
+    continue;
+  }
+}
+      
+      // Get updated quantity: use qtyChanges if available, otherwise base quantity
+      final baseQty = _baseQuantity(item);
+      final updatedQty = qtyChanges[id] ?? baseQty;
+      
+      // Calculate: updateRate * updatedQty
+      total += item.orderSub.orderSubUpdateRate * updatedQty;
     }
     return total;
   }
@@ -223,6 +246,13 @@ class _OrderDetailsCheckerScreenState
 
   Future<void> _pickImage(int orderSubId) async {
     try {
+      // Check if already has 3 images
+      final currentImages = _imageMap[orderSubId] ?? [];
+      if (currentImages.length >= 3) {
+        ToastHelper.showWarning('Maximum 3 images allowed per item');
+        return;
+      }
+
       // Show dialog to choose source
       final source = await showDialog<ImageSource>(
         context: context,
@@ -268,7 +298,11 @@ class _OrderDetailsCheckerScreenState
         final dataUri = 'data:$mimeType;base64,$base64String';
         
         setState(() {
-          _imageMap[orderSubId] = dataUri;
+          // Add to list instead of replacing
+          if (_imageMap[orderSubId] == null) {
+            _imageMap[orderSubId] = [];
+          }
+          _imageMap[orderSubId]!.add(dataUri);
         });
       }
     } catch (e) {
@@ -278,9 +312,14 @@ class _OrderDetailsCheckerScreenState
     }
   }
 
-  void _removeImage(int orderSubId) {
+  void _removeImage(int orderSubId, int imageIndex) {
     setState(() {
-      _imageMap.remove(orderSubId);
+      if (_imageMap[orderSubId] != null) {
+        _imageMap[orderSubId]!.removeAt(imageIndex);
+        if (_imageMap[orderSubId]!.isEmpty) {
+          _imageMap.remove(orderSubId);
+        }
+      }
     });
   }
 
@@ -467,9 +506,9 @@ class _OrderDetailsCheckerScreenState
                   onQtyChanged: (value) => _handleQtyChanged(id, value, item),
                   onNoteChanged: (value) => _handleNoteChanged(id, value, item),
                   replacementItem: replacedItems[id],
-                  imageDataUri: _imageMap[id],
+                  imageDataUris: _imageMap[id] ?? [],
                   onImagePick: () => _pickImage(id),
-                  onImageRemove: () => _removeImage(id),
+                  onImageRemove: (index) => _removeImage(id, index),
                 ),
               );
             }),
@@ -503,9 +542,16 @@ class _OrderDetailsCheckerScreenState
     final shouldShowButton = order.orderApproveFlag != OrderApprovalFlag.completed &&
         order.orderApproveFlag != OrderApprovalFlag.cancelled;
 
-    // Calculate total price for in-stock items only (excludes out-of-stock items)
-    final inStockTotal = _calculateInStockTotal(items);
-    final finalTotal = inStockTotal + order.orderFreightCharge;
+    // Calculate total using updated quantities from text fields
+    // This is called on every build, so it updates when _qtyChanges changes
+    // Sum of (updatedQty × updateRate) for all checked items
+    final subtotal = _calculateTotalWithUpdatedQuantities(
+      items,
+      _qtyChanges,
+      _checkedItems,
+      provider.orderDetails!
+    );
+    final finalTotal = subtotal + order.orderFreightCharge;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -524,11 +570,24 @@ class _OrderDetailsCheckerScreenState
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
+                    'Subtotal : ',
+                    style: TextStyle(fontSize: 14, color: Colors.black),
+                  ),
+                  Text(
+                    subtotal.toStringAsFixed(2),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
                     'Freight Charge : ',
                     style: TextStyle(fontSize: 14, color: Colors.black),
                   ),
                   Text(
-                    order.orderFreightCharge.toString(),
+                    order.orderFreightCharge.toStringAsFixed(2),
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -546,7 +605,7 @@ class _OrderDetailsCheckerScreenState
                     style: TextStyle(fontSize: 14, color: Colors.black),
                   ),
                   Text(
-                    finalTotal.toString(),
+                    finalTotal.toStringAsFixed(2),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -741,9 +800,9 @@ class _CheckerOrderItemCard extends StatelessWidget {
   final ValueChanged<String> onQtyChanged;
   final ValueChanged<String> onNoteChanged;
   final OrderItemDetail? replacementItem;
-  final String? imageDataUri;
+  final List<String> imageDataUris;
   final VoidCallback onImagePick;
-  final VoidCallback onImageRemove;
+  final ValueChanged<int> onImageRemove;
 
   const _CheckerOrderItemCard({
     required this.index,
@@ -759,25 +818,15 @@ class _CheckerOrderItemCard extends StatelessWidget {
     required this.onQtyChanged,
     required this.onNoteChanged,
     this.replacementItem,
-    this.imageDataUri,
+    required this.imageDataUris,
     required this.onImagePick,
     required this.onImageRemove,
   });
 
-  /// Calculate price for this item
-  /// Uses updateRate * qty (or availableQty for out of stock items)
-  double _calculateItemPrice(OrderSub orderSub) {
-    final flag = orderSub.orderSubOrdrFlag;
-    final qty = flag > OrderSubFlag.inStock
-        ? orderSub.orderSubAvailableQty
-        : orderSub.orderSubQty;
-    return orderSub.orderSubUpdateRate * qty;
-  }
 
   @override
   Widget build(BuildContext context) {
     final flag = item.orderSub.orderSubOrdrFlag;
-    final isOutOfStock = flag > OrderSubFlag.inStock;
     final qtyLabel = flag > OrderSubFlag.inStock
         ? item.orderSub.orderSubAvailableQty.toString()
         : item.orderSub.orderSubQty.toString();
@@ -805,12 +854,37 @@ class _CheckerOrderItemCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '#$index  ${item.productName}',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '#$index  ${item.productName}',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                if (item.productCode.isNotEmpty)
+                                  Text(
+                                    'Code: ${item.productCode}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          SmallProductImage(
+                            imageUrl: item.productPhoto,
+                            size: 40,
+                            borderRadius: 5,
+                          ),
+                        ],
                       ),
                       if (isReplacement)
                         const Text(
@@ -836,20 +910,21 @@ class _CheckerOrderItemCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            _KeyValueRow(label: 'Brand', value: item.productBrand),
-            _KeyValueRow(label: 'Sub Brand', value: item.productSubBrand),
+            // _KeyValueRow(label: 'Brand', value: item.productBrand),
+            // _KeyValueRow(label: 'Sub Brand', value: item.productSubBrand),
             Row(
               children: [
-                Expanded(
-                  child: _KeyValueRow(
-                    label: 'Unit',
-                    value: item.unitDisplayName,
-                  ),
-                ),
+                Expanded(child: SizedBox()),
+                // Expanded(
+                //   child: _KeyValueRow(
+                //     label: 'Unit',
+                //     value: item.unitDisplayName,
+                //   ),
+                // ),
                 Text(
                   qtyLabel,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 17,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -857,23 +932,23 @@ class _CheckerOrderItemCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             // Price row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Price: ',
-                  style: TextStyle(fontSize: 13, color: Colors.black54),
-                ),
-                Text(
-                  _calculateItemPrice(item.orderSub).toStringAsFixed(2),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-              ],
-            ),
+            // Row(
+            //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            //   children: [
+            //     const Text(
+            //       'Price: ',
+            //       style: TextStyle(fontSize: 13, color: Colors.black54),
+            //     ),
+            //     Text(
+            //       _calculateItemPrice(item.orderSub).toStringAsFixed(2),
+            //       style: const TextStyle(
+            //         fontSize: 14,
+            //         fontWeight: FontWeight.bold,
+            //         color: Colors.black87,
+            //       ),
+            //     ),
+            //   ],
+            // ),
             const SizedBox(height: 8),
             if (!disableEditing)
               TextField(
@@ -900,61 +975,91 @@ class _CheckerOrderItemCard extends StatelessWidget {
                 border: OutlineInputBorder(),
                 isDense: true,
               ),
-              minLines: 2,
-              maxLines: 3,
+              minLines: 1,
+              maxLines: 1,
               onChanged: onNoteChanged,
             ),
             if (!disableEditing) ...[
               const SizedBox(height: 8),
-              // Image upload button - disabled for out-of-stock products
+              // Image upload button - disabled if max reached
               OutlinedButton.icon(
-                onPressed: isOutOfStock ? null : onImagePick,
+                onPressed: (imageDataUris.length >= 3) ? null : onImagePick,
                 icon: const Icon(Icons.camera_alt, size: 18),
-                label: const Text('Upload Image'),
+                label: Text('Upload Image (${imageDataUris.length}/3)'),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
               ),
-              // Image preview if image is selected
-              if (imageDataUri != null) ...[
+              // Image previews if images are selected
+              if (imageDataUris.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Stack(
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      height: 150,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.memory(
-                          base64Decode(imageDataUri!.split(',').last),
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Center(
-                              child: Icon(Icons.error, color: Colors.red),
-                            );
-                          },
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: imageDataUris.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final imageDataUri = entry.value;
+                    // Check if it's a base64 data URI or a URL
+                    final isDataUri = imageDataUri.startsWith('data:image');
+                    return Stack(
+                      children: [
+                        Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: isDataUri
+                                ? Image.memory(
+                                    base64Decode(imageDataUri.split(',').last),
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return const Center(
+                                        child: Icon(Icons.error, color: Colors.red),
+                                      );
+                                    },
+                                  )
+                                : Image.network(
+                                    imageDataUri,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return const Center(
+                                        child: Icon(Icons.error, color: Colors.red),
+                                      );
+                                    },
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return const Center(
+                                        child: SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
                         ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.black54,
-                          padding: const EdgeInsets.all(4),
-                          minimumSize: const Size(32, 32),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        Positioned(
+                          top: 4,
+                          right: 4,
+                          child: IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.black54,
+                              padding: const EdgeInsets.all(4),
+                              minimumSize: const Size(32, 32),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            onPressed: () => onImageRemove(index),
+                          ),
                         ),
-                        onPressed: onImageRemove,
-                      ),
-                    ),
-                  ],
+                      ],
+                    );
+                  }).toList(),
                 ),
               ],
             ],
@@ -998,18 +1103,32 @@ class _CompletedOrderItemCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '#$index  ${item.productName}',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                SmallProductImage(
+                  imageUrl: item.productPhoto,
+                  size: 40,
+                  borderRadius: 5,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '#$index  ${item.productName}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             _KeyValueRow(label: 'Brand', value: item.productBrand),
-            _KeyValueRow(label: 'Sub Brand', value: item.productSubBrand),
+            // _KeyValueRow(label: 'Sub Brand', value: item.productSubBrand),
+            // _KeyValueRow(label: 'Rate', value: item.orderSub.orderSubUpdateRate.toString()),
             Row(
               children: [
+               
                 Expanded(
                   child: _KeyValueRow(
                     label: 'Unit',
@@ -1023,8 +1142,22 @@ class _CompletedOrderItemCard extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+             
               ],
             ),
+            Row(
+              children: [
+               if (item.orderSub.checkerImages != null && item.orderSub.checkerImages!.isNotEmpty)
+                  ...item.orderSub.checkerImages!.map((image) => SmallProductImage(
+                    imageUrl: image,
+                    size: 40,
+                    borderRadius: 5,
+                    
+                  )),
+                // ...item.orderSub.checkerImages!.map((image) => SmallProductImage(imageUrl: image, size: 40, borderRadius: 5)),
+              ],
+            ),
+              
           ],
         ),
       ),

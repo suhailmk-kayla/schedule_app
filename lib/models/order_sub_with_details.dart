@@ -7,6 +7,7 @@ class OrderSubWithDetails {
   final String? unitName;
   final String? unitDispName;
   final String? productName;
+  final String? productCode;
   final String? productBrand;
   final String? productSubBrand;
   final String? productPhoto; // Product image URL
@@ -16,6 +17,7 @@ class OrderSubWithDetails {
     this.unitName,
     this.unitDispName,
     this.productName,
+    this.productCode,
     this.productBrand,
     this.productSubBrand,
     this.productPhoto,
@@ -28,6 +30,7 @@ class OrderSubWithDetails {
       unitName: map['unitName'] as String?,
       unitDispName: map['unitDispName'] as String?,
       productName: map['productName'] as String?,
+      productCode: map['productCode'] as String?,
       productBrand: map['productBrand'] as String?,
       productSubBrand: map['productSubBrand'] as String?,
       productPhoto: map['productPhoto'] as String?,

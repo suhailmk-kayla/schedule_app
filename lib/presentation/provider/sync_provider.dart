@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'dart:developer' as developer;
 import '../../utils/notification_manager.dart';
 import '../../repositories/products/products_repository.dart';
@@ -92,6 +93,10 @@ class SyncProvider extends ChangeNotifier {
   bool get showError => _showError;
 
   bool _isStopped = false;
+
+  // Last sync date
+  String? _lastSyncDate;
+  String? get lastSyncDate => _lastSyncDate;
 
   // Table sync flags
   bool _isProductDownloaded = false;
@@ -278,6 +283,28 @@ class SyncProvider extends ChangeNotifier {
     return result.fold((failure) => [], (failedSyncs) => failedSyncs);
   }
 
+  /// Load last sync date from database
+  Future<void> loadLastSyncDate() async {
+    final result = await _syncTimeRepository.getLatestSyncTime();
+    result.fold(
+      (_) => _lastSyncDate = null,
+      (syncTime) {
+        if (syncTime != null) {
+          // Format the date for display
+          try {
+            final dateTime = DateTime.parse(syncTime.updateDate);
+            _lastSyncDate = DateFormat('MMM dd, yyyy HH:mm').format(dateTime);
+          } catch (e) {
+            _lastSyncDate = syncTime.updateDate;
+          }
+        } else {
+          _lastSyncDate = null;
+        }
+        notifyListeners();
+      },
+    );
+  }
+
   // ============================================================================
   // Private Sync Methods
   // ============================================================================
@@ -429,6 +456,8 @@ class SyncProvider extends ChangeNotifier {
         _isSyncing = false;
         _progress = 1.0;
         _currentTask = 'Sync completed';
+        // Refresh last sync date after sync completes
+        await loadLastSyncDate();
         notifyListeners();
         developer.log('SyncProvider: Sync completed, notifyListeners() called');
       }

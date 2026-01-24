@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../../../utils/asset_images.dart';
 import '../../../provider/sub_categories_provider.dart';
@@ -185,8 +186,16 @@ class _SubCategoryListScreenState extends State<SubCategoryListScreen> {
         children: [
           // Sub-categories list
           Expanded(
-            child: Consumer<SubCategoriesProvider>(
-              builder: (context, provider, _) {
+            child: Consumer2<SubCategoriesProvider,NotificationManager>(
+
+              builder: (context, provider, notificationManager, _) {
+                if(notificationManager.notificationTrigger){
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    notificationManager.resetTrigger();
+                    provider.getSubCategories();
+                    provider.getAllCategories();
+                  });
+                }
                 if (provider.isLoading && provider.subCategoriesList.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }

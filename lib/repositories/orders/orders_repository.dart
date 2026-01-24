@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:dio/dio.dart';
@@ -287,6 +288,114 @@ class OrdersRepository {
     }
   }
 
+  /// Get all draft orders (flag = 3) with related names
+  /// Returns OrderWithName objects filtered by flag = 3
+  Future<Either<Failure, List<OrderWithName>>> getAllDraftOrdersWithNames({
+    String searchKey = '',
+    int routeId = -1,
+    String date = '',
+    int? salesmanId,
+  }) async {
+    try {
+      developer.log('getAllDraftOrdersWithNames:getting draft orders is called from repository');
+      final db = await _database;
+      final List<Map<String, dynamic>> maps;
+
+      // Build query with JOINs to get names - ONLY draft orders (flag = 3)
+      String whereClause = 'Orders.flag = 3';
+      List<dynamic> whereArgs = [];
+
+      if (salesmanId != null) {
+        whereClause += ' AND Orders.salesmanId = ?';
+        whereArgs.add(salesmanId);
+      }
+
+      if (routeId != -1) {
+        whereClause += ' AND rt.routeId = ?';
+        whereArgs.add(routeId);
+      }
+
+      if (date.isNotEmpty) {
+        whereClause += ' AND Orders.updatedDateTime LIKE ?';
+        whereArgs.add('%$date%');
+      }
+
+      if (searchKey.isNotEmpty) {
+        whereClause += ' AND (Orders.invoiceNo LIKE ? OR Orders.customerName LIKE ?)';
+        final searchPattern = '%$searchKey%';
+        whereArgs.addAll([searchPattern, searchPattern]);
+      }
+
+      maps = await db.rawQuery(
+        '''
+        SELECT
+          COALESCE(sl.name, SalesMan.name) AS salesManName,
+          CASE
+            WHEN Orders.storeKeeperId = -1 THEN ''
+            ELSE COALESCE(storeKeeper.name, '')
+          END AS storeKeeperName,
+          CASE
+            WHEN Customers.routId = -1 THEN ''
+            ELSE COALESCE(rt.name, '')
+          END AS routeName,
+          CASE
+            WHEN Orders.billerId = -1 THEN ''
+            ELSE COALESCE(biller.name, '')
+          END AS billerName,
+          CASE
+            WHEN Orders.checkerId = -1 THEN ''
+            ELSE COALESCE(checker.name, '')
+          END AS checkerName,
+          Customers.name AS customerDisplayName,
+          Orders.*
+        FROM Orders
+        LEFT JOIN SalesMan ON SalesMan.userId = Orders.salesmanId
+        LEFT JOIN Users sl ON sl.userId = Orders.salesmanId
+        LEFT JOIN Users storeKeeper ON storeKeeper.userId = Orders.storeKeeperId
+        LEFT JOIN Users biller ON biller.userId = Orders.billerId
+        LEFT JOIN Users checker ON checker.userId = Orders.checkerId
+        LEFT JOIN Customers ON Customers.customerId = Orders.customerId
+        LEFT JOIN Routes rt ON rt.routeId = Customers.routId
+        WHERE $whereClause
+        ORDER BY Orders.updatedDateTime DESC
+        ''',
+        whereArgs,
+      );
+
+      final ordersWithNames = maps.map((map) {
+        final order = Order.fromMap(map);
+        return OrderWithName(
+          order: order,
+          salesManName: (map['salesManName'] as String?) ?? '',
+          storeKeeperName: (map['storeKeeperName'] as String?) ?? '',
+          customerName: (map['customerDisplayName'] as String?) ?? order.orderCustName,
+          billerName: (map['billerName'] as String?) ?? '',
+          checkerName: (map['checkerName'] as String?) ?? '',
+          route: (map['routeName'] as String?) ?? '',
+        );
+      }).toList();
+
+      return Right(ordersWithNames);
+    } catch (e) {
+      developer.log('getAllDraftOrdersWithNames:error getting draft orders with names: ${e.toString()}');
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get count of draft orders (flag = 3)
+  Future<Either<Failure, int>> getDraftOrderCount() async {
+    try {
+      final db = await _database;
+      final result = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM Orders WHERE flag = 3',
+      );
+      final count = Sqflite.firstIntValue(result) ?? 0;
+      return Right(count);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
   /// Get orders by customer ID and date
   Future<Either<Failure, List<Order>>> getOrdersByCustomer({
     required int customerId,
@@ -339,6 +448,7 @@ class OrdersRepository {
           Units.name AS unitName,
           Units.displayName AS unitDispName,
           Product.name AS productName,
+          Product.code AS productCode,
           Product.brand AS productBrand,
           Product.subBrand AS productSubBrand,
           Product.photoUrl AS productPhoto,
@@ -371,6 +481,7 @@ class OrdersRepository {
           Units.name AS unitName,
           Units.displayName AS unitDispName,
           Product.name AS productName,
+          Product.code AS productCode,
           Product.brand AS productBrand,
           Product.subBrand AS productSubBrand,
           Product.photoUrl AS productPhoto,
@@ -850,7 +961,9 @@ class OrdersRepository {
           orderSub.updatedAt,
           orderSub.orderSubIsCheckedFlag,
           orderSub.orderSubFlag,
-          orderSub.checkerImage,
+          orderSub.checkerImages != null && orderSub.checkerImages!.isNotEmpty
+              ? jsonEncode(orderSub.checkerImages)
+              : null,
         ],
       );
       developer.log('OrdersRepository: Added order sub: ${orderSub.orderSubId}');
@@ -875,9 +988,9 @@ class OrdersRepository {
               orderSubId, orderId, invoiceNo, UUID, customerId, storeKeeperId, 
               salesmanId, dateAndTime, productId, unitId, carId, rate, updateRate, 
               quantity, availQty, unitBaseQty, note, narration, orderFlag, 
-              createdDateTime, updatedDateTime, isCheckedflag, flag, checkerImage
+              createdDateTime, updatedDateTime, isCheckedflag, flag, checkerImage,estimatedQty,estimatedAvailableQty,estimatedTotal
             ) VALUES (
-              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             ''',
             [
@@ -904,7 +1017,12 @@ class OrdersRepository {
               orderSub.updatedAt,
               orderSub.orderSubIsCheckedFlag,
               orderSub.orderSubFlag,
-              orderSub.checkerImage,
+              orderSub.checkerImages != null && orderSub.checkerImages!.isNotEmpty
+                  ? jsonEncode(orderSub.checkerImages)
+                  : null,
+              orderSub.estimatedQty,
+              orderSub.estimatedAvailableQty,
+              orderSub.estimatedTotal,
             ],
           );
         }
@@ -1291,6 +1409,7 @@ class OrdersRepository {
         ApiEndpoints.orderSubDownload,
         queryParameters: queryParams,
       );
+      developer.log('syncOrderSubsFromApi: response: ${response.data}');
 
       final orderSubListApi = OrderSubListApi.fromJson(response.data);
       return Right(orderSubListApi);
@@ -1587,6 +1706,7 @@ class OrdersRepository {
       final response = await _dio.post(
         ApiEndpoints.updateBillerOrChecker,
         data: params,
+
       );
 
       if (response.statusCode != 200) {

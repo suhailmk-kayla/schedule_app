@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../../../utils/asset_images.dart';
 import '../../../provider/categories_provider.dart';
@@ -182,61 +183,73 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Categories list
-          Expanded(
-            child: Consumer<CategoriesProvider>(
-              builder: (context, provider, _) {
-                if (provider.isLoading && provider.categoriesList.isEmpty) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (provider.errorMessage != null &&
-                    provider.categoriesList.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          provider.errorMessage!,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () => provider.getCategories(),
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                if (provider.categoriesList.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      'No Category found',
-                      style: TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
-                  );
-                }
-
-                return ListView.separated(
-                  padding: const EdgeInsets.all(8),
-                  itemCount: provider.categoriesList.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 4),
-                  itemBuilder: (context, index) {
-                    final category = provider.categoriesList[index];
-                    return _CategoryListItem(
-                      category: category,
-                      onEditTap: () => _handleEditClick(category),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          final provider = Provider.of<CategoriesProvider>(context, listen: false);
+          provider.getCategories();
+        },
+        child: Column(
+          children: [
+            // Categories list
+            Expanded(
+              child: Consumer2<CategoriesProvider,NotificationManager>(
+                builder: (context, provider, notificationManager, _) {
+                  if(notificationManager.notificationTrigger){
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      notificationManager.resetTrigger();
+                      provider.getCategories();
+                    });
+                  }
+                  if (provider.isLoading && provider.categoriesList.isEmpty) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+        
+                  if (provider.errorMessage != null &&
+                      provider.categoriesList.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            provider.errorMessage!,
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () => provider.getCategories(),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
                     );
-                  },
-                );
-              },
+                  }
+        
+                  if (provider.categoriesList.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'No Category found',
+                        style: TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                    );
+                  }
+        
+                  return ListView.separated(
+                    padding: const EdgeInsets.all(8),
+                    itemCount: provider.categoriesList.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 4),
+                    itemBuilder: (context, index) {
+                      final category = provider.categoriesList[index];
+                      return _CategoryListItem(
+                        category: category,
+                        onEditTap: () => _handleEditClick(category),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _handleAddClick,

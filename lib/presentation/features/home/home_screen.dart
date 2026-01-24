@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/presentation/features/orders/draft_orders_screen.dart';
 import 'dart:developer' as developer;
 import 'package:schedule_frontend_flutter/utils/push_notification_helper.dart';
 import 'package:schedule_frontend_flutter/utils/storage_helper.dart';
@@ -15,6 +16,7 @@ import '../product_settings/product_settings_screen.dart';
 import '../orders/orders_screen.dart';
 import '../out_of_stock/out_of_stock_list_screen.dart';
 import '../suppliers/suppliers_screen.dart';
+import '../sync/sync_screen.dart';
 import 'home_drawer.dart';
 
 /// Home Screen
@@ -162,23 +164,45 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
           return Padding(
             padding: const EdgeInsets.all(8.0),
-            child: GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 8.0,
-                mainAxisSpacing: 8.0,
-                childAspectRatio: 1.4,
-              ),
-              itemCount: menuItems.length,
-              itemBuilder: (context, index) {
-                return _MenuItemCard(
-                  imagePath: menuItems[index].imagePath ?? '',
-                  menuItem: menuItems[index],
-                  onTap: () {
-                    _handleMenuTap(context, menuItems[index].type);
+            child: Column(
+              children: [
+                _SyncRefreshButton(
+                  onRefresh: () async {
+                    final syncProvider = Provider.of<SyncProvider>(context, listen: false);
+                    if (!syncProvider.isSyncing) {
+                      // Navigate to sync screen
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const SyncScreen()),
+                      );
+                      // Reload last sync date after sync completes
+                      if (mounted) {
+                        syncProvider.loadLastSyncDate();
+                      }
+                    }
                   },
-                );
-              },
+                ),
+                Expanded(
+                  child: GridView.builder(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 8.0,
+                      mainAxisSpacing: 8.0,
+                      childAspectRatio: 1.4,
+                    ),
+                    itemCount: menuItems.length,
+                    itemBuilder: (context, index) {
+                      return _MenuItemCard(
+                        imagePath: menuItems[index].imagePath ?? '',
+                        menuItem: menuItems[index],
+                        onTap: () {
+                          _handleMenuTap(context, menuItems[index].type);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           );
             },
@@ -231,6 +255,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             builder: (_) => const ProductSettingsScreen(),
           ),
         );
+        break;
+      case MenuType.draftOrders:
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const DraftOrdersScreen()));
         break;
       default:
         break;
@@ -309,6 +336,84 @@ class _MenuItemCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Sync Refresh Button Widget
+/// Shows refresh button with last sync date
+class _SyncRefreshButton extends StatelessWidget {
+  final VoidCallback onRefresh;
+
+  const _SyncRefreshButton({required this.onRefresh});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<SyncProvider>(
+      builder: (context, syncProvider, _) {
+        // Load last sync date on first build
+        if (syncProvider.lastSyncDate == null && !syncProvider.isSyncing) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            syncProvider.loadLastSyncDate();
+          });
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Last sync date
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Last Synced:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      syncProvider.lastSyncDate ?? 'Never',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Refresh button
+              IconButton(
+                icon: syncProvider.isSyncing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.refresh, size: 20),
+                onPressed: syncProvider.isSyncing ? null : onRefresh,
+                tooltip: 'Sync Data',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

@@ -172,6 +172,8 @@ class Product {
   final double retail_price;
   @JsonKey(defaultValue: 0.0,fromJson: _toDouble)
   final double fitting_charge;
+  @JsonKey(name: 'minimum_price', fromJson: _toNullableDouble)
+  final double? minimumPrice;
   @JsonKey(defaultValue: '')
   final String note;
   @JsonKey(defaultValue: '')
@@ -196,6 +198,7 @@ class Product {
     required this.mrp,
     required this.retail_price,
     required this.fitting_charge,
+    this.minimumPrice,
     required this.note,
     required this.photo,
   });
@@ -225,6 +228,7 @@ class Product {
       mrp: (map['mrp'] as num?)?.toDouble() ?? 0.0,
       retail_price: (map['retailPrice'] as num?)?.toDouble() ?? 0.0,
       fitting_charge: (map['fittingCharge'] as num?)?.toDouble() ?? 0.0,
+      minimumPrice: (map['minimumPrice'] as num?)?.toDouble(),
       note: map['note'] as String? ?? '',
       photo: map['photoUrl'] as String? ?? '',
     );
@@ -252,6 +256,7 @@ class Product {
       'mrp': mrp,
       'retailPrice': retail_price,
       'fittingCharge': fitting_charge,
+      'minimumPrice': minimumPrice,
       'note': note,
       'outtOfStockFlag': 1,
       'flag': 1,
@@ -333,6 +338,16 @@ double _toDouble(dynamic value) {
   if (value is num) return value.toDouble();
   if (value is String) return double.tryParse(value) ?? 0.0;
   return 0.0;
+}
+
+double? _toNullableDouble(dynamic value) {
+  if (value == null) return null;
+  if (value is num) return value.toDouble();
+  if (value is String) {
+    if (value.trim().isEmpty) return null;
+    return double.tryParse(value);
+  }
+  return null;
 }
 
 /// Product With Details Model

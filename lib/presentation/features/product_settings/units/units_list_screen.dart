@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../../../utils/asset_images.dart';
 import '../../../provider/units_provider.dart';
 import '../../../../models/master_data_api.dart';
@@ -124,8 +125,14 @@ class _UnitsListScreenState extends State<UnitsListScreen> {
         children: [
           // Units list
           Expanded(
-            child: Consumer<UnitsProvider>(
-              builder: (context, provider, _) {
+            child: Consumer2<UnitsProvider,NotificationManager>(
+              builder: (context, provider, notificationManager, _) {
+                if(notificationManager.notificationTrigger){
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    notificationManager.resetTrigger();
+                    provider.getUnits();                    
+                  });
+                }
                 if (provider.isLoading && provider.unitsList.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }

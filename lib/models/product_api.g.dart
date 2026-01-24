@@ -140,6 +140,7 @@ Product _$ProductFromJson(Map<String, dynamic> json) => Product(
   fitting_charge: json['fitting_charge'] == null
       ? 0.0
       : _toDouble(json['fitting_charge']),
+  minimumPrice: _toNullableDouble(json['minimum_price']),
   note: json['note'] as String? ?? '',
   photo: json['photo'] as String? ?? '',
 );
@@ -162,6 +163,7 @@ Map<String, dynamic> _$ProductToJson(Product instance) => <String, dynamic>{
   'mrp': instance.mrp,
   'retail_price': instance.retail_price,
   'fitting_charge': instance.fitting_charge,
+  'minimum_price': instance.minimumPrice,
   'note': instance.note,
   'photo': instance.photo,
 };

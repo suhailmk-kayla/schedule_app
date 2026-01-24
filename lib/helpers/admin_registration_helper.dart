@@ -144,8 +144,8 @@ Future<void> createAdminAccount() async {
   
   final result = await registerAdmin(
     tpin: '1234',
-    code: 'TESTTPIN', // Change this to a unique code
-    name: 'TESTTPIN', // Change this
+    code: 'ADMIN5', // Change this to a unique code
+    name: 'Admin', // Change this
     phoneNo: '7306548087', // Change this
     password: '123456', // Change this to a secure password
     address: 'Admin Address', // Optional
@@ -154,9 +154,6 @@ Future<void> createAdminAccount() async {
   if (result['success']) {
     developer.log('✅ Admin created successfully!');
     developer.log('User: ${result['user']}');
-    developer.log('You can now login with:');
-    developer.log('  Code: ADMIN001'); // Use the code you provided
-    developer.log('  Password: admin123'); // Use the password you provided
   } else {
     print('❌ Error: ${result['message']}');
     if (result['rawResponse'] != null) {
