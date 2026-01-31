@@ -379,6 +379,18 @@ class OrdersProvider extends ChangeNotifier {
 
     _orderDetails = orderWithName;
     _orderDetailItems = builtItems;
+
+    // DEBUG: Log loaded order detail items (flags and available qty)
+    for (final item in builtItems) {
+      developer.log(
+        'OrdersProvider.loadOrderDetails: '
+        'orderId=$orderId '
+        'subId=${item.orderSub.orderSubId} '
+        'flag=${item.orderSub.orderSubOrdrFlag} '
+        'availQty=${item.orderSub.orderSubAvailableQty}',
+        name: 'OrdersProvider',
+      );
+    }
     
     // CRITICAL: Store original order sub IDs to identify new items later
     // This prevents sending existing items as "new" which causes duplicates
@@ -733,13 +745,33 @@ _setError(failure.message);
               ? _orderMaster!.orderCustName
               : 'Select customer';
           
-          // Load order subs with details
-          final subsResult = await _ordersRepository.getAllOrderSubAndDetails(_orderMaster!.orderId);
-          subsResult.fold(
-            (failure) => _setError(failure.message),
-            (subs) {
-              _orderSubsWithDetails = subs;
-              notifyListeners();
+          // Load order subs with details.
+          // NOTE: Draft/temp subs may still have orderFlag == 0 until stock-check happens.
+          // In that case getAllOrderSubAndDetails() can return empty, so we fallback to
+          // getTempOrderSubAndDetails() (KMP parity).
+          final subsResult =
+              await _ordersRepository.getAllOrderSubAndDetails(_orderMaster!.orderId);
+
+          await subsResult.fold(
+            (failure) async => _setError(failure.message),
+            (subs) async {
+              if (subs.isNotEmpty) {
+                _orderSubsWithDetails = subs;
+                notifyListeners();
+                return;
+              }
+
+              final tempSubsResult = await _ordersRepository.getTempOrderSubAndDetails(
+                _orderMaster!.orderId,
+              );
+
+              tempSubsResult.fold(
+                (failure) => _setError(failure.message),
+                (tempSubs) {
+                  _orderSubsWithDetails = tempSubs;
+                  notifyListeners();
+                },
+              );
             },
           );
         }
@@ -840,6 +872,7 @@ _setError(failure.message);
       (_) {
         _orderMaster = Order(
           id: _orderMaster!.id,
+          orderId: _orderMaster!.orderId,
           uuid: _orderMaster!.uuid,
           orderInvNo: _orderMaster!.orderInvNo,
           orderCustId: _orderMaster!.orderCustId,
@@ -880,6 +913,7 @@ _setError(failure.message);
         _customerName = customerName;
         _orderMaster = Order(
           id: _orderMaster!.id,
+          orderId: _orderMaster!.orderId,
           uuid: _orderMaster!.uuid,
           orderInvNo: _orderMaster!.orderInvNo,
           orderCustId: customerId,
@@ -915,9 +949,9 @@ _setError(failure.message);
 
     // Update flag to 3 (draft)
     final flagResult = await _ordersRepository.updateOrderFlag(
-      orderId: _orderMaster!.id,
+      // KMP parity: update by Orders.orderId (works for temp/draft and server orders)
+      orderId: _orderMaster!.orderId,
       flag: 3,
-      isDraft: true
     );
 
     if (flagResult.isLeft) {
@@ -927,18 +961,16 @@ _setError(failure.message);
     }
 
     await _ordersRepository.updateCustomer(
-      orderId: _orderMaster!.id,
+      orderId: _orderMaster!.orderId,
       customerId: _orderMaster!.orderCustId,
       customerName: _orderMaster!.orderCustName,
-      isDraft: true
     );
 
     // Update freight and total
     final updateResult = await _ordersRepository.updateFreightAndTotal(
-      orderId: _orderMaster!.id,
+      orderId: _orderMaster!.orderId,
       freightCharge: freightCharge,
       total: total,
-      isDraft: true,
     );
 
     if (updateResult.isLeft) {
@@ -949,9 +981,8 @@ _setError(failure.message);
 
     // Update updated date
     await _ordersRepository.updateUpdatedDate(
-      orderId: _orderMaster!.id,
+      orderId: _orderMaster!.orderId,
       updatedDateTime: dateTimeStr,
-      isDraft: true,
     );
     loadOrders();
 
@@ -1470,7 +1501,6 @@ _setError(failure.message);
           }
         }
       }
-
       _setLoading(false);
       return true;
     } catch (e) {
@@ -1634,7 +1664,9 @@ _setError(failure.message);
         orderSubNarration: narration.isEmpty ? null : narration,
         orderSubOrdrFlag: 0, // Temp order flag (matches KMP line 543)
         orderSubIsCheckedFlag: isChecked,
-        orderSubFlag: 0, // Temp order flag (matches KMP line 546 where flag=1 for normal, 0 for temp)
+        // IMPORTANT (KMP parity): temp/draft OrderSub rows still have DB flag=1 (active),
+        // while workflow state is kept in orderSubOrdrFlag (orderFlag column).
+        orderSubFlag: 1,
         createdAt: dateTimeStr,
         updatedAt: dateTimeStr,
       );
@@ -3286,15 +3318,19 @@ _setError(failure.message);
       // No need to delete order subs - backend updates replacements in place (same ID)
       final result = await _ordersRepository.replaceOrAddOrderItems(payload);
 
+      // edited by ai on 29-jan-2026 to fix the issue of order details screen showing "Order not found" after Check Stock (use orderId from API response and await reload)
       bool success = false;
+      int? orderIdToReload;
       result.fold(
         (failure) => _setError(failure.message),
         (updatedOrder) {
           success = true;
-          // Reload order details to reflect changes from API response
-          loadOrderDetails(orderId);
+          orderIdToReload = updatedOrder.orderId;
         },
       );
+      if (success && orderIdToReload != null) {
+        await loadOrderDetails(orderIdToReload!);
+      }
 
       _setLoading(false);
       return success;

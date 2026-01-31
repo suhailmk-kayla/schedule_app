@@ -966,10 +966,19 @@ class OrdersRepository {
               : null,
         ],
       );
-      developer.log('OrdersRepository: Added order sub: ${orderSub.orderSubId}');
+      developer.log(
+        'OrdersRepository.addOrderSub: '
+        'orderSubId=${orderSub.orderSubId}, '
+        'flag=${orderSub.orderSubOrdrFlag}, '
+        'availQty=${orderSub.orderSubAvailableQty}',
+        name: 'OrdersRepository',
+      );
       return const Right(null);
     } catch (e) {
-      developer.log('OrdersRepository: Error adding order sub: ${e.toString()}');
+      developer.log(
+        'OrdersRepository.addOrderSub: Error adding order sub: ${e.toString()}',
+        name: 'OrdersRepository',
+      );
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -1085,26 +1094,11 @@ class OrdersRepository {
   Future<Either<Failure, void>> updateOrderFlag({
     required int orderId,
     required int flag,
-    bool isDraft=false
   }) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        if(isDraft){
-          await txn.update(
-            'Orders',
-            {'flag': flag},
-            where: 'id = ?',
-            whereArgs: [orderId],
-          );
-          await txn.update(
-            'OrderSub',
-            {'flag': flag},
-            where: 'id = ?',
-            whereArgs: [orderId],
-          );
-        }
-        else{ 
+        // KMP parity: update both Orders and OrderSub using Orders.orderId (not Orders.id).
         await txn.update(
           'Orders',
           {'flag': flag},
@@ -1117,7 +1111,6 @@ class OrdersRepository {
           where: 'orderId = ?',
           whereArgs: [orderId],
         );
-        }
       });
       developer.log('OrdersRepository: Updated order flag: $flag for order: $orderId');
       return const Right(null);
@@ -1155,19 +1148,10 @@ class OrdersRepository {
     required int orderId,
     required double freightCharge,
     required double total,
-    bool isDraft=false,
   }) async {
     try {
       final db = await _database;
-      if(isDraft){
-        await db.update(
-          'Orders',
-          {'freightCharge': freightCharge, 'total': total},
-          where: 'id = ?',
-          whereArgs: [orderId],
-        );
-      }
-      else{
+      // KMP parity: update by Orders.orderId
       await db.update(
         'Orders',
         {
@@ -1177,7 +1161,6 @@ class OrdersRepository {
         where: 'orderId = ?',
         whereArgs: [orderId],
       );
-      }
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -1186,30 +1169,20 @@ class OrdersRepository {
 
 
 
-    Future<Either<Failure, void>> updateCustomer({
+  Future<Either<Failure, void>> updateCustomer({
     required int orderId,
     required String customerName,
     required int customerId,
-    bool isDraft=false,
   }) async {
     try {
       final db = await _database;
-      if(isDraft){
-        await db.update(
-          'Orders',
-          {'customerId': customerId, 'customerName': customerName},
-          where: 'id = ?',
-          whereArgs: [orderId],
-        );
-      }
-      else{
+      // KMP parity: update by Orders.orderId
       await db.update(
         'Orders',
         {'customerId': customerId, 'customerName': customerName},
         where: 'orderId = ?',
         whereArgs: [orderId],
       );
-      }
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -1221,26 +1194,16 @@ class OrdersRepository {
   Future<Either<Failure, void>> updateUpdatedDate({
     required int orderId,
     required String updatedDateTime,
-    bool isDraft=false
   }) async {
     try {
       final db = await _database;
-      if(isDraft){
-        await db.update(
-          'Orders',
-          {'updatedDateTime': updatedDateTime},
-          where: 'id = ?',
-          whereArgs: [orderId],
-        );
-      }
-      else{
+      // KMP parity: update by Orders.orderId
       await db.update(
         'Orders',
         {'updatedDateTime': updatedDateTime},
         where: 'orderId = ?',
         whereArgs: [orderId],
       );
-      }
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -1288,17 +1251,21 @@ class OrdersRepository {
   Future<Either<Failure, void>> deleteOrderAndSub(int orderId) async {
     try {
       final db = await _database;
+      // Only delete the *temporary* order and its subs (flag=2, orderFlag=0).
+      // After sendOrder succeeds we INSERT the real order with the same orderId (flag=1).
+      // Deleting by orderId alone would remove that real order and make it disappear from
+      // the list until the next sync; scoping to temp data avoids that bug.
       await db.transaction((txn) async {
-        // Delete all order subs first
+        // Delete temp order subs first (orderFlag = 0)
         await txn.delete(
           'OrderSub',
-          where: 'orderId = ?',
+          where: 'orderId = ? AND orderFlag = 0',
           whereArgs: [orderId],
         );
-        // Then delete the order
+        // Then delete the temp order (flag = 2)
         await txn.delete(
           'Orders',
-          where: 'orderId = ?',
+          where: 'orderId = ? AND flag = 2',
           whereArgs: [orderId],
         );
       });

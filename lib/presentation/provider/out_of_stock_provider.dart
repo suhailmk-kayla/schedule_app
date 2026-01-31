@@ -1169,9 +1169,26 @@ class OutOfStockProvider extends ChangeNotifier {
     _clearError();
 
     try {
-      // Get order sub by sub ID - need to find order sub with matching orderSubId
-      final orderResult = await _ordersRepository.getOrderWithNamesById(master.oospMasterId);
+      // changes made by ai on 28/01/2026 as a fix for informSalesman using wrong id (oospMasterId) as orderId; now resolve orderId from order sub so the correct order is loaded and salesman receives the stock update
+      final orderSubByIdResult = await _ordersRepository.getOrderSubById(master.orderSubId);
+      if (orderSubByIdResult.isLeft) {
+        developer.log('informSalesman: error getting order sub by id: ${orderSubByIdResult.left.message}');
+        _setError('Order sub not found');
+        _setLoading(false);
+        onFailure('Order sub not found');
+        return;
+      }
+      final orderSubForOrderId = orderSubByIdResult.right;
+      if (orderSubForOrderId == null) {
+        _setError('Order sub not found');
+        _setLoading(false);
+        onFailure('Order sub not found');
+        return;
+      }
+      final orderId = orderSubForOrderId.orderSubOrdrId;
+      final orderResult = await _ordersRepository.getOrderWithNamesById(orderId);
       if (orderResult.isLeft || orderResult.right == null) {
+        developer.log('informSalesman: error getting order by id: ${orderResult.left.message}');
         _setError('Order not found');
         _setLoading(false);
         onFailure('Order not found');
@@ -1184,6 +1201,7 @@ class OutOfStockProvider extends ChangeNotifier {
       );
 
       if (orderSubsResult.isLeft) {
+        developer.log('informSalesman: error getting order sub by id: ${orderSubsResult.left.message}');
         _setError('Order sub not found');
         _setLoading(false);
         onFailure('Order sub not found');
@@ -1191,8 +1209,10 @@ class OutOfStockProvider extends ChangeNotifier {
       }
 
       final orderSubs = orderSubsResult.right;
+      // Match by server OrderSub ID, not local DB primary key
+      // updated by ai on 28/01/2026
       final orderSub = orderSubs.firstWhere(
-        (sub) => sub.orderSub.id == master.orderSubId,
+        (sub) => sub.orderSub.orderSubId == master.orderSubId,
         orElse: () {
           if (orderSubs.isNotEmpty) return orderSubs.first;
           throw Exception('Order sub not found');
@@ -1201,13 +1221,28 @@ class OutOfStockProvider extends ChangeNotifier {
 
       final order = orderWithName.order;
 
+      // DEBUG: Log initial context for salesman notification
+      developer.log(
+        'informSalesman: start '
+        'oospMasterId=${master.oospMasterId}, '
+        'orderId=${order.orderId}, '
+        'orderSubId=${orderSub.orderSub.orderSubId}, '
+        'orderFlagBefore=${orderSub.orderSub.orderSubOrdrFlag}, '
+        'orderQty=${orderSub.orderSub.orderSubQty}, '
+        'orderAvailBefore=${orderSub.orderSub.orderSubAvailableQty}, '
+        'availableQtyFromAdmin=$availableQty',
+        name: 'OutOfStockProvider',
+      );
+
       // Build user IDs for push notification
       final currentUserId = await StorageHelper.getUserId();
       final List<Map<String, dynamic>> userIds = [];
 
       if (master.salesmanId != -1) {
+        developer.log('informSalesman: salesmanId=${master.salesmanId}');
         userIds.add({'user_id': master.salesmanId, 'silent_push': 0});
       } else {
+        developer.log('informSalesman: salesman is not found, storekeeperId=${master.storekeeperId}');
         userIds.add({'user_id': master.storekeeperId, 'silent_push': 0});
       }
 
@@ -1266,6 +1301,14 @@ class OutOfStockProvider extends ChangeNotifier {
           ? OrderSubFlag.inStock
           : OrderSubFlag.notAvailable;
 
+      // DEBUG: Log computed quantities and flag
+      developer.log(
+        'informSalesman: computed '
+        'neededQty=$neededQty, lastQty=$lastQty, '
+        'updateOrderFlag=$updateOrderFlag',
+        name: 'OutOfStockProvider',
+      );
+
       // Build order sub update payload
       final orderSubPayload = {
         'id': orderSub.orderSub.orderSubId,
@@ -1287,6 +1330,12 @@ class OutOfStockProvider extends ChangeNotifier {
       };
 
       // Call API to update order sub
+      developer.log(
+        'informSalesman: sending updateOrderSub '
+        'payloadFlag=${orderSubPayload['order_sub_ordr_flag']} '
+        'availQty=${orderSubPayload['order_sub_available_qty']}',
+        name: 'OutOfStockProvider',
+      );
       final orderSubResponse = await _dio.post(
         ApiEndpoints.updateOrderSub,
         data: orderSubPayload,
@@ -1308,6 +1357,13 @@ class OutOfStockProvider extends ChangeNotifier {
         onFailure: onFailure,
         onSuccess: () async {
           final orderSubApi = OrderSubApi.fromJson(orderSubResponseData);
+          developer.log(
+            'informSalesman: API OK, updating local OrderSub '
+            'id=${orderSubApi.data.orderSubId}, '
+            'flag=${orderSubApi.data.orderSubOrdrFlag}, '
+            'availQty=${orderSubApi.data.orderSubAvailableQty}',
+            name: 'OutOfStockProvider',
+          );
           await _ordersRepository.addOrderSub(orderSubApi.data);
           await _outOfStockRepository.updateCompleteFlag(master.oospMasterId);
 

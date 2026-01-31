@@ -110,25 +110,6 @@ class HomeProvider extends ChangeNotifier {
         count: newOrders,
       ));
     }
-
-    // Draft Orders - Admin only (1)
-    if (userType == 1) {
-      // Get draft orders count
-      final draftCountResult = await _ordersRepository.getDraftOrderCount();
-      final draftCount = draftCountResult.fold(
-        (failure) => 0,
-        (count) => count,
-      );
-      
-      menuList.add(MenuItem(
-        imagePath: AssetImages.imagesOrder,
-        type: MenuType.draftOrders,
-        title: 'Draft Orders',
-        icon: Icons.edit_note,
-        count: draftCount,
-      ));
-    }
-
     // Out of Stock - Admin (1), Storekeeper (2), Supplier (4)
     if (userType == 4 || userType == 1 || userType == 2) {
       final outOfStockText = userType == 4 ? 'Orders' : 'Out of Stock';
@@ -216,6 +197,24 @@ class HomeProvider extends ChangeNotifier {
         title: 'Product Settings',
         icon: Icons.settings,
         count: 0,
+      ));
+    }
+
+        // Draft Orders - Admin (1) and Salesman (3)
+    if (userType == 1 || userType == 3) {
+      // Get draft orders count
+      final draftCountResult = await _ordersRepository.getDraftOrderCount();
+      final draftCount = draftCountResult.fold(
+        (failure) => 0,
+        (count) => count,
+      );
+      
+      menuList.add(MenuItem(
+        imagePath: AssetImages.imagesOrder,
+        type: MenuType.draftOrders,
+        title: 'Draft Orders',
+        icon: Icons.edit_note,
+        count: draftCount,
       ));
     }
 

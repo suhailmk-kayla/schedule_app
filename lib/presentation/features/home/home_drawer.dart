@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:schedule_frontend_flutter/presentation/features/orders/orders_screen.dart';
+import 'package:schedule_frontend_flutter/presentation/features/orders/draft_orders_screen.dart';
 import 'package:schedule_frontend_flutter/presentation/features/product_settings/product_settings_screen.dart';
 import '../../provider/home_provider.dart';
 import '../../provider/auth_provider.dart';
@@ -52,6 +53,12 @@ class _HomeDrawerState extends State<HomeDrawer> {
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const OrdersScreen()),
+        );
+        break;
+      case MenuType.draftOrders:
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const DraftOrdersScreen()),
         );
         break;
       case MenuType.outOfStock:
@@ -336,6 +343,16 @@ class _HomeDrawerState extends State<HomeDrawer> {
         type: MenuType.orders,
         title: 'Orders',
         icon: Icons.shopping_cart,
+        imagePath: AssetImages.imagesOrder,
+      ));
+    }
+
+    // Draft Orders - Admin (1) and Salesman (3)
+    if (userType == 1 || userType == 3) {
+      menuList.add(MenuItem(
+        type: MenuType.draftOrders,
+        title: 'Draft Orders',
+        icon: Icons.edit_note,
         imagePath: AssetImages.imagesOrder,
       ));
     }

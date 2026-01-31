@@ -47,6 +47,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider = Provider.of<ProductsProvider>(context, listen: false);
+      context.read<ProductsProvider>().loadBaseUnits();
       if (widget.productId != null) {
         // Edit mode: Load existing product data
         developer.log('CreateProductScreen: initState() - widget.productId: ${widget.productId}-Edit mode');
@@ -682,6 +683,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
   }
 
   void _showBaseUnitBottomSheet(BuildContext context, ProductsProvider provider) {
+    developer.log('Base unit list: ${provider.unitList}');
     if (provider.unitList.isEmpty) {
       developer.log('Base unit not found');
       ToastHelper.showError('Base unit not found');

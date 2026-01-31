@@ -78,8 +78,10 @@ class _OrderDetailsSalesmanScreenState
 
   Future<void> _refresh() async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
-    await ordersProvider.loadOrderDetails(widget.orderId);
-    
+    // edited by ai on 29-jan-2026 to fix the issue of order details screen showing "Order not found" after Check Stock (use current orderId from provider when available, else widget.orderId)
+    final orderIdToLoad = ordersProvider.orderDetails?.order.orderId ?? widget.orderId;
+    await ordersProvider.loadOrderDetails(orderIdToLoad);
+
     // Update button visibility based on refreshed order state (matching KMP lines 86-87, 107-108, 130-131)
     final order = ordersProvider.orderDetails?.order;
     if (order != null && mounted) {
@@ -106,6 +108,20 @@ class _OrderDetailsSalesmanScreenState
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     final order = ordersProvider.orderDetails?.order;
     if (order == null) return;
+
+    // Double‑check: block forwarding if ANY item is not in stock
+    // (matches UI stock status logic in _getStockStatus)
+    final items = ordersProvider.orderDetailItems;
+    final hasAnyNotInStock = items.any(
+      (item) => item.orderSub.orderSubOrdrFlag >= OrderSubFlag.outOfStock,
+    );
+    if (hasAnyNotInStock) {
+      if (!mounted) return;
+      ToastHelper.showInfo(
+        'Order cannot be sent. Please ensure all items are in stock.',
+      );
+      return;
+    }
 
     // Step 1: Send to biller first (just notifications, no flag change, no assignment)
     // This is essentially a "no-op" for local DB - just sends notifications
@@ -640,12 +656,22 @@ final hasReportItem = items.any(
     final showSendToBillerChecker = !hasEdits && shouldShowButton;
 
 
-    // With this (check for both outOfStock AND notAvailable):
-// With this (check for both outOfStock AND notAvailable):
-final hasUnreportedOutOfStock = items.any(
-  (item) => item.orderSub.orderSubOrdrFlag == OrderSubFlag.outOfStock ||
-            item.orderSub.orderSubOrdrFlag == OrderSubFlag.notAvailable,
-);
+    // Block send if ANY item is not in stock (outOfStock, reported, notAvailable, etc.)
+    final hasAnyNotInStock = items.any(
+      (item) => item.orderSub.orderSubOrdrFlag >= OrderSubFlag.outOfStock,
+    );
+
+    // DEBUG: Log bottom bar decision
+    developer.log(
+      'OrderDetailsSalesman._buildBottomBar: '
+      'orderId=${order.orderId}, '
+      'hasEdits=$hasEdits, '
+      'shouldShowButton=$shouldShowButton, '
+      'hasAnyNotInStock=$hasAnyNotInStock, '
+      'flags=${items.map((i) => i.orderSub.orderSubOrdrFlag).toList()}, '
+      'avail=${items.map((i) => i.orderSub.orderSubAvailableQty).toList()}',
+      name: 'OrderDetailsSalesman',
+    );
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -723,14 +749,16 @@ final hasUnreportedOutOfStock = items.any(
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: hasUnreportedOutOfStock
+                onPressed: hasAnyNotInStock
                     ? () {
-                        // Show toast when button is disabled due to unreported items
-                        ToastHelper.showInfo('Please report all out of stock items before sending to biller and checker');
+                        // Show toast when button is disabled due to out-of-stock items
+                        ToastHelper.showInfo(
+                          'Order cannot be sent. Please ensure all items are in stock.',
+                        );
                       }
                     : _handleSendToBillerAndChecker,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: hasUnreportedOutOfStock
+                  backgroundColor: hasAnyNotInStock
                       ? Colors.grey // Disabled color
                       : Theme.of(context).primaryColor,
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1407,6 +1435,15 @@ class _OrderItemCardState extends State<_OrderItemCard> {
   
   ({String text, Color color}) _getStockStatus(OrderSub orderSub) {
   final orderFlag = orderSub.orderSubOrdrFlag;
+
+  // DEBUG: Log stock status evaluation inputs
+  developer.log(
+    'OrderDetailsSalesman._getStockStatus: '
+    'orderSubId=${orderSub.orderSubId}, '
+    'flag=$orderFlag, '
+    'availQty=${orderSub.orderSubAvailableQty}',
+    name: 'OrderDetailsSalesman',
+  );
   
   // Flag < 3 (inStock = 2, notChecked = 1, newItem = 0) = Available
   if (orderFlag < OrderSubFlag.outOfStock) {

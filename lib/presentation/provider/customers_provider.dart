@@ -115,7 +115,6 @@ class CustomersProvider extends ChangeNotifier {
     _clearError();
 
     final userType = await StorageHelper.getUserType();
-    final userId = await StorageHelper.getUserId();
     final result = await _customersRepository.getAllCustomers(
       searchKey: _searchKey,
       routeId: _routeId == -1 ? -1 : _routeId,
@@ -454,6 +453,9 @@ class CustomersProvider extends ChangeNotifier {
     final now = _getDBFormatDateTime();
     final tempOrder = Order(
       id: 0,
+      // IMPORTANT (KMP parity): temp/draft Orders.orderId is a locally generated positive ID,
+      // not -1. This value is later replaced by the server-assigned id when submitted.
+      orderId: orderId,
       uuid: '',
       orderInvNo: 'ORDER$orderId',
       orderCustId: customer.customerId!,
