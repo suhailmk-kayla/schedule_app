@@ -297,7 +297,7 @@ class OrdersRepository {
     int? salesmanId,
   }) async {
     try {
-      developer.log('getAllDraftOrdersWithNames:getting draft orders is called from repository');
+       
       final db = await _database;
       final List<Map<String, dynamic>> maps;
 
@@ -377,7 +377,7 @@ class OrdersRepository {
 
       return Right(ordersWithNames);
     } catch (e) {
-      developer.log('getAllDraftOrdersWithNames:error getting draft orders with names: ${e.toString()}');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -472,7 +472,7 @@ class OrdersRepository {
   /// Get temp order subs with details (orderFlag == 0)
   /// Converted from KMP's getTempGetOrdersSubAndDetails
   Future<Either<Failure, List<OrderSubWithDetails>>> getTempOrderSubAndDetails(int orderId) async {
-    developer.log('getTempOrderSubAndDetails:getting temp order subs with details for orderId: $orderId');
+     
     try {
       final db = await _database;
       final maps = await db.rawQuery(
@@ -496,10 +496,10 @@ class OrdersRepository {
       );
 
       final orderSubs = maps.map((map) => OrderSubWithDetails.fromMap(map)).toList();
-      developer.log('getTempOrderSubAndDetails:got temp order subs with details for orderId: $orderId: ${orderSubs.length}');
+       
       return Right(orderSubs);
     } catch (e) {
-      developer.log('getTempOrderSubAndDetails:error getting temp order subs with details for orderId: $orderId: ${e.toString()}');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -606,7 +606,7 @@ class OrdersRepository {
 
   /// Get last inserted order
   Future<Either<Failure, Order?>> getLastOrderEntry() async {
-    developer.log('getLastOrderEntry:getting last inserted order');
+     
     try {
       final db = await _database;
       final maps = await db.query(
@@ -620,10 +620,10 @@ class OrdersRepository {
       }
 
       final order = Order.fromMap(maps.first);
-      developer.log('getLastOrderEntry:got last inserted order: ${order.orderId}');
+       
       return Right(order);
     } catch (e) {
-      developer.log('getLastOrderEntry:error getting last inserted order: ${e.toString()}');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -683,7 +683,7 @@ class OrdersRepository {
   }) async {
     try {
       if (isTemp) {
-        developer.log('addOrder:adding temp order: ${order.orderId}');
+         
       }
       
       // Apply KMP's filtering logic if userType/userId are provided (sync operations)
@@ -762,9 +762,9 @@ class OrdersRepository {
         INSERT OR REPLACE INTO Orders (
           id, orderId, invoiceNo, UUID, customerId, customerName, storeKeeperId, 
           salesmanId, billerId, checkerId, dateAndTime, note, total, freightCharge, 
-          approveFlag, createdDateTime, updatedDateTime, flag, isProcessFinish
+          approveFlag, isBilled, createdDateTime, updatedDateTime, flag, isProcessFinish
         ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
@@ -782,6 +782,7 @@ class OrdersRepository {
           order.orderTotal,
           order.orderFreightCharge,
           order.orderApproveFlag,
+          order.orderIsBilled,
           order.createdAt,
           order.updatedAt,
           order.orderFlag,
@@ -795,7 +796,7 @@ class OrdersRepository {
       }
       return const Right(null);
     } catch (e) {
-      developer.log('addOrder:error adding order: ${e.toString()}');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -855,7 +856,7 @@ class OrdersRepository {
                 // SEND_TO_CHECKER(6), CHECKER_IS_CHECKING(7)
                 // Matching KMP line 52-58
                 if (order.orderApproveFlag >= OrderApprovalFlag.completed) {
-                  developer.log('<-----------------user is checker and order approve flag is greater than completed------------------------------->');
+                   
                   shouldInsert = true;
                 }
                 break;
@@ -882,9 +883,9 @@ class OrdersRepository {
               INSERT OR REPLACE INTO Orders (
                 orderId, invoiceNo, UUID, customerId, customerName, storeKeeperId, 
                 salesmanId, billerId, checkerId, dateAndTime, note, total, freightCharge, 
-                approveFlag, createdDateTime, updatedDateTime, flag, isProcessFinish
+                approveFlag, isBilled, createdDateTime, updatedDateTime, flag, isProcessFinish
               ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
               )
               ''',
               [
@@ -902,6 +903,7 @@ class OrdersRepository {
                 order.orderTotal,
                 order.orderFreightCharge,
                 order.orderApproveFlag,
+                order.orderIsBilled,
                 order.createdAt,
                 order.updatedAt,
                 order.orderFlag,
@@ -912,7 +914,7 @@ class OrdersRepository {
         }
         await batch.commit(noResult: true);
       });
-      developer.log('OrdersRepository: Added ${orders.length} orders (filtered by userType: $userType)');
+       
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -1112,10 +1114,10 @@ class OrdersRepository {
           whereArgs: [orderId],
         );
       });
-      developer.log('OrdersRepository: Updated order flag: $flag for order: $orderId');
+       
       return const Right(null);
     } catch (e) {
-      developer.log('OrdersRepository: Error updating order flag: ${e.toString()}');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -1127,7 +1129,7 @@ class OrdersRepository {
     required int checkerId,
   }) async {
     try {
-      developer.log('updateCheckerLocal: updating checker id: $checkerId for order: $orderId');
+       
       final db = await _database;
       await db.update(
         'Orders',
@@ -1135,7 +1137,7 @@ class OrdersRepository {
         where: 'orderId = ?',
         whereArgs: [orderId],
       );
-      developer.log('updateCheckerLocal: checker id updated: $checkerId for order: $orderId');
+       
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -1224,7 +1226,7 @@ class OrdersRepository {
         where: 'orderId = ?',
         whereArgs: [orderId],
       );
-      developer.log('OrdersRepository: Updated process flag for order: $orderId, isProcessFinish: $isProcessFinish');
+       
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -1376,7 +1378,7 @@ class OrdersRepository {
         ApiEndpoints.orderSubDownload,
         queryParameters: queryParams,
       );
-      developer.log('syncOrderSubsFromApi: response: ${response.data}');
+       
 
       final orderSubListApi = OrderSubListApi.fromJson(response.data);
       return Right(orderSubListApi);
@@ -1504,7 +1506,7 @@ class OrdersRepository {
       // 2. Parse response
       final orderApi = OrderApi.fromJson(response.data);
       if (orderApi.status != 1) {
-        developer.log('Failed to update order with custom payload: ${orderApi.message}');
+         
         return Left(ServerFailure.fromError(
           'Failed to update order: ${orderApi.message}',
         ));
@@ -1538,10 +1540,10 @@ class OrdersRepository {
 
       return Right(orderApi.data);
     } on DioException catch (e) {
-      developer.log('Failed to update order with custom payload: ${e.response?.data}');
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
-      developer.log('Failed to update order with custom payload: $e');
+       
       return Left(UnknownFailure.fromError(e));
     }
   }
@@ -1562,7 +1564,7 @@ class OrdersRepository {
       // 2. Parse response
       final orderApi = OrderApi.fromJson(response.data);
       if (orderApi.status != 1) {
-        developer.log('Failed to replace/add order items: ${orderApi.message}');
+         
         return Left(ServerFailure.fromError(
           'Failed to replace/add order items: ${orderApi.message}',
         ));
@@ -1596,10 +1598,10 @@ class OrdersRepository {
 
       return Right(orderApi.data);
     } on DioException catch (e) {
-      developer.log('Failed to replace/add order items: ${e.response?.data}');
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
-      developer.log('Failed to replace/add order items: $e');
+       
       return Left(UnknownFailure.fromError(e));
     }
   }
@@ -1656,10 +1658,10 @@ class OrdersRepository {
 
       return Right(orderApi);
     } on DioException catch (e) {
-      developer.log('Failed to send order: ${e.response?.data}');
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
-      developer.log('Failed to send order: $e');
+       
       return Left(UnknownFailure.fromError(e));
     }
   }
@@ -1710,12 +1712,12 @@ class OrdersRepository {
       );
 
       if (response.statusCode != 200) {
-        developer.log('updateOrderApproveFlag: failed to update order approval flag: ${response.statusMessage}');
+         
         return Left(ServerFailure.fromError(
           'Failed to update order approval flag: ${response.statusMessage}',
         ));
       }
-      developer.log('updateOrderApproveFlag: order approval flag updated for server: $approveFlag for order: $orderId');
+       
 
       // Update local DB
       final db = await _database;
@@ -1725,7 +1727,7 @@ class OrdersRepository {
         where: 'orderId = ?',
         whereArgs: [orderId],
       );
-      developer.log('updateOrderApproveFlag: approve flag updated for local db: $approveFlag for order: $orderId');
+       
 
       return const Right(null);
     } on DioException catch (e) {

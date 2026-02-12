@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 
+import '../../../helpers/image_url_handler.dart';
 import '../../../models/order_api.dart';
 import '../../../models/order_item_detail.dart';
 import '../../../models/order_with_name.dart';
@@ -163,7 +164,7 @@ class _OrderDetailsCheckerScreenState
       // Only include checked items
       if (orderWithName.order.orderApproveFlag != OrderApprovalFlag.completed) {
   if (!checkedItems.contains(id)) {
-    developer.log('OrderDetailsCheckerScreen: Item $id not checked');
+     
     continue;
   }
 }
@@ -312,6 +313,75 @@ class _OrderDetailsCheckerScreenState
     }
   }
 
+  /// Show image preview dialog (handles base64 data URIs and network URLs)
+  void _showImagePreview(BuildContext context, String imageDataUri) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: InteractiveViewer(
+                minScale: 1,
+                maxScale: 4,
+                child: _buildPreviewImage(imageDataUri),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPreviewImage(String imageDataUri) {
+    if (imageDataUri.startsWith('data:image')) {
+      try {
+        final base64String = imageDataUri.split(',').last;
+        final imageBytes = base64Decode(base64String);
+        return Image.memory(
+          imageBytes,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => const Center(
+            child: Icon(Icons.broken_image, color: Colors.white70, size: 48),
+          ),
+        );
+      } catch (e) {
+        return const Center(
+          child: Icon(Icons.broken_image, color: Colors.white70, size: 48),
+        );
+      }
+    }
+    final imageUrl = ImageUrlFixer.fix(imageDataUri);
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) => const Center(
+        child: Icon(Icons.broken_image, color: Colors.white70, size: 48),
+      ),
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return const Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+          ),
+        );
+      },
+    );
+  }
+
   void _removeImage(int orderSubId, int imageIndex) {
     setState(() {
       if (_imageMap[orderSubId] != null) {
@@ -349,12 +419,15 @@ class _OrderDetailsCheckerScreenState
               isLoading,
             ),
           ),
-          bottomNavigationBar: _buildBottomBar(
-            ordersProvider,
-            orderWithName?.order,
-            ordersProvider.orderDetailItems,
-            _isSubmissionEnabled(ordersProvider.orderDetailItems),
-          ),
+          bottomNavigationBar: () {
+            final bar = _buildBottomBar(
+              ordersProvider,
+              orderWithName?.order,
+              ordersProvider.orderDetailItems,
+              _isSubmissionEnabled(ordersProvider.orderDetailItems),
+            );
+            return bar != null ? SafeArea(top: false, child: bar) : null;
+          }(),
         );
       },
     );
@@ -509,6 +582,7 @@ class _OrderDetailsCheckerScreenState
                   imageDataUris: _imageMap[id] ?? [],
                   onImagePick: () => _pickImage(id),
                   onImageRemove: (index) => _removeImage(id, index),
+                  onImagePreview: _showImagePreview,
                 ),
               );
             }),
@@ -803,6 +877,7 @@ class _CheckerOrderItemCard extends StatelessWidget {
   final List<String> imageDataUris;
   final VoidCallback onImagePick;
   final ValueChanged<int> onImageRemove;
+  final void Function(BuildContext context, String imageDataUri) onImagePreview;
 
   const _CheckerOrderItemCard({
     required this.index,
@@ -821,6 +896,7 @@ class _CheckerOrderItemCard extends StatelessWidget {
     required this.imageDataUris,
     required this.onImagePick,
     required this.onImageRemove,
+    required this.onImagePreview,
   });
 
 
@@ -1003,58 +1079,64 @@ class _CheckerOrderItemCard extends StatelessWidget {
                     final isDataUri = imageDataUri.startsWith('data:image');
                     return Stack(
                       children: [
-                        Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: isDataUri
-                                ? Image.memory(
-                                    base64Decode(imageDataUri.split(',').last),
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return const Center(
-                                        child: Icon(Icons.error, color: Colors.red),
-                                      );
-                                    },
-                                  )
-                                : Image.network(
-                                    imageDataUri,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return const Center(
-                                        child: Icon(Icons.error, color: Colors.red),
-                                      );
-                                    },
-                                    loadingBuilder: (context, child, loadingProgress) {
-                                      if (loadingProgress == null) return child;
-                                      return const Center(
-                                        child: SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(strokeWidth: 2),
-                                        ),
-                                      );
-                                    },
-                                  ),
+                        InkWell(
+                          onTap: () => onImagePreview(context, imageDataUri),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            width: 50,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: isDataUri
+                                  ? Image.memory(
+                                      base64Decode(imageDataUri.split(',').last),
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return const Center(
+                                          child: Icon(Icons.error, color: Colors.red),
+                                        );
+                                      },
+                                    )
+                                  : Image.network(
+                                      imageDataUri,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return const Center(
+                                          child: Icon(Icons.error, color: Colors.red),
+                                        );
+                                      },
+                                      loadingBuilder: (context, child, loadingProgress) {
+                                        if (loadingProgress == null) return child;
+                                        return const Center(
+                                          child: SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                            ),
                           ),
                         ),
                         Positioned(
-                          top: 4,
-                          right: 4,
-                          child: IconButton(
-                            icon: const Icon(Icons.close, color: Colors.white),
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.black54,
-                              padding: const EdgeInsets.all(4),
-                              minimumSize: const Size(32, 32),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          top: 2,
+                          right: 2,
+                          child: Material(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(10),
+                            child: InkWell(
+                              onTap: () => onImageRemove(index),
+                              borderRadius: BorderRadius.circular(10),
+                              child: const Padding(
+                                padding: EdgeInsets.all(3),
+                                child: Icon(Icons.remove, color: Colors.red, size: 14),
+                              ),
                             ),
-                            onPressed: () => onImageRemove(index),
                           ),
                         ),
                       ],

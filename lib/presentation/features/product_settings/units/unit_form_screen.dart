@@ -91,7 +91,7 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
 
 
   Future<void> _handleSave() async {
-    developer.log('UnitFormScreen: _handleSave (${_isEditMode ? "edit" : "create"})');
+     
 
     if (_isEditMode) {
       // Edit mode: validate and update
@@ -166,7 +166,7 @@ class _UnitFormScreenState extends State<UnitFormScreen> {
         Navigator.of(context).pop();
       } else if (mounted) {
         ToastHelper.showError(provider.errorMessage ?? 'Failed to save unit');
-        developer.log('UnitFormScreen: Error saving unit: ${provider.errorMessage}');
+         
       }
     }
   }

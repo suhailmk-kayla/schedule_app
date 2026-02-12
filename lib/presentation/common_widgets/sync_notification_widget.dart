@@ -35,7 +35,7 @@ class _SyncNotificationWidgetState extends State<SyncNotificationWidget> {
     // Check every 30 seconds when app is in foreground
     _checkTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) {
-        developer.log('SyncNotificationWidget: Checking sync needed');
+         
         _checkSyncNeeded();
       }
     });
@@ -61,7 +61,7 @@ class _SyncNotificationWidgetState extends State<SyncNotificationWidget> {
         _hasShownSnackbar = false;
       }
     } catch (e) {
-      developer.log('SyncNotificationWidget: Error checking flag: $e');
+       
     }
   }
 
@@ -112,12 +112,12 @@ class _SyncNotificationWidgetState extends State<SyncNotificationWidget> {
       final syncProvider = getIt<SyncProvider>();
       if (!syncProvider.isSyncing) {
         await syncProvider.startSync();
-        developer.log('SyncNotificationWidget: Sync triggered from snackbar');
+         
       } else {
-        developer.log('SyncNotificationWidget: Sync already in progress');
+         
       }
     } catch (e) {
-      developer.log('SyncNotificationWidget: Error triggering sync: $e');
+       
       // Show error snackbar
       if (mounted) {
         ToastHelper.showError('Error starting sync: $e');

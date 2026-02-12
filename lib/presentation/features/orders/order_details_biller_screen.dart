@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../models/order_api.dart';
 import '../../../models/order_item_detail.dart';
 import '../../../models/order_with_name.dart';
+import '../../../utils/config.dart';
 import '../../../utils/order_flags.dart';
 import '../../../utils/notification_manager.dart';
 import '../../../utils/storage_helper.dart';
@@ -279,6 +280,121 @@ class _FinalBillTab extends StatefulWidget {
 
 class _FinalBillTabState extends State<_FinalBillTab> {
   bool _isMarkingAsBilled = false;
+  final TextEditingController _freightController = TextEditingController();
+  double? _enteredFreightCharge;
+  bool _hasInitializedFreightField = false;
+  bool _isSavingFreightCharge = false;
+
+  @override
+  void dispose() {
+    _freightController.dispose();
+    super.dispose();
+  }
+
+  void _initializeFreightController(double freightCharge) {
+    if (_hasInitializedFreightField) {
+      return;
+    }
+    if (freightCharge <= 0) {
+      _freightController.clear();
+      _enteredFreightCharge = null;
+    } else {
+      _freightController.text = freightCharge.toStringAsFixed(2);
+      _enteredFreightCharge = freightCharge;
+    }
+    _hasInitializedFreightField = true;
+  }
+
+  void _onFreightChanged(String value) {
+    setState(() {
+      _enteredFreightCharge = double.tryParse(value.trim());
+    });
+  }
+
+  Future<void> _handleSaveFreightCharge() async {
+    if (_enteredFreightCharge == null) {
+      return;
+    }
+    setState(() {
+      _isSavingFreightCharge = true;
+    });
+    try {
+      final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+      final currentOrder = ordersProvider.orderDetails?.order ?? widget.order;
+      final double newFreight = _enteredFreightCharge!;
+
+      final Order updatedOrder = Order(
+        id: currentOrder.id,
+        orderId: currentOrder.orderId,
+        uuid: currentOrder.uuid,
+        orderInvNo: currentOrder.orderInvNo,
+        orderCustId: currentOrder.orderCustId,
+        orderCustName: currentOrder.orderCustName,
+        orderSalesmanId: currentOrder.orderSalesmanId,
+        orderStockKeeperId: currentOrder.orderStockKeeperId,
+        orderBillerId: currentOrder.orderBillerId,
+        orderCheckerId: currentOrder.orderCheckerId,
+        orderDateTime: currentOrder.orderDateTime,
+        orderTotal: currentOrder.orderTotal,
+        orderFreightCharge: newFreight,
+        orderNote: currentOrder.orderNote,
+        orderApproveFlag: currentOrder.orderApproveFlag,
+        orderIsBilled: currentOrder.orderIsBilled,
+        orderFlag: currentOrder.orderFlag,
+        createdAt: currentOrder.createdAt,
+        updatedAt: currentOrder.updatedAt,
+        items: currentOrder.items,
+      );
+
+      final bool success = await ordersProvider.updateOrder(updatedOrder);
+
+      if (!mounted) {
+        return;
+      }
+
+      if (success) {
+        // Refresh order details so UI reflects latest values
+        await ordersProvider.loadOrderDetails(updatedOrder.orderId);
+        setState(() {
+          _hasInitializedFreightField = false;
+          _enteredFreightCharge = newFreight;
+          _isSavingFreightCharge = false;
+        });
+        _freightController.text = newFreight.toStringAsFixed(2);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Freight charge updated successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        setState(() {
+          _isSavingFreightCharge = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ordersProvider.errorMessage ?? 'Failed to update freight charge',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isSavingFreightCharge = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update freight charge: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   Future<void> _handleMarkAsBilled(bool? value) async {
     if (value == null || !value) return; // Only handle when checking (not unchecking)
@@ -383,117 +499,165 @@ class _FinalBillTabState extends State<_FinalBillTab> {
         // Get updated order from provider to reflect billed status
         final updatedOrder = ordersProvider.orderDetails?.order ?? widget.order;
         final isBilled = updatedOrder.orderIsBilled == 1;
+        _initializeFreightController(updatedOrder.orderFreightCharge);
 
-        return SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _OrderHeader(order: updatedOrder, orderWithName: widget.orderWithName),
-              const SizedBox(height: 12),
-              if (updatedOrder.orderNote?.isNotEmpty == true) ...[
-                const Text(
-                  'Note',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  updatedOrder.orderNote ?? '',
-                  style: const TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 16),
-              ],
-              // Mark as Billed checkbox
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isBilled
-                      ? Colors.green.withValues(alpha: 0.1)
-                      : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isBilled ? Colors.green.shade300 : Colors.grey.shade300,
+        return Scaffold(
+          body: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _OrderHeader(order: updatedOrder, orderWithName: widget.orderWithName),
+                const SizedBox(height: 12),
+                if (updatedOrder.orderNote?.isNotEmpty == true) ...[
+                  const Text(
+                    'Note',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   ),
-                ),
-                child: Row(
-                  children: [
-                    Checkbox(
-                      value: isBilled,
-                      onChanged: _isMarkingAsBilled
-                          ? null
-                          : (value) {
-                              if (value == true && !isBilled) {
-                                _handleMarkAsBilled(value);
-                              }
-                            },
+                  const SizedBox(height: 4),
+                  Text(
+                    updatedOrder.orderNote ?? '',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                // Mark as Billed checkbox
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isBilled
+                        ? Colors.green.withValues(alpha: 0.1)
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isBilled ? Colors.green.shade300 : Colors.grey.shade300,
                     ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Mark as Billed',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: isBilled ? Colors.green.shade700 : Colors.black87,
-                            ),
-                          ),
-                          if (isBilled)
+                  ),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: isBilled,
+                        onChanged: _isMarkingAsBilled
+                            ? null
+                            : (value) {
+                                if (value == true && !isBilled) {
+                                  _handleMarkAsBilled(value);
+                                }
+                              },
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              'This order has been marked as billed',
+                              'Mark as Billed',
                               style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.green.shade700,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: isBilled ? Colors.green.shade700 : Colors.black87,
                               ),
                             ),
-                        ],
+                            if (isBilled)
+                              Text(
+                                'This order has been marked as billed',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.green.shade700,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
+                      if (_isMarkingAsBilled)
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Items (Final)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (widget.items.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    if (_isMarkingAsBilled)
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                    child: const Text(
+                      'No items found for this order.',
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  )
+                else
+                  _FinalItemsList(items: widget.items),
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: _FinalSummary(
+                    freightCharge: updatedOrder.orderFreightCharge,
+                    total: _calculateFinalTotal(widget.items),
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
+          bottomNavigationBar: SafeArea(
+            top: false,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 6,
+                    offset: Offset(0, -2),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _freightController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Freight charge',
+                        hintText: 'Enter freight charge',
                       ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Items (Final)',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (widget.items.isEmpty)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(8),
+                      onChanged: _onFreightChanged,
+                    ),
                   ),
-                  child: const Text(
-                    'No items found for this order.',
-                    style: TextStyle(color: Colors.black54),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: _isSavingFreightCharge ||
+                            _enteredFreightCharge == null
+                        ? null
+                        : _handleSaveFreightCharge,
+                    child: _isSavingFreightCharge
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save'),
                   ),
-                )
-              else
-                _FinalItemsList(items: widget.items),
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: _FinalSummary(
-                  freightCharge: updatedOrder.orderFreightCharge,
-                  total: _calculateFinalTotal(widget.items),
-                ),
+                ],
               ),
-              const SizedBox(height: 24),
-            ],
+            ),
           ),
         );
       },
@@ -675,6 +839,7 @@ class _EstimatedItemCard extends StatelessWidget {
     final total = orderSub.estimatedTotal > 0
         ? orderSub.estimatedTotal
         : orderSub.orderSubUpdateRate * qty;
+    final String checkerNote = _extractCheckerNote(orderSub.orderSubNote);
 
     return Card(
       shape: RoundedRectangleBorder(
@@ -769,11 +934,30 @@ class _EstimatedItemCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (checkerNote.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Note : ',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Expanded(
+                    child: Text(
+                      checkerNote,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
     );
   }
+
 }
 
 /// Final Items List
@@ -831,6 +1015,8 @@ class _FinalItemCard extends StatelessWidget {
         : orderSub.orderSubQty;
     final total = orderSub.orderSubUpdateRate * qty;
 
+    final String checkerNote = _extractCheckerNote(orderSub.orderSubNote);
+
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -851,19 +1037,32 @@ class _FinalItemCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    '#$index  ${item.productName}',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '#$index  ${item.productName}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (item.productCode.isNotEmpty)
+                        Text(
+                          'Code: ${item.productCode}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 6),
-            _InfoRow(label: 'Brand', value: item.productBrand),
-            _InfoRow(label: 'Sub Brand', value: item.productSubBrand),
+            // _InfoRow(label: 'Brand', value: item.productBrand),
+            // _InfoRow(label: 'Sub Brand', value: item.productSubBrand),
             _InfoRow(label: 'Unit', value: item.unitDisplayName),
             Row(
               children: [
@@ -903,6 +1102,24 @@ class _FinalItemCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (checkerNote.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Note : ',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Expanded(
+                    child: Text(
+                      checkerNote,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -1074,6 +1291,16 @@ class _FinalSummary extends StatelessWidget {
       ),
     );
   }
+}
+
+String _extractCheckerNote(String? raw) {
+  if (raw == null || raw.isEmpty) {
+    return '';
+  }
+  if (!raw.contains(ApiConfig.noteSplitDel)) {
+    return raw;
+  }
+  return raw.split(ApiConfig.noteSplitDel).first;
 }
 
 class _ErrorState extends StatelessWidget {

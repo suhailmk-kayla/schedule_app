@@ -1,8 +1,7 @@
-import 'dart:developer' as developer;
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:schedule_frontend_flutter/presentation/common_widgets/sync_refresh_button.dart';
 import '../../provider/out_of_stock_provider.dart';
 import '../../../models/master_data_api.dart';
 import '../../../utils/storage_helper.dart';
@@ -32,8 +31,18 @@ class _OutOfStockListSupplierScreenState
   bool _showSearchBar = false;
   int _userType = 0;
   String _dateSt = 'Today';
+  int _statusFilterIndex = 0; // 0=All, 1=Packed, 2=Confirmed, 3=Pending, 4=Not Initialized, 5=Cancelled
+  String _statusSt = 'All';
 
   final List<String> _dateFilterList = const ['All', 'Today', 'Yesterday', 'Custom'];
+  static const List<String> _statusFilterList = [
+    'All',
+    'Packed',
+    'Confirmed',
+    'Pending',
+    'Not Initialized',
+    'Cancelled',
+  ];
 
   @override
   void initState() {
@@ -125,6 +134,38 @@ class _OutOfStockListSupplierScreenState
     });
   }
 
+  /// Filters oospSubList by selected status (client-side)
+  List<OutOfStockSubWithDetails> _filterListByStatus(
+    List<OutOfStockSubWithDetails> list,
+  ) {
+    if (_statusFilterIndex == 0) return list;
+    switch (_statusFilterIndex) {
+      case 1: // Packed
+        return list.where((item) => item.isPacked == 1).toList();
+      case 2: // Confirmed
+        return list.where((item) => item.oospFlag == 2).toList();
+      case 3: // Pending
+        return list.where((item) => item.oospFlag == 1).toList();
+      case 4: // Not Initialized
+        return list.where((item) => item.oospFlag == 0).toList();
+      case 5: // Cancelled
+        return list.where((item) {
+          if (item.oospFlag == 5) return true;
+          if (item.oospFlag == 3 && item.availQty <= 0) return true;
+          return false;
+        }).toList();
+      default:
+        return list;
+    }
+  }
+
+  void _handleStatusFilter(int index) {
+    setState(() {
+      _statusFilterIndex = index;
+      _statusSt = _statusFilterList[index];
+    });
+  }
+
   Future<void> _showCustomDatePicker() async {
     final provider = Provider.of<OutOfStockProvider>(context, listen: false);
     final selectedDate = await showDatePicker(
@@ -149,6 +190,192 @@ class _OutOfStockListSupplierScreenState
         _dateSt = _toReadableDate(dateStr);
       });
     }
+  }
+
+  /// Shows a dialog with estimate in bill format: only packed items, product list with qty and grand total
+  Future<void> _showEstimate() async {
+    final provider = Provider.of<OutOfStockProvider>(context, listen: false);
+    // Refresh list so isPacked is up to date from DB (PackedSubs join)
+    await provider.getAllOospSub(
+      supplierId: widget.userId,
+      searchKey: provider.searchKey,
+      date: provider.date,
+    );
+    if (!mounted) return;
+    // Only include items marked as packed (isPacked == 1)
+    final packedItems = provider.oospSubList
+        .where((item) => item.isPacked == 1)
+        .toList();
+    final grandTotal = packedItems.fold<double>(
+      0.0,
+      (sum, item) => sum + (item.updateRate * item.qty),
+    );
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.4,
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Packed Items Estimate',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: packedItems.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No packed products',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Bill header row
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: Text(
+                                  'Product',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 56,
+                                child: Text(
+                                  'Qty',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 72,
+                                child: Text(
+                                  'Amount',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 16),
+                          // Product rows
+                          ...packedItems.map((item) {
+                            final lineAmount = item.updateRate * item.qty;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: Text(
+                                      item.productName.isNotEmpty
+                                          ? item.productName
+                                          : '—',
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 56,
+                                    child: Text(
+                                      item.qty.toStringAsFixed(2),
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      textAlign: TextAlign.right,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  SizedBox(
+                                    width: 72,
+                                    child: Text(
+                                      '₹ ${lineAmount.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      textAlign: TextAlign.right,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                          const Divider(height: 20),
+                          // Grand total row
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              const Text(
+                                'Grand Total: ',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                '₹ ${grandTotal.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -219,9 +446,19 @@ class _OutOfStockListSupplierScreenState
               ),
             ],
           ),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: _showEstimate,
+            icon: const Icon(Icons.assessment),
+            label: const Text('Get Estimate'),
+          ),
           body: Column(
             children: [
-              // Date filter card
+              // Sync refresh button (for supplier who doesn't have HomeScreen)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                child: SyncRefreshButton(),
+              ),
+              // Date and status filter row
               Row(
                 children: [
                   Expanded(
@@ -231,7 +468,8 @@ class _OutOfStockListSupplierScreenState
                         onTap: () {
                           showModalBottomSheet(
                             context: context,
-                            builder: (context) => _buildDateFilterBottomSheet(provider),
+                            builder: (context) =>
+                                _buildDateFilterBottomSheet(provider),
                           );
                         },
                         child: Padding(
@@ -252,7 +490,35 @@ class _OutOfStockListSupplierScreenState
                       ),
                     ),
                   ),
-                  Expanded(child: SizedBox()),
+                  Expanded(
+                    child: Card(
+                      margin: const EdgeInsets.all(8.0),
+                      child: InkWell(
+                        onTap: () {
+                          showModalBottomSheet(
+                            context: context,
+                            builder: (context) =>
+                                _buildStatusFilterBottomSheet(),
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                _statusSt,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.black,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
               // List
@@ -286,11 +552,16 @@ class _OutOfStockListSupplierScreenState
                       );
                     }
 
-                    if (provider.oospSubList.isEmpty) {
-                      return const Center(
+                    final filteredList =
+                        _filterListByStatus(provider.oospSubList);
+
+                    if (filteredList.isEmpty) {
+                      return Center(
                         child: Text(
-                          'No orders',
-                          style: TextStyle(
+                          provider.oospSubList.isEmpty
+                              ? 'No orders'
+                              : 'No orders match "$_statusSt" filter',
+                          style: const TextStyle(
                             color: Colors.grey,
                             fontSize: 14,
                           ),
@@ -299,14 +570,14 @@ class _OutOfStockListSupplierScreenState
                     }
 
                     return ListView.builder(
-                      itemCount: provider.oospSubList.length,
+                      itemCount: filteredList.length,
                       itemBuilder: (context, index) {
-                        final item = provider.oospSubList[index];
+                        final item = filteredList[index];
                         return _OutOfStockSupplierListItem(
                           item: item,
                           userType: _userType,
                           onTap: () {
-                            developer.log('OutOfStockListSupplierScreen: Navigating to out of stock details screen for item: ${item.oospId}');
+                             
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -356,6 +627,24 @@ class _OutOfStockListSupplierScreenState
           onTap: () {
             Navigator.pop(context);
             _handleDateFilter(index);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildStatusFilterBottomSheet() {
+    return ListView.builder(
+      shrinkWrap: true,
+      itemCount: _statusFilterList.length,
+      itemBuilder: (context, index) {
+        final selected = _statusFilterIndex == index;
+        return ListTile(
+          title: Text(_statusFilterList[index]),
+          trailing: selected ? const Icon(Icons.check) : null,
+          onTap: () {
+            Navigator.pop(context);
+            _handleStatusFilter(index);
           },
         );
       },

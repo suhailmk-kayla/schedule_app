@@ -122,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    developer.log('LoginScreen: build() called');
+     
     final authProvider = Provider.of<AuthProvider>(context);
 
     return Container(

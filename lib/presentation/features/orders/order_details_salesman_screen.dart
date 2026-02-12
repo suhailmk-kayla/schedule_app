@@ -264,7 +264,7 @@ class _OrderDetailsSalesmanScreenState
       // Parent OrderSub not found
       if (!mounted) return;
       if (mounted) {
-        developer.log('Parent order item not found');
+         
         // ScaffoldMessenger.of(context).showSnackBar(
         //   const SnackBar(
         //     content: Text('Parent order item not found'),
@@ -295,7 +295,7 @@ class _OrderDetailsSalesmanScreenState
       if (product == null) {
         if (!mounted) return;
         if (mounted) {
-          developer.log('Product not found');
+           
           // ScaffoldMessenger.of(context).showSnackBar(
           //   const SnackBar(
           //     content: Text('Product not found'),
@@ -430,12 +430,13 @@ class _OrderDetailsSalesmanScreenState
               isLoading: isLoading,
             ),
           ),
-          bottomNavigationBar: order != null
-              ? _buildBottomBar(
-                  order.order,
-                  ordersProvider,
-                )
-              : null,
+          bottomNavigationBar: () {
+            if (order == null) return null;
+            final bar = _buildBottomBar(order.order, ordersProvider);
+            return bar != null
+                ? SafeArea(top: false, child: bar)
+                : null;
+          }(),
         );
       },
     );
@@ -1194,23 +1195,43 @@ class _OrderItemCardState extends State<_OrderItemCard> {
               ],
             ),
 
-            // Note (if checked)
-            if (orderSub.orderSubIsCheckedFlag == 1 && note.isNotEmpty) ...[
+            // Note and status (if checked)
+            if (orderSub.orderSubIsCheckedFlag == 1 && (note.isNotEmpty || status.isNotEmpty)) ...[
               const SizedBox(height: 4),
-              Row(
-                children: [
-                  const Text(
-                    'Note : ',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                  Expanded(
-                    child: Text(
-                      note,
-                      style: const TextStyle(fontSize: 14),
+              if (note.isNotEmpty)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Note : ',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
-                  ),
-                ],
-              ),
+                    Expanded(
+                      child: Text(
+                        note,
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  ],
+                ),
+              if (status.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Status : ',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    Expanded(
+                      child: Text(
+                        status,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
 
             // Suggestions toggle or Status
@@ -1604,6 +1625,28 @@ class _CompletedOrderItemCard extends StatelessWidget {
                 ),
               ],
             ),
+            // Checker changed quantity (only for completed orders)
+            if (item.orderSub.estimatedQty > 0 &&
+                (item.orderSub.estimatedQty - item.orderSub.orderSubQty).abs() > 0.001) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Text(
+                  'Checker changed the quantity from ${item.orderSub.estimatedQty.toStringAsFixed(2)} to ${item.orderSub.orderSubQty.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 6),
             // Header row with labels
             Row(

@@ -46,7 +46,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   Future<void> _loadOrder() async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     if (widget.orderId != null && widget.orderId!.isNotEmpty) {
-      developer.log('Loading draft order: ${widget.orderId}');
+       
       // Load draft order (only when explicitly editing a draft via orderId)
       await ordersProvider.getDraftOrder(int.parse(widget.orderId!));
       if (ordersProvider.orderMaster != null) {
@@ -473,14 +473,17 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                             final index = entry.key;
                             final item = entry.value;
                             return _OrderItemCard(
-                              key: ValueKey(item.orderSub.orderSubId),
+                              key: ValueKey('${item.orderSub.orderSubId}_$index'),
                               slNo: index + 1,
                               item: item,
-                              onDelete: () async {
-                                final success = await ordersProvider.deleteOrderSub(item.orderSub.orderSubId);
-                                if (success) {
-                                  await ordersProvider.getAllOrderSubAndDetails();
-                                }
+                              onDelete: () {
+                                final orderSubId = item.orderSub.orderSubId;
+                                ordersProvider.removeOrderSubOptimistically(orderSubId);
+                                ordersProvider.deleteOrderSub(orderSubId).then((success) {
+                                  if (success) {
+                                    ordersProvider.getAllOrderSubAndDetails();
+                                  }
+                                });
                               },
                               onTap: () {
                                 // Show edit bottom sheet instead of navigating to products page
@@ -499,7 +502,9 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       
                 // Bottom Bar with Total and Actions (only shown if items exist)
                 if (ordersProvider.orderSubsWithDetails.isNotEmpty)
-                  Container(
+                  SafeArea(
+                    top: false,
+                    child: Container(
                     // height: 140,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -577,6 +582,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                       ],
                     ),
                   ),
+                ),
               ],
             );
           },

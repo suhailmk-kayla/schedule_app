@@ -119,7 +119,7 @@ class RoutesProvider extends ChangeNotifier {
           dataIds: dataIds,
           message: 'Route updates',
         ).catchError((e) {
-          developer.log('RoutesProvider: Error sending push notification: $e');
+           
         });
 
         _setLoading(false);
@@ -176,7 +176,7 @@ class RoutesProvider extends ChangeNotifier {
           dataIds: dataIds,
           message: 'Route updates',
         ).catchError((e) {
-          developer.log('RoutesProvider: Error sending push notification: $e');
+           
         });
 
         _setLoading(false);

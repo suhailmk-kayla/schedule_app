@@ -114,12 +114,12 @@ class CustomersRepository {
         }
       }
       if(maps.isEmpty) {
-        developer.log('No customers found!!!');
+         
       }
       final customers = maps.map((map) => CustomerWithNames.fromMap(map)).toList();
       return Right(customers);
     } catch (e) {
-      developer.log('Failed to get all customers: $e');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -343,7 +343,7 @@ Future<Either<Failure, void>> editCustomer(Customer customer) async {
 
       return const Right(null);
     } catch (e) {
-      developer.log('updateCustomerLocal error: $e');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }

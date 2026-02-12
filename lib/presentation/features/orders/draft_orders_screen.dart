@@ -565,7 +565,7 @@ class _OrderListItem extends StatelessWidget {
               // Salesman (if exists and not salesman user)
               if (order.orderSalesmanId != -1 && userType != 3) ...[
                 const SizedBox(height: 4),
-                // developer.log('salesman name: ${_getSalesmanName(orderWithName, userType, userId)}');
+                //  
                 Text(
                   // 'Salesman: ${orderWithName.salesManName.isNotEmpty ? orderWithName.salesManName : "N/A"}',
                   'Salesman: ${_getSalesmanName(orderWithName, userType, userId)}',
@@ -628,7 +628,7 @@ class _OrderListItem extends StatelessWidget {
     if (userType == 1 && orderWithName.order.orderSalesmanId == userId) {
       return '${orderWithName.salesManName}(SELF ORDER)';
     }
-    developer.log('salesman name: ${orderWithName.salesManName}');
+     
     return orderWithName.salesManName.isNotEmpty
         ? orderWithName.salesManName
         : 'N/A';

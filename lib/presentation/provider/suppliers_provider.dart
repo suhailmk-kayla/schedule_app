@@ -44,16 +44,16 @@ class SuppliersProvider extends ChangeNotifier {
       result.fold(
         (failure) {
           _errorMessage = failure.message;
-          developer.log('SuppliersProvider: Failed to get suppliers: ${failure.message}');
+           
         },
         (list) {
           _suppliersList = list;
-          developer.log('SuppliersProvider: Loaded ${list.length} suppliers');
+           
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('SuppliersProvider: Error in getSuppliers: $e');
+       
     } finally {
       _isLoading = false;
       notifyListeners();

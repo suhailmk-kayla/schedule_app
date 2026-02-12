@@ -29,14 +29,14 @@ class _SyncScreenState extends State<SyncScreen>
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat();
-    developer.log('SyncScreen: initState() called');
+     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startSync();
     });
   }
 
   Future<void> _startSync() async {
-    developer.log('SyncScreen: _startSync() called');
+     
     try {
       final syncProvider = Provider.of<SyncProvider>(context, listen: false);
       
@@ -44,15 +44,15 @@ class _SyncScreenState extends State<SyncScreen>
       if (!_hasListener) {
         syncProvider.addListener(_onSyncStateChanged);
         _hasListener = true;
-        developer.log('SyncScreen: Listener added to SyncProvider');
+         
       }
       
       // Start sync
-      developer.log('SyncScreen: Calling syncProvider.startSync()');
+       
       await syncProvider.startSync();
-      developer.log('SyncScreen: syncProvider.startSync() returned');
+       
     } catch (e, stackTrace) {
-      developer.log('SyncScreen: Exception in _startSync: $e', error: e, stackTrace: stackTrace);
+       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -65,39 +65,39 @@ class _SyncScreenState extends State<SyncScreen>
   }
 
   void _onSyncStateChanged()async{
-    developer.log('SyncScreen: _onSyncStateChanged() called');
+     
     if (!mounted) {
-      developer.log('SyncScreen: Widget not mounted, ignoring state change');
+       
       return;
     }
 
     final syncProvider = Provider.of<SyncProvider>(context, listen: false);
-    developer.log('SyncScreen: isSyncing=${syncProvider.isSyncing}, showError=${syncProvider.showError}, errorMessage=${syncProvider.errorMessage}');
+     
     
     if (!syncProvider.isSyncing) {
       // Sync completed or stopped
-      developer.log('SyncScreen: Sync completed or stopped');
+       
       
       if (_hasListener) {
         syncProvider.removeListener(_onSyncStateChanged);
         _hasListener = false;
-        developer.log('SyncScreen: Listener removed');
+         
       }
       
       if (mounted) {
         if (syncProvider.showError && syncProvider.errorMessage != null) {
-          developer.log('SyncScreen: Sync failed with error: ${syncProvider.errorMessage}');
+           
           // Don't navigate on error, let user see the error
           return;
         }
         
-        developer.log('SyncScreen: Sync successful, waiting for DB operations to complete...');
+         
         // CRITICAL FIX: Wait a bit to ensure all database transactions are fully committed
         await Future.delayed(const Duration(milliseconds: 500));
         
         // Mark user as logged in
         await StorageHelper.setIsUserLogin('1');
-        developer.log('SyncScreen: isUserLogin set to 1');
+         
         
         // Process stored notifications (from when app was terminated)
         // This happens AFTER login sync completes, so we don't interfere with login sync
@@ -105,7 +105,7 @@ class _SyncScreenState extends State<SyncScreen>
           await PushNotificationHelper.processStoredNotifications();
         } catch (e) {
           // Log error but don't block navigation
-          developer.log('SyncScreen: Error processing stored notifications: $e');
+           
         }
         
         if (mounted) {
@@ -119,12 +119,12 @@ class _SyncScreenState extends State<SyncScreen>
   @override
   void dispose() {
     _animationController.dispose();
-    developer.log('SyncScreen: dispose() called');
+     
     if (_hasListener) {
       final syncProvider = Provider.of<SyncProvider>(context, listen: false);
       syncProvider.removeListener(_onSyncStateChanged);
       _hasListener = false;
-      developer.log('SyncScreen: Listener removed in dispose()');
+       
     }
     super.dispose();
   }
@@ -150,7 +150,7 @@ class _SyncScreenState extends State<SyncScreen>
               builder: (context, syncProvider, _) {
                 // Log only on significant state changes (not every rebuild)
                 if (syncProvider.progress > 0 || syncProvider.showError) {
-                  developer.log('SyncScreen: UI update - isSyncing=${syncProvider.isSyncing}, progress=${(syncProvider.progress * 100).toStringAsFixed(1)}%, task=${syncProvider.currentTask}');
+                   
                 }
                 return Center(
                   child: Padding(

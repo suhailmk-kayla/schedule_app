@@ -75,7 +75,7 @@ class PushNotificationSender {
 
       // If no users to notify, skip sending
       if (userIds.isEmpty) {
-        developer.log('PushNotificationSender: No users to notify (excluding current user and suppliers)');
+         
         return;
       }
 
@@ -96,7 +96,7 @@ class PushNotificationSender {
       developer.log(
         'PushNotificationSender: Sending push notification to ${userIds.length} users',
       );
-      developer.log('PushNotificationSender: Data IDs: $dataIdsArray');
+       
 
       // 6. Send push notification (matches KMP's sendPush - just logs success/error)
       try {
@@ -126,7 +126,7 @@ class PushNotificationSender {
           );
           // Log response data if available (might be error message)
           if (response.data != null && response.data.toString().isNotEmpty) {
-            developer.log('PushNotificationSender: Response: ${response.data}');
+             
           }
         }
       } on DioException catch (e) {
@@ -140,7 +140,7 @@ class PushNotificationSender {
             'PushNotificationSender: Response status: ${e.response?.statusCode}',
           );
           if (e.response?.data != null) {
-            developer.log('PushNotificationSender: Response data: ${e.response?.data}');
+             
           }
         }
         // Don't throw - push notification failure shouldn't break the main operation

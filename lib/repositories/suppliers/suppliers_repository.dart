@@ -189,7 +189,7 @@ class SuppliersRepository {
         // CRITICAL: Commit all inserts at once - matches SQLDelight's optimized behavior
         await batch.commit(noResult: true);
       });
-      developer.log('SuppliersRepository: ${suppliers.length} suppliers added successfully');
+       
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -236,7 +236,7 @@ class SuppliersRepository {
         where: 'supplierId = ?',
         whereArgs: [supplierId],
       );
-      developer.log('SuppliersRepository: supplier flag updated successfully');
+       
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));

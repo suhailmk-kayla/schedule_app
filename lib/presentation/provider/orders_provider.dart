@@ -209,9 +209,9 @@ class OrdersProvider extends ChangeNotifier {
 
   Future<void> loadOrders({bool toRefresh=false}) async {
     if(toRefresh){
-      developer.log('loadOrders:loading orders from local database to refresh');
+       
     }else{
-      developer.log('loadOrders:loading orders from local databae');
+       
     }
     _setLoading(true);
     _clearError();
@@ -245,9 +245,9 @@ class OrdersProvider extends ChangeNotifier {
   /// Used by DraftOrdersScreen for admin
   Future<void> loadDraftOrders({bool toRefresh = false}) async {
     if (toRefresh) {
-      developer.log('loadDraftOrders: loading draft orders from local database to refresh');
+       
     } else {
-      developer.log('loadDraftOrders: loading draft orders from local database');
+       
     }
     _setLoading(true);
     _clearError();
@@ -695,12 +695,12 @@ class OrdersProvider extends ChangeNotifier {
     final result = await _ordersRepository.getTempOrders();
     result.fold(
       (failure){
-        developer.log('getTempOrder: ${failure.message}');
+         
 _setError(failure.message);
       } ,
       (orders) async {
         if (orders.isNotEmpty) {
-          developer.log('Get Temp Order: temporary order found');
+           
           _orderMaster = orders.first;
           _customerId = _orderMaster!.orderCustId;
           _customerName = _orderMaster!.orderCustName.isNotEmpty
@@ -784,13 +784,13 @@ _setError(failure.message);
   /// Create new temp order (flag = 2)
   /// Converted from KMP's createTempOrder
   Future<void> createTempOrder() async {
-    developer.log('createTempOrder:no temporary order found, creating new one');
+     
     _setLoading(true);
     _clearError();
 
     // Get last order entry to determine next orderId
     final lastEntryResult = await _ordersRepository.getLastOrderEntry();
-    developer.log('createTempOrder:got last inserted order: ${lastEntryResult.fold((_) => 'null', (order) => order?.id.toString() ?? 'null')}');
+     
     int nextOrderId = 1;
     lastEntryResult.fold(
       (_) {},
@@ -834,12 +834,20 @@ _setError(failure.message);
       (_) {
         _orderMaster = tempOrder;
         _orderSubsWithDetails = [];
-        developer.log('createTempOrder:temp order added: ${tempOrder.orderId}');
+         
         notifyListeners();
       },
     );
 
     _setLoading(false);
+  }
+
+  /// Synchronously removes an order sub from the in-memory list.
+  /// Required for Dismissible: item must leave the tree immediately when onDismissed fires.
+  /// Call this first, then deleteOrderSub() in background.
+  void removeOrderSubOptimistically(int orderSubId) {
+    _orderSubsWithDetails.removeWhere((s) => s.orderSub.orderSubId == orderSubId);
+    notifyListeners();
   }
 
   /// Get all order subs with details for current order
@@ -1457,7 +1465,7 @@ _setError(failure.message);
         _setLoading(false);
         return false;
       }else{
-        developer.log('sendOrder:order added: ${newOrder.orderId}');
+         
         loadOrders();
       }
 
@@ -1871,7 +1879,7 @@ _setError(failure.message);
           _orderDetailItems[originalItemIndex] = newItem;
         } else {
           // Original item not found - add as new item (shouldn't happen, but handle gracefully)
-          developer.log('Warning: Original item ${replaceOrderSub.orderSubId} not found in _orderDetailItems, adding as new item');
+           
           _orderDetailItems.add(newItem);
         }
         
@@ -2119,10 +2127,10 @@ _setError(failure.message);
       populateResult.fold(
         (failure) {
           // Log error but continue - estimated fields population is not critical
-          developer.log('sendToCheckers: Failed to populate estimated fields: ${failure.message}');
+           
         },
         (_) {
-          developer.log('sendToCheckers: Estimated fields populated successfully');
+           
         },
       );
 
@@ -2242,6 +2250,11 @@ _setError(failure.message);
       final dateTimeStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
 
       // 4. Create OutOfStockMaster (matching KMP lines 1695-1717)
+      // TRACE: log orderSubId we write to master and sub when storekeeper creates OOS (reportAdmin)
+      developer.log(
+        'OrdersProvider.reportAdmin: creating OOS master and sub with orderSub.orderSubId=${orderSub.orderSubId}, orderSub.orderSubOrdrId=${orderSub.orderSubOrdrId}',
+        name: 'OrdersProvider.trace',
+      );
       final oospMaster = OutOfStock(
         id: 0,
         outosOrderSubId: orderSub.orderSubId,
@@ -2391,7 +2404,7 @@ _setError(failure.message);
             message: 'Product out of stock reported',
             customUserIds: userIds,
           ).catchError((e) {
-            developer.log('OrdersProvider: Error sending push notification in reportAdmin: $e');
+             
           });
 
           // 9. Optimistically update OrderSub flag to "reported" for immediate UI feedback
@@ -2528,6 +2541,11 @@ _setError(failure.message);
       // Note: Endpoint doesn't support notification payload, so we send it separately
       final mastersList = outOfStocks.keys.toList();
       final subsList = outOfStocks.values.toList();
+      // TRACE: log orderSubIds we write to OOS master/sub when storekeeper creates OOS (reportAllAdmin)
+      developer.log(
+        'OrdersProvider.reportAllAdmin: creating OOS for masters with outosOrderSubIds=${mastersList.map((m) => m.outosOrderSubId).toList()}, subs outosSubOrderSubIds=${subsList.map((s) => s.outosSubOrderSubId).toList()}',
+        name: 'OrdersProvider.trace',
+      );
 
       final result = await _outOfStockRepository.createOutOfStockAll(
         outOfStockMasters: mastersList,
@@ -2594,7 +2612,7 @@ _setError(failure.message);
             message: 'Product out of stock reported',
             customUserIds: userIds,
           ).catchError((e) {
-            developer.log('OrdersProvider: Error sending push notification in reportAllAdmin: $e');
+             
           });
 
           _setLoading(false);
@@ -3117,6 +3135,7 @@ _setError(failure.message);
     _setLoading(true);
     _clearError();
     final List<Map<String, dynamic>> userIds = [];
+    final Set<int> notifiedUserIds = <int>{};
     try {
 
       //get all billers for notifying the change
@@ -3125,10 +3144,15 @@ _setError(failure.message);
         (_) {},
         (billers) {
           for (final biller in billers) {
-            userIds.add({
-              'user_id': biller.userId,
-              'silent_push': 0,
-            });
+            final int? billerUserId = biller.userId;
+            if (billerUserId != null &&
+                billerUserId != billerId &&
+                notifiedUserIds.add(billerUserId)) {
+              userIds.add({
+                'user_id': billerUserId,
+                'silent_push': 0,
+              });
+            }
           }
         },
       );
@@ -3138,10 +3162,15 @@ _setError(failure.message);
         (_) {},
         (admins) {
           for (final admin in admins) {
-            userIds.add({
-              'user_id': admin.userId,
-              'silent_push': 0,
-            });
+            final int? adminUserId = admin.userId;
+            if (adminUserId != null &&
+                adminUserId != billerId &&
+                notifiedUserIds.add(adminUserId)) {
+              userIds.add({
+                'user_id': adminUserId,
+                'silent_push': 0,
+              });
+            }
           }
         },
       );
@@ -3167,12 +3196,12 @@ _setError(failure.message);
       bool success = false;
       result.fold(
         (failure) => _setError(failure.message),
-        (_) {
-          success = true;
-          // Reload order details to reflect the updated state
-          loadOrderDetails(orderId);
-        },
+        (_) => success = true,
       );
+
+      if (success) {
+        await loadOrderDetails(orderId);
+      }
 
       _setLoading(false);
       return success;
@@ -3214,7 +3243,7 @@ _setError(failure.message);
         // Determine if this is a replacement or new item
         // Check the isReplaced flag on the OrderSub object itself
         bool isReplacement = sub.isReplaced;
-        developer.log('OrderSub ${sub.orderSubId} - isReplaced: ${sub.isReplaced}, inOriginalSet: ${_originalOrderSubIds.contains(sub.orderSubId)}');
+         
         
         bool isNewItem = !isReplacement && !_originalOrderSubIds.contains(sub.orderSubId);
         
@@ -3245,11 +3274,11 @@ _setError(failure.message);
         if (isReplacement) {
           itemPayload['is_replacement'] = true;
           itemPayload['order_sub_id'] = sub.orderSubId; // Same ID (backend updates in place)
-          developer.log('OrderSub ${sub.orderSubId} marked as replacement - is_replacement: true, order_sub_id: ${sub.orderSubId}');
+           
         } else if (isNewItem) {
           // New item - explicitly set is_replacement to false
           itemPayload['is_replacement'] = false;
-          developer.log('OrderSub ${sub.orderSubId} marked as new item - is_replacement: false');
+           
         }
 
         // Add checker_images if present

@@ -397,7 +397,7 @@ class CarsProvider extends ChangeNotifier {
         dataIds: dataIds,
         message: 'Car updates',
       ).catchError((e) {
-        developer.log('CarsProvider: Error sending push notification: $e');
+         
       });
 
       _isLoading = false;

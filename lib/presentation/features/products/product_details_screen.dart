@@ -32,7 +32,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   }
 
   void _showFullImageDialog(BuildContext context, String imageUrl) {
-    developer.log('imageUrl: $imageUrl');
+     
     showDialog(
       context: context,
       barrierDismissible: true,
@@ -168,7 +168,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     child: GestureDetector(
                       onTap: product.photo.isNotEmpty
                           ? () {
-                              developer.log('product.photo: ${product.photo}');
+                               
                               _showFullImageDialog(context, product.photo);
                             }
                           : null,
@@ -633,7 +633,7 @@ class _FullImageDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fixedUrl = ImageUrlFixer.fix(imageUrl);
-    developer.log('imageUrl: $fixedUrl');
+     
     return Dialog(
       backgroundColor: Colors.transparent,
       child: GestureDetector(

@@ -271,7 +271,7 @@ class ProductsRepository {
     required String code,
     required int productId,
   }) async {
-    developer.log('getProductsByCodeWithId: $code, $productId');
+     
     try {
       final db = await _database;
       final maps = await db.query(
@@ -399,7 +399,7 @@ class ProductsRepository {
       );
       return const Right(null);
     } catch (e) {
-      developer.log('ProductsRepository: addProduct() - Error: ${e.toString()}');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -462,7 +462,7 @@ class ProductsRepository {
       });
       return const Right(null);
     } catch (e) {
-      developer.log('ProductsRepository: addProducts() - Error: ${e.toString()}');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -472,10 +472,10 @@ class ProductsRepository {
     try {
       final db = await _database;
       await db.delete('Product');
-      developer.log('ProductsRepository: clearAll() - Products cleared');
+       
       return const Right(null);
     } catch (e) {
-      developer.log('ProductsRepository: clearAll() - Error: ${e.toString()}');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -604,17 +604,17 @@ class ProductsRepository {
       try {
         productApi = ProductApi.fromJson(responseData);
       } catch (e) {
-        developer.log('ProductsRepository: createProduct() - Error parsing response: $e');
+         
         return Left(ServerFailure.fromError('Failed to parse product response: $e'));
       }
       
       // 4. Store in local DB
       final addResult = await addProduct(productApi.product);
       if (addResult.isLeft) {
-        developer.log('ProductsRepository: createProduct() - Add result: ${addResult.left}');
+         
         return addResult.map((_) => productApi.product);
       }
-      developer.log('ProductsRepository: createProduct() - Product: ${productApi.product.toJson()}');
+       
       
       // 4b. Store ProductUnit in local DB (matches KMP line 209-210)
       if (productApi.productUnit.id != -1) {
@@ -644,7 +644,7 @@ class ProductsRepository {
           dataIds: dataIds,
           message: 'Product updates',
         ).catchError((e) {
-          developer.log('ProductsRepository: Error sending push notification: $e');
+           
         });
       }
       
@@ -652,7 +652,7 @@ class ProductsRepository {
     } on DioException catch (e) {
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
-      developer.log('ProductsRepository: createProduct() - Error: $e');
+       
       return Left(UnknownFailure.fromError(e));
     }
   }
@@ -693,7 +693,7 @@ class ProductsRepository {
       );
       return const Right(null);
     } catch (e) {
-      developer.log('ProductsRepository: updateProductLocal() - Error: $e');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -747,16 +747,16 @@ class ProductsRepository {
           dataIds: dataIds,
           message: 'Product updates',
         ).catchError((e) {
-          developer.log('ProductsRepository: Error sending push notification: $e');
+           
         });
       }
 
       return Right(updateProductApi.product);
     } on DioException catch (e) {
-      developer.log('ProductsRepository: updateProduct() - DioException: $e');
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
-      developer.log('ProductsRepository: updateProduct() - Error: $e');
+       
       return Left(UnknownFailure.fromError(e));
     }
   }
@@ -1108,7 +1108,7 @@ class ProductsRepository {
           dataIds: dataIds,
           message: 'Product car updates',
         ).catchError((e) {
-          developer.log('ProductsRepository: Error sending push notification: $e');
+           
         });
       }
 
@@ -1207,7 +1207,7 @@ class ProductsRepository {
           dataIds: dataIds,
           message: 'Product unit updates',
         ).catchError((e) {
-          developer.log('ProductsRepository: Error sending push notification: $e');
+           
         });
       }
 

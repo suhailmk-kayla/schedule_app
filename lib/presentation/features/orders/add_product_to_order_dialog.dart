@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/presentation/features/products/products_screen.dart';
 import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
@@ -359,12 +360,15 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
       
                     // Quantity Field
                     TextField(
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
                       controller: _quantityController,
                       decoration: const InputDecoration(
                         labelText: 'Quantity',
                         border: OutlineInputBorder(),
                       ),
-                      keyboardType: TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: TextInputType.numberWithOptions(decimal: false),
                     ),
                     const SizedBox(height: 16),
       

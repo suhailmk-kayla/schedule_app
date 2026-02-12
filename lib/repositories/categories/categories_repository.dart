@@ -237,10 +237,10 @@ class CategoriesRepository {
     try {
       final db = await _database;
       await db.delete('Category');
-      developer.log('CategoriesRepository: clearAll() - Categories cleared');
+       
       return const Right(null);
     } catch (e) {
-      developer.log('CategoriesRepository: clearAll() - Error: ${e.toString()}');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }

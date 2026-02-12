@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:schedule_frontend_flutter/presentation/common_widgets/sync_refresh_button.dart';
 import 'package:schedule_frontend_flutter/presentation/features/home/home_drawer.dart';
 import 'package:schedule_frontend_flutter/presentation/features/orders/order_details_storekeeper_screen.dart';
 import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
@@ -149,6 +150,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
           return Column(
             children: [
+              // Sync refresh button (for checker, biller, driver who don't have HomeScreen)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                child: SyncRefreshButton(),
+              ),
               // Filter Row
               _FilterRow(
                 routeSt: provider.routeSt,
@@ -185,7 +191,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                     builder: (_) =>
                                         OrderDetailsScreen(orderId: order.orderId),
                                   ),
-                                );
+                                ).then((_) {
+                                  final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                                  homeProvider.refreshCounts();
+                                  provider.loadOrders(toRefresh: true);
+                                });
                               } else if (_userType == 2) {
                                 // Storekeeper flow: claim if unassigned, otherwise validate ownership
                                 if (order.orderStockKeeperId == -1) {
@@ -215,24 +225,26 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                         OrderDetailsStorekeeperScreen(orderId: order.orderId),
                                   ),
                                 ).then((_) {
-                                  // Refresh badge counts when returning from order details
+                                  // Refresh badge counts and orders list when returning
                                   final homeProvider = Provider.of<HomeProvider>(context, listen: false);
                                   homeProvider.refreshCounts();
+                                  provider.loadOrders(toRefresh: true);
                                 });
                               } else if (_userType == 3) {
                                 // Check if it's a draft order (flag = 3) - if so, navigate to CreateOrderScreen for editing
                                 // This matches KMP's behavior (BaseScreen.kt lines 394-397)
                                 if (order.orderFlag == 3) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => CreateOrderScreen(orderId: order.orderId.toString()),
-                                    ),
-                                  ).then((_) {
-                                    // Refresh badge counts when returning from order details
-                                    final homeProvider = Provider.of<HomeProvider>(context, listen: false);
-                                    homeProvider.refreshCounts();
-                                  });
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => CreateOrderScreen(orderId: order.orderId.toString()),
+                                  ),
+                                ).then((_) {
+                                  // Refresh badge counts and orders list when returning
+                                  final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                                  homeProvider.refreshCounts();
+                                  provider.loadOrders(toRefresh: true);
+                                });
                                 } else {
                                   // For non-draft orders, navigate to OrderDetailsSalesmanScreen
                                   Navigator.push(
@@ -241,9 +253,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                       builder: (_) => OrderDetailsSalesmanScreen(orderId: order.orderId),
                                     ),
                                   ).then((_) {
-                                    // Refresh badge counts when returning from order details
+                                    // Refresh badge counts and orders list when returning
                                     final homeProvider = Provider.of<HomeProvider>(context, listen: false);
                                     homeProvider.refreshCounts();
+                                    provider.loadOrders(toRefresh: true);
                                   });
                                 }
                               } else if (_userType == 6) {
@@ -279,9 +292,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                     builder: (_) => OrderDetailsCheckerScreen(orderId: order.orderId),
                                   ),
                                 ).then((_) {
-                                  // Refresh badge counts when returning from order details
+                                  // Refresh badge counts and orders list when returning
                                   final homeProvider = Provider.of<HomeProvider>(context, listen: false);
                                   homeProvider.refreshCounts();
+                                  provider.loadOrders(toRefresh: true);
                                 });
                               } else if (_userType == 5) {
                                 _handleBillerOrderTap(context, order);
@@ -413,14 +427,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
         builder: (_) => OrderDetailsBillerScreen(orderId: order.orderId),
       ),
     ).then((_) {
-      // Refresh badge counts when returning from order details
+      // Refresh badge counts and orders list when returning
       final homeProvider = Provider.of<HomeProvider>(context, listen: false);
       homeProvider.refreshCounts();
+      ordersProvider.loadOrders(toRefresh: true);
     });
-
-    // Refresh orders list after returning
-    if (!mounted) return;
-    ordersProvider.loadOrders();
   }
 }
 
@@ -580,13 +591,13 @@ class _OrderListItem extends StatelessWidget {
                   const SizedBox(width: 10),
                   order.orderIsBilled == 1 ? Container(
                     padding: EdgeInsets.symmetric(horizontal: 5,vertical: 2),
-                    width: 70,
+                    // width: 70,
                     height: 20,
                     decoration: BoxDecoration(
                      border: Border.all(color: Colors.green),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text('Billed'),
+                    child: Text('Billed',style: TextStyle(fontSize: 9,color: Colors.green),),
                   ):SizedBox.shrink(),
                   Text(
                     _formatDate(order.updatedAt),
@@ -617,7 +628,7 @@ class _OrderListItem extends StatelessWidget {
               // Salesman (if exists and not salesman user)
               if (order.orderSalesmanId != -1 && userType != 3) ...[
                 const SizedBox(height: 4),
-                // developer.log('salesman name: ${_getSalesmanName(orderWithName, userType, userId)}');
+                //  
                 Text(
                   // 'Salesman: ${orderWithName.salesManName.isNotEmpty ? orderWithName.salesManName : "N/A"}',
                   'Salesman: ${_getSalesmanName(orderWithName, userType, userId)}',
@@ -680,7 +691,7 @@ class _OrderListItem extends StatelessWidget {
     if (userType == 1 && orderWithName.order.orderSalesmanId == userId) {
       return '${orderWithName.salesManName}(SELF ORDER)';
     }
-    developer.log('salesman name: ${orderWithName.salesManName}');
+     
     return orderWithName.salesManName.isNotEmpty
         ? orderWithName.salesManName
         : 'N/A';

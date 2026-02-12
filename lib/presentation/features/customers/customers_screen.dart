@@ -113,7 +113,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     // Navigate to CreateOrderScreen with customer pre-selected
     // Matches KMP's orderClick behavior (BaseScreen.kt line 898-903)
     // When order icon is clicked, navigate to CreateOrderScreen and auto-select the customer
-    developer.log('Customer name: ${customer.name}');
+     
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     ordersProvider.setCustomer(customer.customerId, customer.name);
     Navigator.push(

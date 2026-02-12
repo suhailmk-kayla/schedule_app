@@ -239,7 +239,7 @@ class CustomersProvider extends ChangeNotifier {
           message: 'Customer updates',
           customUserIds: notificationUserIds,
         ).catchError((e) {
-          developer.log('CustomersProvider: Error sending push notification: $e');
+           
         });
         
         loadCustomers(); // Reload list
@@ -329,7 +329,7 @@ class CustomersProvider extends ChangeNotifier {
           message: 'Customer updates',
           customUserIds: notificationUserIds,
         ).catchError((e) {
-          developer.log('CustomersProvider: Error sending push notification: $e');
+           
         });
         
         loadCustomers(); // Reload list
@@ -379,7 +379,7 @@ class CustomersProvider extends ChangeNotifier {
           message: 'Customer updates',
           customUserIds: notificationUserIds,
         ).catchError((e) {
-          developer.log('CustomersProvider: Error sending push notification: $e');
+           
         });
         
         loadCustomers(); // Reload list

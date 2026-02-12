@@ -436,7 +436,7 @@ class RoutesRepository {
         existingRoute: baseRoute,
       );
       if (addRouteApi.status != 1) {
-        developer.log('Failed to update route: ${addRouteApi.message}');
+         
         return Left(ServerFailure.fromError(
           'Failed to update route: ${addRouteApi.message}',
         ));
@@ -450,10 +450,10 @@ class RoutesRepository {
 
       return Right(addRouteApi.data);
     } on DioException catch (e) {
-      developer.log('Failed to update route: ${e.response?.data}');
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
-      developer.log('Failed to update route: $e');
+       
       return Left(UnknownFailure.fromError(e));
     }
   }

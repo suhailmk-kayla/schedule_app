@@ -980,6 +980,28 @@ class _CompletedOrderItemCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (item.orderSub.estimatedQty > 0 &&
+                (item.orderSub.estimatedQty - item.orderSub.orderSubQty).abs() > 0.001)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Text(
+                    'Checker changed the quantity from ${item.orderSub.estimatedQty.toStringAsFixed(2)} to ${item.orderSub.orderSubQty.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.amber.shade900,
+                    ),
+                  ),
+                ),
+              ),
             const SizedBox(height: 6),
             _InfoRow(label: 'Brand', value: item.productBrand),
             _InfoRow(label: 'Sub Brand', value: item.productSubBrand),

@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -13,6 +14,11 @@ import '../../../utils/notification_manager.dart';
 /// OutOfStock Details Admin Screen
 /// Shows product details and allows admin to select/change supplier and handle availability
 /// Converted from KMP's OutOfStockDetailsAdminScreen.kt
+///
+/// Fix 2026-02-03, by AI: When supplier returns "out of stock" (oospFlag==3, availQty==0),
+/// workflow is now: (1) Click "Change Supplier" to open selection dialog,
+/// (2) Select new supplier - stored in state only, (3) Button changes to "Send to Supplier",
+/// (4) Click to send. Previously selection immediately persisted; now it's two-step.
 class OutOfStockDetailsAdminScreen extends StatefulWidget {
   final int oospMasterId;
 
@@ -35,6 +41,13 @@ class _OutOfStockDetailsAdminScreenState
   OutOfStockSubWithDetails? _selectedSubItem;
   String _confirmMessage = '';
   int _confirmDialogFlag = 1; // 1=accept, 2=reject, 3=not available
+
+  /// Fix 2026-02-03, by AI: When supplier returns "out of stock" (oospFlag==3, availQty==0),
+  /// admin selects a new supplier. Selection is stored in state only (not persisted).
+  /// Button then changes from "Change Supplier" to "Send to Supplier".
+  /// Sending persists and notifies the new supplier in one step.
+  final Map<int, int> _pendingSupplierByOospId = {};
+  final Map<int, String> _pendingSupplierNameByOospId = {};
 
   @override
   void initState() {
@@ -124,6 +137,37 @@ class _OutOfStockDetailsAdminScreenState
         setState(() => _isLoading = false);
         ToastHelper.showInfo('Order sent to supplier');
         _loadData(); // Reload to refresh status
+      },
+    );
+  }
+
+  /// Fix 2026-02-03, by AI: Send to the newly selected supplier (from pending state)
+  /// when original supplier returned "out of stock". Uses supplierIdOverride.
+  void _handleSendToPendingSupplier(OutOfStockSubWithDetails subItem) {
+    final pendingId = _pendingSupplierByOospId[subItem.oospId];
+    if (pendingId == null || pendingId == -1) return;
+
+    final provider = Provider.of<OutOfStockProvider>(context, listen: false);
+    setState(() => _isLoading = true);
+
+    provider.sendOrderToSupplier(
+      subItem: subItem,
+      supplierIdOverride: pendingId,
+      onFailure: (error) {
+        setState(() => _isLoading = false);
+        ToastHelper.showError(error);
+      },
+      onSuccess: () async {
+        setState(() {
+          _isLoading = false;
+          _pendingSupplierByOospId.remove(subItem.oospId);
+          _pendingSupplierNameByOospId.remove(subItem.oospId);
+        });
+        ToastHelper.showInfo('Order sent to supplier');
+        // Persist the new supplier to local DB so _loadData shows correct state
+        await provider.updateSupplier(oospId: subItem.oospId, supplierId: pendingId);
+        if (!mounted) return;
+        _loadData();
       },
     );
   }
@@ -237,6 +281,13 @@ class _OutOfStockDetailsAdminScreenState
                   }
                 }
 
+                // TRACE: log master vs subs orderSubId before informSalesman (from Not Available flow)
+                final subOrderSubIds = provider.oospSubList.map((s) => s.orderSubId).toList();
+                developer.log(
+                  'OOS details: before informSalesman (notAvailable) master.orderSubId=${_masterWithDetails!.orderSubId}, oospSubList.orderSubIds=$subOrderSubIds',
+                  name: 'OutOfStockDetailsAdmin.trace',
+                );
+
                 provider.informSalesman(
                   master: _masterWithDetails!,
                   availableQty: availableQty,
@@ -324,6 +375,12 @@ class _OutOfStockDetailsAdminScreenState
     }
 
     if (_masterWithDetails!.orderSubId != -1) {
+      // TRACE: log master vs subs orderSubId before informSalesman (from Complete flow)
+      final subOrderSubIds = provider.oospSubList.map((s) => s.orderSubId).toList();
+      developer.log(
+        'OOS details: before informSalesman (complete) master.orderSubId=${_masterWithDetails!.orderSubId}, oospSubList.orderSubIds=$subOrderSubIds',
+        name: 'OutOfStockDetailsAdmin.trace',
+      );
       // Inform salesman
       provider.informSalesman(
         master: _masterWithDetails!,
@@ -445,8 +502,11 @@ class _OutOfStockDetailsAdminScreenState
                             padding: const EdgeInsets.only(bottom: 8),
                             child: _SubItemCard(
                               subItem: subItem,
+                              pendingSupplierId: _pendingSupplierByOospId[subItem.oospId],
+                              pendingSupplierName: _pendingSupplierNameByOospId[subItem.oospId],
                               onSelectSupplier: () => _handleSelectSupplier(subItem),
                               onSendToSupplier: () => _handleSendToSupplier(subItem),
+                              onSendToPendingSupplier: () => _handleSendToPendingSupplier(subItem),
                               onAcceptAvailable: () => _handleAcceptAvailable(subItem),
                               onRejectAvailable: () => _handleRejectAvailable(subItem),
                               onNotAvailable: () => _handleNotAvailable(subItem),
@@ -457,9 +517,11 @@ class _OutOfStockDetailsAdminScreenState
                   ),
                 ),
           bottomNavigationBar: isAllFinished && !isCompleted
-              ? Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: ElevatedButton(
+              ? SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: ElevatedButton(
                     onPressed: () => _handleComplete(oospProvider),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).primaryColor,
@@ -478,7 +540,8 @@ class _OutOfStockDetailsAdminScreenState
                       ),
                     ),
                   ),
-                )
+                ),
+              )
               : null,
         );
       },
@@ -680,6 +743,7 @@ class _OutOfStockDetailsAdminScreenState
                             title: Text(supplier.name),
                             trailing: isSelected ? const Icon(Icons.check, color: Colors.green) : null,
                             onTap: () {
+
                               setDialogState(() {
                                 _selectedSupplierId = supplier.userId ?? -1;
                               });
@@ -694,10 +758,34 @@ class _OutOfStockDetailsAdminScreenState
                   child: const Text('Cancel'),
                 ),
                 TextButton(
-                  onPressed: _selectedSupplierId != null && 
-                             _selectedSupplierId! != -1 && 
+                  onPressed: _selectedSupplierId != null &&
+                             _selectedSupplierId! != -1 &&
                              _selectedSubItem != null
-                      ? () => _handleSupplierSelected(_selectedSupplierId!)
+                      ? () {
+                          // Fix 2026-02-03, by AI: When supplier returned "out of stock",
+                          // store selection in state only. Button becomes "Send to Supplier".
+                          if (_selectedSubItem!.oospFlag == 3 &&
+                              _selectedSubItem!.availQty == 0) {
+                            User? selectedSupplier;
+                            for (final s in suppliers) {
+                              if (s.userId == _selectedSupplierId) {
+                                selectedSupplier = s;
+                                break;
+                              }
+                            }
+                            if (selectedSupplier != null) {
+                              setState(() {
+                                _pendingSupplierByOospId[_selectedSubItem!.oospId] =
+                                    _selectedSupplierId!;
+                                _pendingSupplierNameByOospId[_selectedSubItem!.oospId] =
+                                    selectedSupplier!.name;
+                              });
+                              Navigator.of(context).pop();
+                            }
+                          } else {
+                            _handleSupplierSelected(_selectedSupplierId!);
+                          }
+                        }
                       : null,
                   child: const Text('Select'),
                 ),
@@ -749,16 +837,25 @@ class _OutOfStockDetailsAdminScreenState
 
 class _SubItemCard extends StatelessWidget {
   final OutOfStockSubWithDetails subItem;
+  /// Fix 2026-02-03, by AI: When supplier returned "out of stock", admin selects
+  /// a new supplier (stored in state). This is the pending selection.
+  final int? pendingSupplierId;
+  final String? pendingSupplierName;
   final VoidCallback onSelectSupplier;
   final VoidCallback onSendToSupplier;
+  /// Fix 2026-02-03, by AI: Sends to the pending supplier (used when reselecting after out of stock)
+  final VoidCallback? onSendToPendingSupplier;
   final VoidCallback onAcceptAvailable;
   final VoidCallback onRejectAvailable;
   final VoidCallback onNotAvailable;
 
   const _SubItemCard({
     required this.subItem,
+    this.pendingSupplierId,
+    this.pendingSupplierName,
     required this.onSelectSupplier,
     required this.onSendToSupplier,
+    this.onSendToPendingSupplier,
     required this.onAcceptAvailable,
     required this.onRejectAvailable,
     required this.onNotAvailable,
@@ -783,6 +880,36 @@ class _SubItemCard extends StatelessWidget {
     }
   }
 
+  /// Fix 2026-02-03, by AI: Green button handler. When pending supplier exists
+  /// (after "out of stock" reselect), call onSendToPendingSupplier.
+  VoidCallback? _getGreenButtonOnPressed() {
+    if (subItem.supplierId == -1 && pendingSupplierId == null) {
+      return onSelectSupplier;
+    }
+    if (subItem.oospFlag == 3) {
+      if (subItem.availQty > 0) return onAcceptAvailable;
+      if (pendingSupplierId != null && onSendToPendingSupplier != null) {
+        return onSendToPendingSupplier!;
+      }
+      return onSelectSupplier;
+    }
+    return onSendToSupplier;
+  }
+
+  /// Fix 2026-02-03, by AI: Green button label. "Send to Supplier" when pending
+  /// selection exists (after out of stock reselect), else existing logic.
+  String _getGreenButtonLabel() {
+    if (subItem.supplierId == -1 && pendingSupplierId == null) {
+      return 'Select Supplier';
+    }
+    if (subItem.oospFlag == 3) {
+      if (subItem.availQty > 0) return 'Accept';
+      if (pendingSupplierId != null) return 'Send to Supplier';
+      return 'Change Supplier';
+    }
+    return 'Send to Supplier';
+  }
+
   Color _getStatusColor() {
     switch (subItem.oospFlag) {
       case 0:
@@ -801,7 +928,11 @@ class _SubItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canShowActions = subItem.oospFlag == 0 || subItem.oospFlag == 3;
-    final supplierName = subItem.supplierName.isEmpty ? 'Not selected' : subItem.supplierName.toUpperCase();
+    // Fix 2026-02-03, by AI: Show pending supplier name when admin has selected
+    // a new supplier (not yet sent) after original returned "out of stock"
+    final supplierName = (pendingSupplierName?.isNotEmpty == true)
+        ? pendingSupplierName!.toUpperCase()
+        : (subItem.supplierName.isEmpty ? 'Not selected' : subItem.supplierName.toUpperCase());
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -822,7 +953,9 @@ class _SubItemCard extends StatelessWidget {
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.normal),
                   ),
                 ),
-                if (subItem.supplierId != -1 && (subItem.oospFlag == 0 || subItem.oospFlag == 3))
+                // Fix 2026-02-03, by AI: Show "Change" when supplier exists OR pending selection exists
+                if ((subItem.supplierId != -1 || pendingSupplierId != null) &&
+                    (subItem.oospFlag == 0 || subItem.oospFlag == 3))
                   TextButton(
                     onPressed: onSelectSupplier,
                     child: const Text('Change', style: TextStyle(color: Colors.green)),
@@ -912,26 +1045,18 @@ class _SubItemCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: subItem.supplierId == -1
-                          ? onSelectSupplier
-                          : subItem.oospFlag == 3
-                              ? (subItem.availQty > 0 ? onAcceptAvailable : onSelectSupplier)
-                              : onSendToSupplier,
+                      onPressed: _getGreenButtonOnPressed(),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).primaryColor,
                       ),
                       child: Text(
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        subItem.supplierId == -1
-                            ? 'Select Supplier'
-                            : subItem.oospFlag == 3
-                                ? (subItem.availQty > 0 ? 'Accept' : 'Change Supplier')
-                                : 'Send to Supplier',
+                        _getGreenButtonLabel(),
                         style: const TextStyle(
                           fontSize: 12,
                           color: Colors.white,
-                           fontWeight: FontWeight.bold),
+                          fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),

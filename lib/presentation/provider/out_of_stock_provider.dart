@@ -104,16 +104,16 @@ class OutOfStockProvider extends ChangeNotifier {
       result.fold(
         (failure) {
           _errorMessage = failure.message;
-          developer.log('OutOfStockProvider: Failed to get OOSP masters: ${failure.message}');
+           
         },
         (list) {
           _oospList = list;
-          developer.log('OutOfStockProvider: Loaded ${list.length} OOSP masters');
+           
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in getAllOosp: $e');
+       
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -143,16 +143,16 @@ class OutOfStockProvider extends ChangeNotifier {
       result.fold(
         (failure) {
           _errorMessage = failure.message;
-          developer.log('OutOfStockProvider: Failed to get OOSP subs: ${failure.message}');
+           
         },
         (list) {
           _oospSubList = list;
-          developer.log('OutOfStockProvider: Loaded ${list.length} OOSP subs');
+           
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in getAllOospSub: $e');
+       
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -171,16 +171,16 @@ class OutOfStockProvider extends ChangeNotifier {
       result.fold(
         (failure) {
           _errorMessage = failure.message;
-          developer.log('OutOfStockProvider: Failed to get OOSP subs by master: ${failure.message}');
+           
         },
         (list) {
           _oospSubList = list;
-          developer.log('OutOfStockProvider: Loaded ${list.length} OOSP subs for master $masterId');
+           
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in getOopsSub: $e');
+       
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -195,17 +195,17 @@ class OutOfStockProvider extends ChangeNotifier {
       return result.fold(
         (failure) {
           _errorMessage = failure.message;
-          developer.log('OutOfStockProvider: Failed to get OOSP master: ${failure.message}');
+           
           return null;
         },
         (master) {
-          developer.log('OutOfStockProvider: Loaded OOSP master $masterId');
+           
           return master;
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in getOopsMaster: $e');
+       
       return null;
     }
   }
@@ -221,16 +221,16 @@ class OutOfStockProvider extends ChangeNotifier {
       result.fold(
         (failure) {
           _errorMessage = failure.message;
-          developer.log('OutOfStockProvider: Failed to add packed sub: ${failure.message}');
+           
           notifyListeners();
         },
         (_) {
-          developer.log('OutOfStockProvider: Added packed sub for orderSubId $orderSubId');
+           
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in addPackedSub: $e');
+       
       notifyListeners();
     }
   }
@@ -243,16 +243,16 @@ class OutOfStockProvider extends ChangeNotifier {
       result.fold(
         (failure) {
           _errorMessage = failure.message;
-          developer.log('OutOfStockProvider: Failed to delete packed sub: ${failure.message}');
+           
           notifyListeners();
         },
         (_) {
-          developer.log('OutOfStockProvider: Deleted packed sub for orderSubId $orderSubId');
+           
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in deletePackedSub: $e');
+       
       notifyListeners();
     }
   }
@@ -272,13 +272,13 @@ class OutOfStockProvider extends ChangeNotifier {
           return null;
         },
         (sub) {
-          developer.log('OutOfStockProvider: Loaded OOSP sub $oospId');
+           
           return sub;
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in getOopsSubBySub: $e');
+       
       return null;
     }
   }
@@ -310,7 +310,7 @@ class OutOfStockProvider extends ChangeNotifier {
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in updateIsMasterViewedFlag: $e');
+       
       notifyListeners();
     }
   }
@@ -335,12 +335,12 @@ class OutOfStockProvider extends ChangeNotifier {
           notifyListeners();
         },
         (_) {
-          developer.log('OutOfStockProvider: Updated sub viewed flag for $oospId');
+           
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in updateIsSubViewedFlag: $e');
+       
       notifyListeners();
     }
   }
@@ -375,23 +375,16 @@ class OutOfStockProvider extends ChangeNotifier {
         return false;
       }
 
-      // If supplier was -1, update flag to 4, otherwise update flag
+      // Do not change oospFlag when only selecting/changing supplier.
+      // Flags are updated only on submission (e.g. Send to Supplier, Not Available),
+      // so that "Send to Supplier" remains visible after changing supplier and admin
+      // can send the request to the new supplier.
       final sub = _oospSubList.firstWhere(
         (s) => s.oospId == oospId,
         orElse: () => throw Exception('Sub not found'),
       );
 
-      if (sub.supplierId == -1) {
-        // Just update supplier
-      } else {
-        // Update flag to 4 (replaced)
-        await _outOfStockRepository.updateOospFlag(
-          oospId: oospId,
-          oospFlag: 4,
-        );
-      }
-
-      // Reload subs
+      // Reload subs so UI shows updated supplierId
       if (sub.oospMasterId != -1) {
         await getOopsSub(sub.oospMasterId);
       }
@@ -530,7 +523,7 @@ class OutOfStockProvider extends ChangeNotifier {
         customUserIds: userIds,
         message: 'Order cancelled',
       ).catchError((e) {
-        developer.log('OutOfStockProvider: Error sending push notification in notAvailable: $e');
+         
       });
 
       _setLoading(false);
@@ -549,15 +542,19 @@ class OutOfStockProvider extends ChangeNotifier {
   }
 
   /// Send order to supplier (matching KMP's sendOrderToSupplier)
+  /// [supplierIdOverride] Optional. When supplier returned "out of stock", admin selects
+  /// a new supplier (stored in UI state). Pass that ID here to send without persisting first.
+  /// Fix: 2026-02-03, by AI - Enables "Change Supplier" → "Send to Supplier" two-step workflow.
   Future<void> sendOrderToSupplier({
     required OutOfStockSubWithDetails subItem,
     required Function(String) onFailure,
     required Function() onSuccess,
+    int? supplierIdOverride,
   }) async {
     _setLoading(true);
     _clearError();
-    //if no supplier is selected return earlier
-    if (subItem.supplierId == -1) {
+    final effectiveSupplierId = supplierIdOverride ?? subItem.supplierId;
+    if (effectiveSupplierId == -1) {
       _setError('No supplier selected');
       _setLoading(false);
       onFailure('No supplier selected');
@@ -568,6 +565,7 @@ class OutOfStockProvider extends ChangeNotifier {
         subItem: subItem,
         flag: 1,
         isChecked: 0,
+        supplierIdOverride: supplierIdOverride,
       );
 
       final response = await _dio.post(
@@ -594,7 +592,7 @@ class OutOfStockProvider extends ChangeNotifier {
           _pushNotificationSender.sendPushNotification(
             dataIds: [PushData(table: 12, id: subItem.oospId)],
             customUserIds: [
-              {'user_id': subItem.supplierId, 'silent_push': 0}
+              {'user_id': effectiveSupplierId, 'silent_push': 0}
             ],
             message: 'Out of stock order received',
           );
@@ -686,7 +684,7 @@ class OutOfStockProvider extends ChangeNotifier {
             customUserIds: userIds,
             message: 'Order confirmed',
           ).catchError((e) {
-            developer.log('OutOfStockProvider: Error sending push notification: $e');
+             
           });
 
           _setLoading(false);
@@ -777,7 +775,7 @@ class OutOfStockProvider extends ChangeNotifier {
             customUserIds: userIds,
             message: 'Order cancelled',
           ).catchError((e) {
-            developer.log('OutOfStockProvider: Error sending push notification: $e');
+             
           });
 
           _setLoading(false);
@@ -860,7 +858,7 @@ class OutOfStockProvider extends ChangeNotifier {
         customUserIds: userIds,
         message: 'Order confirmed',
       ).catchError((e) {
-        developer.log('OutOfStockProvider: Error sending push notification: $e');
+         
       });
 
       _setLoading(false);
@@ -949,7 +947,7 @@ class OutOfStockProvider extends ChangeNotifier {
             customUserIds: userIds,
             message: 'Order confirmed',
           ).catchError((e) {
-            developer.log('OutOfStockProvider: Error sending push notification: $e');
+             
           });
 
           _setLoading(false);
@@ -1035,7 +1033,7 @@ class OutOfStockProvider extends ChangeNotifier {
         customUserIds: userIds,
         message: 'Supplier response',
       ).catchError((e) {
-        developer.log('OutOfStockProvider: Error sending push notification: $e');
+         
       });
 
       _setLoading(false);
@@ -1169,10 +1167,16 @@ class OutOfStockProvider extends ChangeNotifier {
     _clearError();
 
     try {
+      // TRACE: log which orderSubId we use from master (path 1 – from OutOfStockMaster)
+      developer.log(
+        'informSalesman: entry master.oospMasterId=${master.oospMasterId}, master.orderSubId=${master.orderSubId} (from OutOfStockMaster)',
+        name: 'OutOfStockProvider.trace',
+      );
+
       // changes made by ai on 28/01/2026 as a fix for informSalesman using wrong id (oospMasterId) as orderId; now resolve orderId from order sub so the correct order is loaded and salesman receives the stock update
       final orderSubByIdResult = await _ordersRepository.getOrderSubById(master.orderSubId);
       if (orderSubByIdResult.isLeft) {
-        developer.log('informSalesman: error getting order sub by id: ${orderSubByIdResult.left.message}');
+         
         _setError('Order sub not found');
         _setLoading(false);
         onFailure('Order sub not found');
@@ -1186,9 +1190,14 @@ class OutOfStockProvider extends ChangeNotifier {
         return;
       }
       final orderId = orderSubForOrderId.orderSubOrdrId;
+      // TRACE: log which order/sub we resolved to (getOrderSubById(master.orderSubId))
+      developer.log(
+        'informSalesman: getOrderSubById(master.orderSubId) resolved to orderId=$orderId, orderSubId=${orderSubForOrderId.orderSubId}',
+        name: 'OutOfStockProvider.trace',
+      );
       final orderResult = await _ordersRepository.getOrderWithNamesById(orderId);
       if (orderResult.isLeft || orderResult.right == null) {
-        developer.log('informSalesman: error getting order by id: ${orderResult.left.message}');
+         
         _setError('Order not found');
         _setLoading(false);
         onFailure('Order not found');
@@ -1201,7 +1210,7 @@ class OutOfStockProvider extends ChangeNotifier {
       );
 
       if (orderSubsResult.isLeft) {
-        developer.log('informSalesman: error getting order sub by id: ${orderSubsResult.left.message}');
+         
         _setError('Order sub not found');
         _setLoading(false);
         onFailure('Order sub not found');
@@ -1221,6 +1230,12 @@ class OutOfStockProvider extends ChangeNotifier {
 
       final order = orderWithName.order;
 
+      // TRACE: log which order sub we matched and will update (must match master.orderSubId)
+      developer.log(
+        'informSalesman: matched orderSub orderSubId=${orderSub.orderSub.orderSubId}, orderId=${order.orderId} (will send update for this line)',
+        name: 'OutOfStockProvider.trace',
+      );
+
       // DEBUG: Log initial context for salesman notification
       developer.log(
         'informSalesman: start '
@@ -1239,10 +1254,10 @@ class OutOfStockProvider extends ChangeNotifier {
       final List<Map<String, dynamic>> userIds = [];
 
       if (master.salesmanId != -1) {
-        developer.log('informSalesman: salesmanId=${master.salesmanId}');
+         
         userIds.add({'user_id': master.salesmanId, 'silent_push': 0});
       } else {
-        developer.log('informSalesman: salesman is not found, storekeeperId=${master.storekeeperId}');
+         
         userIds.add({'user_id': master.storekeeperId, 'silent_push': 0});
       }
 
@@ -1373,7 +1388,7 @@ class OutOfStockProvider extends ChangeNotifier {
             customUserIds: userIds,
             message: 'Update from admin',
           ).catchError((e) {
-            developer.log('OutOfStockProvider: Error sending push notification: $e');
+             
           });
 
           _setLoading(false);
@@ -1484,7 +1499,7 @@ class OutOfStockProvider extends ChangeNotifier {
         customUserIds: userIds,
         message: 'Order cancelled',
       ).catchError((e) {
-        developer.log('OutOfStockProvider: Error sending push notification: $e');
+         
       });
 
       onSuccess();
@@ -1512,6 +1527,8 @@ class OutOfStockProvider extends ChangeNotifier {
   // ============================================================================
 
   /// Build update out of stock sub params (matching KMP's updateOutOfStockSubParams)
+  /// [supplierIdOverride] Optional. Used when sending to a newly selected supplier
+  /// before persisting. Fix: 2026-02-03, by AI.
   Map<String, dynamic> _buildUpdateOutOfStockSubParams({
     required OutOfStockSubWithDetails subItem,
     required int flag,
@@ -1519,7 +1536,9 @@ class OutOfStockProvider extends ChangeNotifier {
     String? note,
     double? availQty,
     double? qty,
+    int? supplierIdOverride,
   }) {
+    final supplierId = supplierIdOverride ?? subItem.supplierId;
     return {
       'id': subItem.oospId,
       'outos_sub_outos_id': subItem.oospMasterId,
@@ -1528,7 +1547,7 @@ class OutOfStockProvider extends ChangeNotifier {
       'outos_sub_sales_man_id': subItem.salesmanId,
       'outos_sub_stock_keeper_id': subItem.storekeeperId,
       'outos_sub_date_and_time': subItem.dateAndTime,
-      'outos_sub_supp_id': subItem.supplierId,
+      'outos_sub_supp_id': supplierId,
       'outos_sub_prod_id': subItem.productId,
       'outos_sub_unit_id': subItem.unitId,
       'outos_sub_car_id': subItem.carId,

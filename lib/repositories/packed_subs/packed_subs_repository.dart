@@ -80,10 +80,10 @@ class PackedSubsRepository {
     try {
       final db = await _databaseHelper.database;
       await db.delete('PackedSubs');
-      developer.log('PackedSubsRepository: clearAll() - Packed subs cleared');
+       
       return const Right(null);
     } catch (e) {
-      developer.log('PackedSubsRepository: clearAll() - Error: ${e.toString()}');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }

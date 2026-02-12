@@ -14,19 +14,19 @@ const String backgroundSyncTaskKey = 'com.schedule.backgroundSyncTask';
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    developer.log('BackgroundSyncWorker: callbackDispatcher called');
-    developer.log('BackgroundSyncWorker: Task received: $task');
-    developer.log('BackgroundSyncWorker: Expected task: $backgroundSyncTaskKey');
-    developer.log('BackgroundSyncWorker: Input data: $inputData');
+     
+     
+     
+     
     
     // Only handle our specific background sync task
     if (task != backgroundSyncTaskKey) {
-      developer.log('BackgroundSyncWorker: Unknown task: $task, ignoring (returning true for other tasks)');
+       
       // Return true for other tasks (like OneSignal) so they can complete
       return Future.value(true);
     }
     
-    developer.log('BackgroundSyncWorker: Our task matched! Processing...');
+     
     
     try {
       // Reload SharedPreferences to get latest values (matching example pattern)
@@ -39,7 +39,7 @@ void callbackDispatcher() {
       // Check if sync is needed and set flag
       await _checkAndSetFlagIfNeeded();
       
-      developer.log('BackgroundSyncWorker: Task completed successfully');
+       
       return Future.value(true);
     } catch (e, stackTrace) {
       developer.log(
@@ -64,7 +64,7 @@ Future<void> _initializeDependenciesInBackground() async {
     if (_backgroundDatabaseHelper == null) {
       _backgroundDatabaseHelper = DatabaseHelper();
       await _backgroundDatabaseHelper!.initDatabase();
-      developer.log('BackgroundSyncWorker: DatabaseHelper initialized');
+       
     }
 
     // Create sync time repository instance if not already created
@@ -72,10 +72,10 @@ Future<void> _initializeDependenciesInBackground() async {
       _backgroundSyncTimeRepository = SyncTimeRepository(
         databaseHelper: _backgroundDatabaseHelper!,
       );
-      developer.log('BackgroundSyncWorker: SyncTimeRepository initialized');
+       
     }
     
-    developer.log('BackgroundSyncWorker: All dependencies initialized');
+     
   } catch (e, stackTrace) {
     developer.log(
       'BackgroundSyncWorker: Error initializing dependencies: $e',
@@ -110,7 +110,7 @@ Future<void> _checkAndSetFlagIfNeeded() async {
       (syncTime) async {
         if (syncTime == null) {
           // No sync time exists - first sync needed
-          developer.log('BackgroundSyncWorker: No sync time found - sync needed');
+           
           shouldSync = true;
         } else {
           // Check if sync is older than threshold
@@ -121,23 +121,23 @@ Future<void> _checkAndSetFlagIfNeeded() async {
             
             developer.log(
               'BackgroundSyncWorker: Last sync: ${syncTime.updateDate}, '
-              'Hours since sync: ${timeSinceSync.inHours}',
+              'Minutes since sync: ${timeSinceSync.inMinutes}',
             );
             
-            const syncThreshold = Duration(hours: 1);
+            const syncThreshold = Duration(minutes: 30);
             if (timeSinceSync >= syncThreshold) {
               developer.log(
-                'BackgroundSyncWorker: Sync is ${timeSinceSync.inHours} hours old - setting flag',
+                'BackgroundSyncWorker: Sync is ${timeSinceSync.inMinutes} min old - setting flag',
               );
               shouldSync = true;
             } else {
               developer.log(
-                'BackgroundSyncWorker: Sync is recent (${timeSinceSync.inHours} hours) - no flag needed',
+                'BackgroundSyncWorker: Sync is recent (${timeSinceSync.inMinutes} min) - no flag needed',
               );
             }
           } else {
             // Could not parse date - assume sync needed
-            developer.log('BackgroundSyncWorker: Could not parse sync date - setting flag');
+             
             shouldSync = true;
           }
         }
@@ -148,12 +148,12 @@ Future<void> _checkAndSetFlagIfNeeded() async {
       // Set flag in SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(BackgroundSyncWorker.syncNeededFlagKey, true);
-      developer.log('BackgroundSyncWorker: Sync needed flag set');
+       
     } else {
       // Clear flag if sync is recent
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(BackgroundSyncWorker.syncNeededFlagKey, false);
-      developer.log('BackgroundSyncWorker: Sync needed flag cleared');
+       
     }
   } catch (e, stackTrace) {
     developer.log(
@@ -189,34 +189,34 @@ DateTime? _parseSyncDate(String dateString) {
     // Try parsing as ISO 8601
     return DateTime.parse(dateString);
   } catch (e) {
-    developer.log('BackgroundSyncWorker: Error parsing date: $dateString - $e');
+     
     return null;
   }
 }
 
 /// Background Sync Worker
-/// Checks if last sync is 6 hours old and sets a flag for UI to show snackbar
+/// Checks if last sync is older than 30 min and sets a flag for UI to prompt force sync
 class BackgroundSyncWorker {
   static const String taskName = backgroundSyncTaskKey;
-  static const Duration syncThreshold = Duration(minutes: 10);
+  static const Duration syncThreshold = Duration(minutes: 30);
   static const String syncNeededFlagKey = 'sync_needed_flag';
 
-  /// Register periodic sync check task (runs every 15 minutes)
+  /// Register periodic sync check task (runs every 30 minutes)
   static Future<void> registerPeriodicTask() async {
     try {
       // IMPORTANT: Cancel any existing task first to avoid duplicates
       try {
         await Workmanager().cancelByUniqueName(taskName);
-        developer.log('BackgroundSyncWorker: Cancelled existing task before registration');
+         
       } catch (e) {
         // Ignore if task doesn't exist
-        developer.log('BackgroundSyncWorker: No existing task to cancel: $e');
+         
       }
       
       await Workmanager().registerPeriodicTask(
         taskName,
         taskName,
-        frequency: const Duration(hours: 6),
+        frequency: const Duration(minutes: 30),
         constraints: Constraints(
           networkType: NetworkType.connected,
           requiresBatteryNotLow: false,
@@ -228,21 +228,21 @@ class BackgroundSyncWorker {
         existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
       );
       
-      developer.log('BackgroundSyncWorker: Periodic task registered successfully');
-      developer.log('BackgroundSyncWorker: Task name: $taskName');
-      developer.log('BackgroundSyncWorker: Will run every 6 hours, starting in 10 seconds');
+       
+       
+       
       
       // Verify task is scheduled (Android only)
       try {
         await Future.delayed(const Duration(seconds: 2)); // Wait a bit for registration
         final isScheduled = await Workmanager().isScheduledByUniqueName(taskName);
-        developer.log('BackgroundSyncWorker: Task scheduled status: $isScheduled');
+         
         
         if (!isScheduled) {
-          developer.log('BackgroundSyncWorker: WARNING - Task registration returned false!');
+           
         }
       } catch (e) {
-        developer.log('BackgroundSyncWorker: Could not verify task schedule status: $e');
+         
       }
     } catch (e, stackTrace) {
       developer.log(
@@ -257,7 +257,7 @@ class BackgroundSyncWorker {
   /// Cancel periodic task
   static Future<void> cancelTask() async {
     await Workmanager().cancelByUniqueName(taskName);
-    developer.log('BackgroundSyncWorker: Task cancelled');
+     
   }
 
   /// Register a one-off test task (for immediate testing)
@@ -273,9 +273,9 @@ class BackgroundSyncWorker {
           networkType: NetworkType.connected,
         ),
       );
-      developer.log('BackgroundSyncWorker: Test task registered (will run in 5 seconds)');
+       
     } catch (e) {
-      developer.log('BackgroundSyncWorker: Error registering test task: $e');
+       
     }
   }
 
@@ -285,7 +285,7 @@ class BackgroundSyncWorker {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getBool(syncNeededFlagKey) ?? false;
     } catch (e) {
-      developer.log('BackgroundSyncWorker: Error checking flag: $e');
+       
       return false;
     }
   }
@@ -295,9 +295,9 @@ class BackgroundSyncWorker {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(syncNeededFlagKey, false);
-      developer.log('BackgroundSyncWorker: Sync needed flag cleared');
+       
     } catch (e) {
-      developer.log('BackgroundSyncWorker: Error clearing flag: $e');
+       
     }
   }
 }

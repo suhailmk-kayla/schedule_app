@@ -45,10 +45,9 @@ void main() async {
       isInDebugMode: true,
     );
     await BackgroundSyncWorker.registerPeriodicTask();
-    developer.log('Background sync worker initialized');
+     
   } catch (e) {
     // Log error but don't block app startup
-    developer.log('Background sync worker initialization failed: $e');
   }
   // await BackgroundSyncWorker.registerTestTask();
   runApp(const MyApp());
@@ -90,10 +89,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       try {
         final syncProvider = getIt<SyncProvider>();
         syncProvider.syncFailedSyncs().catchError((e) {
-          developer.log('Error retrying failed syncs on resume: $e');
+           
         });
       } catch (e) {
-        developer.log('Error getting SyncProvider on resume: $e');
+         
       }
       
       // Check if background sync worker detected that sync is needed
@@ -106,25 +105,25 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   // void _checkAndTriggerSyncIfNeeded() {
   //   BackgroundSyncWorker.isSyncNeeded().then((isNeeded) {
   //     if (isNeeded) {
-  //       developer.log('App resumed: Sync is needed (12+ hours old), triggering sync...');
+  //        
   //       try {
   //         final syncProvider = getIt<SyncProvider>();
   //         // Only trigger if not already syncing
   //         if (!syncProvider.isSyncing) {
   //           syncProvider.startSync().catchError((e) {
-  //             developer.log('Error triggering sync on resume: $e');
+  //              
   //           });
   //         } else {
-  //           developer.log('Sync already in progress, skipping auto-trigger');
+  //            
   //         }
   //       } catch (e) {
-  //         developer.log('Error getting SyncProvider for auto-sync: $e');
+  //          
   //       }
   //     } else {
-  //       developer.log('App resumed: Sync is recent, no auto-sync needed');
+  //        
   //     }
   //   }).catchError((e) {
-  //     developer.log('Error checking sync need on resume: $e');
+  //      
   //   });
   // }
 
@@ -155,7 +154,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       child: Consumer<NotificationManager>(
         builder: (context, notificationManager, _) {
           if (notificationManager.notificationLogoutTrigger) {
-            developer.log('Logout trigger detected');
+             
             WidgetsBinding.instance.addPostFrameCallback((_) {
               notificationManager.resetLogoutTrigger();
               _navigatorKey.currentState?.pushAndRemoveUntil(

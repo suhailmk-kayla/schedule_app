@@ -28,7 +28,7 @@ class _UsersScreenState extends State<UsersScreen> {
         builder: (_) => const CreateUserScreen(),
       ),
     ).then((_) {
-      developer.log('CreateUserScreen returned');
+       
       // Refresh users list after returning - use postFrameCallback for safety
       if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {

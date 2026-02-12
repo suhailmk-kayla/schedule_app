@@ -143,7 +143,7 @@ class SubCategoriesProvider extends ChangeNotifier {
           dataIds: dataIds,
           message: 'Sub-Category updates',
         ).catchError((e) {
-          developer.log('SubCategoriesProvider: Error sending push notification: $e');
+           
         });
 
         _isLoading = false;
@@ -206,7 +206,7 @@ class SubCategoriesProvider extends ChangeNotifier {
           dataIds: dataIds,
           message: 'Sub-Category updates',
         ).catchError((e) {
-          developer.log('SubCategoriesProvider: Error sending push notification: $e');
+           
         });
 
         _isLoading = false;

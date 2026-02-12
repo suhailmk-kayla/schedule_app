@@ -105,7 +105,7 @@ class CategoriesProvider extends ChangeNotifier {
           dataIds: dataIds,
           message: 'Category updates',
         ).catchError((e) {
-          developer.log('CategoriesProvider: Error sending push notification: $e');
+           
         });
 
         _isLoading = false;
@@ -165,7 +165,7 @@ class CategoriesProvider extends ChangeNotifier {
           dataIds: dataIds,
           message: 'Category updates',
         ).catchError((e) {
-          developer.log('CategoriesProvider: Error sending push notification: $e');
+           
         });
 
         _isLoading = false;

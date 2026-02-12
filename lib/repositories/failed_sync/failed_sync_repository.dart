@@ -31,7 +31,7 @@ class FailedSyncRepository {
       );
       return const Right(null);
     } catch (e) {
-      developer.log('FailedSyncRepository: addFailedSync error: ${e.toString()}');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }

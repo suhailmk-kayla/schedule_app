@@ -217,7 +217,7 @@ class SyncProvider extends ChangeNotifier {
       return;
     }
 
-    developer.log('SyncProvider: Starting sync...');
+     
     _isSyncing = true;
     _isStopped = false;
     _resetSyncFlags();
@@ -239,7 +239,7 @@ class SyncProvider extends ChangeNotifier {
     _lastProgressUpdate = null;
 
     notifyListeners();
-    developer.log('SyncProvider: State updated, notifyListeners() called');
+     
 
     try {
       await _startSyncDatabase();
@@ -257,12 +257,12 @@ class SyncProvider extends ChangeNotifier {
 
   /// Stop syncing
   void stopSync() {
-    developer.log('SyncProvider: stopSync() called');
+     
     _isStopped = true;
     _isSyncing = false;
     _currentTask = 'Sync stopped';
     notifyListeners();
-    developer.log('SyncProvider: Sync stopped, notifyListeners() called');
+     
   }
 
   /// Sync failed syncs
@@ -317,7 +317,7 @@ class SyncProvider extends ChangeNotifier {
       'SyncProvider: _startSyncDatabase() - syncing table: $_syncingTable--the recursive funxtion is running....',
     );
     if (_isStopped) {
-      developer.log('SyncProvider: _startSyncDatabase() - sync was stopped');
+       
       _isSyncing = false;
       notifyListeners();
       return;
@@ -326,7 +326,7 @@ class SyncProvider extends ChangeNotifier {
     try {
       // Use cached values (matching KMP pattern - no async storage reads)
       final userType = _cachedUserType ?? 0;
-      developer.log('SyncProvider: _startSyncDatabase() - UserType: $userType');
+       
 
       if (!_isProductDownloaded) {
         _syncingTable = 'Product';
@@ -452,14 +452,14 @@ class SyncProvider extends ChangeNotifier {
         await _downloadUserCategories();
       } else {
         // All syncs completed
-        developer.log('SyncProvider: All syncs completed!');
+         
         _isSyncing = false;
         _progress = 1.0;
         _currentTask = 'Sync completed';
         // Refresh last sync date after sync completes
         await loadLastSyncDate();
         notifyListeners();
-        developer.log('SyncProvider: Sync completed, notifyListeners() called');
+         
       }
     } catch (e, stackTrace) {
       developer.log(
@@ -486,7 +486,7 @@ class SyncProvider extends ChangeNotifier {
   }) async {
     if (id == -1) {
       // Full sync mode
-      developer.log('SyncProvider: _downloadProducts() - Part: $_productPart');
+       
       _updateTask('Product details downloading...');
     }
 
@@ -637,7 +637,7 @@ class SyncProvider extends ChangeNotifier {
   }) async {
     if (id == -1) {
       // Full sync mode
-      developer.log('SyncProvider: _downloadCarBrand() - Part: $_carBrandPart');
+       
       _updateTask('Car details downloading...');
     }
 
@@ -1278,7 +1278,7 @@ class SyncProvider extends ChangeNotifier {
               (_) {},
             );
             _subCategoryPart++;
-            developer.log('downloading sub-categories part: $_subCategoryPart');
+             
             _startSyncDatabase();
           }
         } else {
@@ -1794,6 +1794,13 @@ class SyncProvider extends ChangeNotifier {
             _startSyncDatabase();
           } else {
             // CRITICAL FIX: Await database operation to prevent locks
+            // TRACE: log API master order_sub_id we are storing (path 1 – from out_of_stocks)
+            for (final m in outOfStocks) {
+              developer.log(
+                'SyncProvider: storing OOS master from API oospMasterId=${m.outOfStockId}, outosOrderSubId=${m.outosOrderSubId}',
+                name: 'SyncProvider.trace',
+              );
+            }
             final addResult = await _outOfStockRepository.addOutOfStockMasters(
               outOfStocks,
             );
@@ -1917,6 +1924,13 @@ class SyncProvider extends ChangeNotifier {
             _startSyncDatabase();
           } else {
             // CRITICAL FIX: Await database operation to prevent locks
+            // TRACE: log API sub order_sub_id we are storing (path 2 – from out_of_stock_sub)
+            for (final s in outOfStockSubs) {
+              developer.log(
+                'SyncProvider: storing OOS product from API oospId=${s.outOfStockSubId}, oospMasterId=${s.outosSubOutosId}, outosSubOrderSubId=${s.outosSubOrderSubId}',
+                name: 'SyncProvider.trace',
+              );
+            }
             final addResult = await _outOfStockRepository.addOutOfStockProducts(
               outOfStockSubs,
             );
@@ -1932,6 +1946,13 @@ class SyncProvider extends ChangeNotifier {
         } else {
           // Single record retry mode (matching KMP pattern)
           if (outOfStockSubs.isNotEmpty) {
+            // TRACE: when creating masters from subs we use sub.outosSubOrderSubId as master's outosOrderSubId
+            for (final sub in outOfStockSubs) {
+              developer.log(
+                'SyncProvider: creating OOS master from sub (retry) outosSubOutosId=${sub.outosSubOutosId}, outosSubOrderSubId=${sub.outosSubOrderSubId} -> master.outosOrderSubId',
+                name: 'SyncProvider.trace',
+              );
+            }
             // CRITICAL FIX: Create master records from sub data
             // The query getOutOfStockMastersWithDetails reads from OutOfStockMaster table
             // So we must ensure master exists before sub can be displayed
@@ -3177,7 +3198,7 @@ class SyncProvider extends ChangeNotifier {
   Future<void> downloadOrder({required int id}) async {
     await _ensureUserDataInitialized();
     if (id != -1) {
-      developer.log('Handling order download for id: $id');
+       
     }
     await _downloadOrders(id: id);
   }
@@ -3199,7 +3220,7 @@ class SyncProvider extends ChangeNotifier {
   /// Download single out of stock master by ID
   /// ✅ Already implemented - _downloadOutOfStock supports id parameter
   Future<void> downloadOutOfStock({required int id}) async {
-    developer.log('downloadOutOfStock: downloading out of stock with id: $id');
+     
     await _ensureUserDataInitialized();
     await _downloadOutOfStock(id: id);
   }
@@ -3207,7 +3228,7 @@ class SyncProvider extends ChangeNotifier {
   /// Download single out of stock sub by ID
   /// ✅ Already implemented - _downloadOutOfStockSub supports id parameter
   Future<void> downloadOutOfStockSub({required int id}) async {
-    developer.log('downloadOutOfStockSub: downloading out of stock sub with id: $id');
+     
     await _ensureUserDataInitialized();
     await _downloadOutOfStockSub(id: id);
   }
@@ -3275,7 +3296,7 @@ class SyncProvider extends ChangeNotifier {
     await _ensureUserDataInitialized();
     
     try {
-      developer.log('SyncProvider: updateStoreKeeper called with id: $id');
+       
 
       // Download order from API (matching KMP line 1092)
       // Uses orderDownload endpoint with id parameter
@@ -3382,7 +3403,7 @@ class SyncProvider extends ChangeNotifier {
       final authProvider = getIt<AuthProvider>();
       await authProvider.logout();
       NotificationManager().triggerLogout();
-      developer.log('SyncProvider: logout() - Completed');
+       
     } catch (e, stackTrace) {
       developer.log(
         'SyncProvider: logout() - Error: $e',
@@ -3441,7 +3462,7 @@ class SyncProvider extends ChangeNotifier {
         (syncTime) => syncTime?.updateDate ?? '',
       );
       _syncTimeCache[table] = updateDate;
-      developer.log('SyncProvider: Cached sync time for $table: $updateDate');
+       
     });
 
     await Future.wait(futures);
@@ -3464,13 +3485,13 @@ class SyncProvider extends ChangeNotifier {
   }
 
   void _updateTask(String task) {
-    developer.log('SyncProvider: _updateTask() - $task');
+     
     _currentTask = task;
     notifyListeners();
   }
 
   void _updateError(String message, bool show) {
-    developer.log('SyncProvider: _updateError() - $message (show: $show)');
+     
     _errorMessage = message;
     _showError = show;
     _isSyncing = false; // Stop syncing on error
@@ -3485,7 +3506,7 @@ class SyncProvider extends ChangeNotifier {
   /// Clear all tables (used during logout)
   /// Converted from KMP's clearAllTable function
   Future<void> clearAllTable() async {
-    developer.log('SyncProvider: clearAllTable() - Clearing all tables');
+     
     try {
       await _productsRepository.clearAll();
       await _unitsRepository.clearAll();
@@ -3507,16 +3528,16 @@ class SyncProvider extends ChangeNotifier {
       await _syncTimeRepository.clearAll();
       await _packedSubsRepository.clearAll();
 
-      developer.log('SyncProvider: clearAllTable() - All tables cleared');
+       
     } catch (e) {
-      developer.log('SyncProvider: clearAllTable() - Error: $e');
+       
       rethrow;
     }
   }
 
   /// Logout all users from all devices (admin only - matches KMP About screen)
   Future<void> logoutAllUsersFromDevices() async {
-    developer.log('SyncProvider: logoutAllUsersFromDevices() - Start');
+     
 
     final usersResult = await _usersRepository.getAllUsers();
     final users = usersResult.fold<List<User>>((failure) {

@@ -176,7 +176,7 @@ class CarNameRepository {
       );
       return const Right(null);
     } catch (e) {
-      developer.log('CarNameRepository: Error adding car name: $e');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }

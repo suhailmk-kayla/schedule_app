@@ -16,7 +16,7 @@ class DatabaseHelper {
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await initDatabase();
-    developer.log('<--------------------Database initialized successfully-------------------->',name: 'DatabaseHelper');
+     
     return _database!;
   }
 
@@ -35,13 +35,13 @@ class DatabaseHelper {
 
   /// Create database schema (for new installations)
   Future<void> _onCreate(Database db, int version) async {
-    developer.log('<--------------------Database schema creation started,oncreate method-------------------->',name: 'DatabaseHelper');
+     
     await _createAllTables(db);
   }
 
   /// Handle database upgrades
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    developer.log('Database upgrade from version $oldVersion to $newVersion');
+     
     for (int version = oldVersion + 1; version <= newVersion; version++) {
       await _runMigration(db, version);
     }
@@ -159,7 +159,7 @@ class DatabaseHelper {
     await db.execute(_createOutOfStockMasterTable);
     await db.execute(_createOutOfStockProductsTable);
     await db.execute(_createPackedSubsTable);
-    developer.log('<--------------------Database schema created successfully-------------------->');
+     
   }
 
   // ============================================================================
@@ -574,7 +574,7 @@ class DatabaseHelper {
   // For now, creating placeholder functions
 
   Future<void> _migration1(Database db) async {
-    developer.log('Migration 1: Initial Product table');
+     
     // Migration 1: Initial Product table
     await db.execute('''
       CREATE TABLE IF NOT EXISTS Product (
@@ -600,13 +600,13 @@ class DatabaseHelper {
   }
 
   Future<void> _migration2(Database db) async {
-    developer.log('Migration 2: Add Units table');
+     
     // Migration 2: Add Units table
     await db.execute(_createUnitsTable);
   }
 
   Future<void> _migration3(Database db) async {
-    developer.log('Migration 3: Add Category, SubCategory, Car tables');
+     
     // Migration 3: Add Category, SubCategory, Car tables
     await db.execute(_createCategoryTable);
     await db.execute(_createSubCategoryTable);
@@ -617,7 +617,7 @@ class DatabaseHelper {
   }
 
   Future<void> _migration4(Database db) async {
-    developer.log('Migration 4: Add UsersCategory, Users, Customers, Suppliers, Routes');
+     
     // Migration 4: Add UsersCategory, Users, Customers, Suppliers, Routes
     await db.execute(_createUsersCategoryTable);
     await db.execute(_createUsersTable);
@@ -627,21 +627,21 @@ class DatabaseHelper {
   }
 
   Future<void> _migration5(Database db) async {
-    developer.log('Migration 5: Add userId to Suppliers, create SalesMan table');
+     
     // Migration 5: Add userId to Suppliers, create SalesMan table
     await db.execute('ALTER TABLE Suppliers ADD userId INTEGER DEFAULT -1 NOT NULL;');
     await db.execute(_createSalesManTable);
   }
 
   Future<void> _migration6(Database db) async {
-    developer.log('Migration 6: Drop and recreate Product table with new schema');
+     
     // Migration 6: Drop and recreate Product table with new schema
     await db.execute('DROP TABLE IF EXISTS Product;');
     await db.execute(_createProductTable);
   }
 
   Future<void> _migration7(Database db) async {
-    developer.log('Migration 7: Add Orders and OrderSub tables (without isProcessFinish, billerId, checkerId)');
+     
     // Migration 7: Add Orders and OrderSub tables (without isProcessFinish, billerId, checkerId)
     await db.execute('''
       CREATE TABLE IF NOT EXISTS Orders (
@@ -694,19 +694,19 @@ class DatabaseHelper {
   }
 
   Future<void> _migration8(Database db) async {
-    developer.log('Migration 8: Add ProductCar table');
+     
     // Migration 8: Add ProductCar table
     await db.execute(_createProductCarTable);
   }
 
   Future<void> _migration9(Database db) async {
-    developer.log('Migration 9: Add ProductUnits table');
+     
     // Migration 9: Add ProductUnits table
     await db.execute(_createProductUnitsTable);
   }
 
   Future<void> _migration10(Database db) async {
-    developer.log('Migration 10: Add OrderSubSuggestions and OutOfStockProducts tables');
+     
     // Migration 10: Add OrderSubSuggestions and OutOfStockProducts tables
     await db.execute('''
       CREATE TABLE IF NOT EXISTS OrderSubSuggestions (
@@ -748,13 +748,13 @@ class DatabaseHelper {
   }
 
   Future<void> _migration11(Database db) async {
-    developer.log('Migration 11: Add note to OrderSubSuggestions');
+     
     // Migration 11: Add note to OrderSubSuggestions
     await db.execute('ALTER TABLE OrderSubSuggestions ADD note TEXT DEFAULT \'\' NOT NULL;');
   }
 
   Future<void> _migration12(Database db) async {
-    developer.log('Migration 12: Change isCheckedflag type in OrderSub (SQLite doesn\'t support DROP COLUMN)');
+     
     // Migration 12: Change isCheckedflag type in OrderSub (SQLite doesn't support DROP COLUMN)
     // We need to recreate the table with the correct type
     await db.execute('''
@@ -797,7 +797,7 @@ class DatabaseHelper {
   }
 
   Future<void> _migration13(Database db) async {
-    developer.log('Migration 13: Drop and recreate OutOfStockProducts with correct oospFlag type');
+     
     // Migration 13: Drop and recreate OutOfStockProducts with correct oospFlag type
     await db.execute('DROP TABLE IF EXISTS OutOfStockProducts;');
     await db.execute('''
@@ -829,7 +829,7 @@ class DatabaseHelper {
   }
 
   Future<void> _migration14(Database db) async {
-    developer.log('Migration 14: Add OutOfStockMaster and recreate OutOfStockProducts with oospMasterId');
+     
     // Migration 14: Add OutOfStockMaster and recreate OutOfStockProducts with oospMasterId
     await db.execute('''
       CREATE TABLE IF NOT EXISTS OutOfStockMaster (
@@ -883,44 +883,44 @@ class DatabaseHelper {
   }
 
   Future<void> _migration15(Database db) async {
-    developer.log('Migration 15: Add oospMasterId to OutOfStockProducts');
+     
     // Migration 15: Add oospMasterId to OutOfStockProducts
     await db.execute('ALTER TABLE OutOfStockProducts ADD oospMasterId INTEGER DEFAULT -1 NOT NULL;');
   }
 
   Future<void> _migration16(Database db) async {
-    developer.log('Migration 16: Add FailedSync table');
+     
     // Migration 16: Add FailedSync table
     await db.execute(_createFailedSyncTable);
   }
 
   Future<void> _migration17(Database db) async {
-    developer.log('Migration 17: Add isProcessFinish to Orders');
+     
     // Migration 17: Add isProcessFinish to Orders
     await db.execute('ALTER TABLE Orders ADD isProcessFinish INTEGER DEFAULT 0 NOT NULL;');
   }
 
   Future<void> _migration18(Database db) async {
-    developer.log('Migration 18: Add address to Users');
+     
     // Migration 18: Add address to Users
     await db.execute('ALTER TABLE Users ADD address TEXT DEFAULT \'\' NOT NULL;');
   }
 
   Future<void> _migration19(Database db) async {
-    developer.log('Migration 19: Add isViewed to OutOfStockMaster and OutOfStockProducts');
+     
     // Migration 19: Add isViewed to OutOfStockMaster and OutOfStockProducts
     await db.execute('ALTER TABLE OutOfStockMaster ADD isViewed INTEGER DEFAULT 0 NOT NULL;');
     await db.execute('ALTER TABLE OutOfStockProducts ADD isViewed INTEGER DEFAULT 0 NOT NULL;');
   }
 
   Future<void> _migration20(Database db) async {
-    developer.log('Migration 20: Add SyncTime table');
+     
     // Migration 20: Add SyncTime table
     await db.execute(_createSyncTimeTable);
   }
 
   Future<void> _migration21(Database db) async {
-    developer.log('Migration 21: Add PackedSubs table and narration/UUID columns');
+     
     // Migration 21: Add PackedSubs table and narration/UUID columns
     await db.execute(_createPackedSubsTable);
     await db.execute('ALTER TABLE OrderSub ADD narration TEXT DEFAULT \'\' NOT NULL;');
@@ -931,7 +931,7 @@ class DatabaseHelper {
   }
 
   Future<void> _migration22(Database db) async {
-    developer.log('Migration 22: Add OrderSubEditCache table');
+     
     // Migration 22: Add OrderSubEditCache table
     await db.execute(_createOrderSubEditCacheTable);
   }

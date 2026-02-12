@@ -131,7 +131,7 @@ class _OutOfStockListScreenState extends State<OutOfStockListScreen> {
     return Consumer<NotificationManager>(
       builder: (context, notificationManager, _) {
         if (notificationManager.notificationTrigger) {
-          developer.log('OutOfStockListScreen: notificationTrigger: true');
+           
           WidgetsBinding.instance.addPostFrameCallback((_) {
             final provider = Provider.of<OutOfStockProvider>(context, listen: false);
             provider.getAllOosp(searchKey: provider.searchKey, date: provider.date);

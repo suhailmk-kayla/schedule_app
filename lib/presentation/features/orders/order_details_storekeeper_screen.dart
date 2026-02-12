@@ -111,7 +111,10 @@ class _OrderDetailsStorekeeperScreenState
               isLoading: isLoading,
             ),
           ),
-          bottomNavigationBar: _buildBottomBar(context, ordersProvider, order),
+          bottomNavigationBar: () {
+            final bar = _buildBottomBar(context, ordersProvider, order);
+            return bar != null ? SafeArea(top: false, child: bar) : null;
+          }(),
         );
       },
     );

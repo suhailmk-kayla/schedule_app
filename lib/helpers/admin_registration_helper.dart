@@ -152,12 +152,12 @@ Future<void> createAdminAccount() async {
   );
 
   if (result['success']) {
-    developer.log('✅ Admin created successfully!');
-    developer.log('User: ${result['user']}');
+     
+     
   } else {
     print('❌ Error: ${result['message']}');
     if (result['rawResponse'] != null) {
-      developer.log('Response: ${result['rawResponse']}');
+       
     }
   }
 }

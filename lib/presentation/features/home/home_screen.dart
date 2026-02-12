@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/presentation/common_widgets/sync_refresh_button.dart';
 import 'package:schedule_frontend_flutter/presentation/features/orders/draft_orders_screen.dart';
 import 'dart:developer' as developer;
 import 'package:schedule_frontend_flutter/utils/push_notification_helper.dart';
@@ -16,7 +17,6 @@ import '../product_settings/product_settings_screen.dart';
 import '../orders/orders_screen.dart';
 import '../out_of_stock/out_of_stock_list_screen.dart';
 import '../suppliers/suppliers_screen.dart';
-import '../sync/sync_screen.dart';
 import 'home_drawer.dart';
 
 /// Home Screen
@@ -45,9 +45,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // This ensures any missed push notifications are caught
       final syncProvider = Provider.of<SyncProvider>(context, listen: false);
       syncProvider.syncFailedSyncs().then((_) {
-        developer.log('HomeScreen: Completed retrying failed syncs');
+         
       }).catchError((e) {
-        developer.log('HomeScreen: Error retrying failed syncs: $e');
+         
       });
     });
   }
@@ -68,7 +68,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final homeProvider = Provider.of<HomeProvider>(context, listen: false);
         homeProvider.refreshCounts();
-        developer.log('HomeScreen: Refreshed badge counts on app resume');
+         
       });
     }
   }
@@ -166,22 +166,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             padding: const EdgeInsets.all(8.0),
             child: Column(
               children: [
-                _SyncRefreshButton(
-                  onRefresh: () async {
-                    final syncProvider = Provider.of<SyncProvider>(context, listen: false);
-                    if (!syncProvider.isSyncing) {
-                      // Navigate to sync screen
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const SyncScreen()),
-                      );
-                      // Reload last sync date after sync completes
-                      if (mounted) {
-                        syncProvider.loadLastSyncDate();
-                      }
-                    }
-                  },
-                ),
+                const SyncRefreshButton(),
                 Expanded(
                   child: GridView.builder(
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -336,84 +321,6 @@ class _MenuItemCard extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Sync Refresh Button Widget
-/// Shows refresh button with last sync date
-class _SyncRefreshButton extends StatelessWidget {
-  final VoidCallback onRefresh;
-
-  const _SyncRefreshButton({required this.onRefresh});
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<SyncProvider>(
-      builder: (context, syncProvider, _) {
-        // Load last sync date on first build
-        if (syncProvider.lastSyncDate == null && !syncProvider.isSyncing) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            syncProvider.loadLastSyncDate();
-          });
-        }
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.blue.shade50,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.blue.shade200),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Last sync date
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'Last Synced:',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.black54,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      syncProvider.lastSyncDate ?? 'Never',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Refresh button
-              IconButton(
-                icon: syncProvider.isSyncing
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.refresh, size: 20),
-                onPressed: syncProvider.isSyncing ? null : onRefresh,
-                tooltip: 'Sync Data',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }

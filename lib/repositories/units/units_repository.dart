@@ -344,10 +344,10 @@ class UnitsRepository {
     try {
       final db = await _database;
       await db.delete('Units');
-      developer.log('UnitsRepository: clearAll() - Units cleared');
+       
       return const Right(null);
     } catch (e) {
-      developer.log('UnitsRepository: clearAll() - Error: ${e.toString()}');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -431,10 +431,10 @@ class UnitsRepository {
 
       return Right(unitApi.data);
     } on DioException catch (e) {
-      developer.log('UnitsRepository: Error creating unit: ${e.toString()}');
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
-      developer.log('UnitsRepository: Error creating unit: ${e.toString()}');
+       
       return Left(UnknownFailure.fromError(e));
     }
   }

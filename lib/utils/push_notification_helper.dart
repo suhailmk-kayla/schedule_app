@@ -18,7 +18,7 @@ class PushNotificationHelper {
   /// Should be called in main.dart before runApp()
   static Future<void> initialize() async {
     if (_isInitialized) {
-      developer.log('OneSignal already initialized');
+       
       return;
     }
 
@@ -37,17 +37,17 @@ class PushNotificationHelper {
       
       // Track push subscription changes (IMPORTANT: detects when token is ready)
       OneSignal.User.pushSubscription.addObserver((state) {
-        developer.log('Push Subscription State Changed:');
-        developer.log('  Opted In: ${OneSignal.User.pushSubscription.optedIn}');
-        developer.log('  ID: ${OneSignal.User.pushSubscription.id}');
-        developer.log('  Token: ${OneSignal.User.pushSubscription.token}');
-        developer.log('  State: ${state.current.jsonRepresentation()}');
+         
+         
+         
+         
+         
         
         // Save token when it becomes available
         final token = OneSignal.User.pushSubscription.id;
         if (token != null && token.isNotEmpty) {
           StorageHelper.setDeviceToken(token);
-          developer.log('Device token saved: $token');
+           
         }
       });
 
@@ -57,12 +57,12 @@ class PushNotificationHelper {
 
       // Track user state changes
       OneSignal.User.addObserver((state) {
-        developer.log('OneSignal user changed: ${state.jsonRepresentation()}');
+         
       });
 
       // Set up notification click handler
       OneSignal.Notifications.addClickListener((event) {
-        developer.log('OneSignal notification clicked: ${event.notification}');
+         
         // Process notification when clicked (in case it wasn't processed in foreground)
         _processNotification(event.notification.additionalData);
       });
@@ -70,12 +70,12 @@ class PushNotificationHelper {
       // Set up foreground notification handler
       // This is called when notification is received while app is in foreground
       OneSignal.Notifications.addForegroundWillDisplayListener((event) async {
-        developer.log('OneSignal notification received in foreground:');
+         
         
         // Extract additional data from notification
         final additionalData = event.notification.additionalData;
         if (additionalData != null) {
-          developer.log('OneSignal notification additional data: ${additionalData.toString()}');
+           
           try {
             await _processNotification(additionalData);
           } catch (e, stackTrace) {
@@ -107,7 +107,7 @@ if (!isPayloadNotification || showNotification == '0') {
 
       // Set up permission observer
       OneSignal.Notifications.addPermissionObserver((state) {
-        developer.log('OneSignal permission changed: ${state.toString()}');
+         
         
       });
 
@@ -119,9 +119,9 @@ if (!isPayloadNotification || showNotification == '0') {
       _setupFirebaseMessagingChannel();
 
       _isInitialized = true;
-      developer.log('OneSignal initialized successfully');
+       
     } catch (e) {
-      developer.log('Error initializing OneSignal: $e');
+       
       rethrow;
     }
   }
@@ -130,50 +130,50 @@ if (!isPayloadNotification || showNotification == '0') {
   /// Extracts data from OneSignal notification and routes to PushNotificationHandler
   /// Matches KMP's pattern where notification data is extracted and processed
   static Future<void> _processNotification(Map<String, dynamic>? additionalData) async {
-    developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    developer.log('🔄 _processNotification() START');
-    developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+     
+     
+     
     
     if (additionalData == null || additionalData.isEmpty) {
-      developer.log('⚠️ No additional data in notification');
-      developer.log('  • additionalData: $additionalData');
-      developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+       
+       
+       
       return;
     }
     
-    developer.log('✅ Additional data found');
-    developer.log('  • Data keys: ${additionalData.keys}');
-    developer.log('  • Data size: ${additionalData.length} entries');
-    developer.log('  • Full data: $additionalData');
+     
+     
+     
+     
     
     try {
       // Get SyncProvider instance from dependency injection
       // We need to get it lazily since it might not be registered yet
-      developer.log('📦 Getting SyncProvider from dependency injection...');
+       
       SyncProvider? syncProvider;
       try {
         syncProvider = GetIt.instance<SyncProvider>();
-        developer.log('✅ SyncProvider retrieved successfully');
+         
       } catch (e) {
-        developer.log('⚠️ SyncProvider not available on first try: $e');
-        developer.log('  → Attempting alternative retrieval method...');
+         
+         
         // Try to get it from GetIt with optional check
         if (GetIt.instance.isRegistered<SyncProvider>()) {
           syncProvider = GetIt.instance<SyncProvider>();
-          developer.log('✅ SyncProvider retrieved via isRegistered check');
+           
         } else {
-          developer.log('❌ SyncProvider not registered in GetIt');
-          developer.log('  → Cannot process notification');
-          developer.log('  → This might happen if notification arrives before app initialization');
-          developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+           
+           
+           
+           
           return;
         }
       }
 
       // Process notification through handler
-      developer.log('🚀 Calling PushNotificationHandler.handleNotification()...');
-      developer.log('  • additionalData: $additionalData');
-      developer.log('  • syncProvider: available');
+       
+       
+       
       
       
       await PushNotificationHandler.handleNotification(
@@ -181,18 +181,18 @@ if (!isPayloadNotification || showNotification == '0') {
         syncProvider,
       );
       
-      developer.log('✅ PushNotificationHandler.handleNotification() completed');
-      developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+       
+       
     } catch (e, stackTrace) {
-      developer.log('❌ Error in _processNotification()');
-      developer.log('  • Error: $e');
-      developer.log('  • Error type: ${e.runtimeType}');
+       
+       
+       
       developer.log(
         'PushNotificationHelper: Error processing notification: $e',
         error: e,
         stackTrace: stackTrace,
       );
-      developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+       
     }
   }
 
@@ -203,10 +203,10 @@ if (!isPayloadNotification || showNotification == '0') {
     try {
       final subscription = OneSignal.User.pushSubscription;
       final userId = subscription.id;
-      developer.log('OneSignal User ID: $userId');
+       
       return userId;
     } catch (e) {
-      developer.log('Error getting OneSignal User ID: $e');
+       
       return null;
     }
   }
@@ -218,13 +218,13 @@ if (!isPayloadNotification || showNotification == '0') {
     for (int i = 0; i < maxRetries; i++) {
       final pushId = getPushSubscriptionId();
       if (pushId != null && pushId.isNotEmpty) {
-        developer.log('OneSignal User ID obtained: $pushId');
+         
         return pushId;
       }
-      developer.log('OneSignal User ID not available yet, retry ${i + 1}/$maxRetries');
+       
       await Future.delayed(const Duration(milliseconds: 500));
     }
-    developer.log('OneSignal User ID not available after $maxRetries retries');
+     
     return null;
   }
 
@@ -234,46 +234,46 @@ if (!isPayloadNotification || showNotification == '0') {
   /// In KMP, MyFirebaseMessagingService directly calls PushNotificationHandler.handleNotification
   /// Here, we forward to Flutter which then calls PushNotificationHandler.handleNotification
   static void _setupFirebaseMessagingChannel() {
-    developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    developer.log('📡 Setting up Firebase Messaging Service method channel...');
-    developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+     
+     
+     
     
     const MethodChannel channel = MethodChannel('com.foms.schedule/firebase_notifications');
     
     channel.setMethodCallHandler((call) async {
-      developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      developer.log('📨 Method channel call received');
-      developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      developer.log('  • Method: ${call.method}');
-      developer.log('  • Arguments type: ${call.arguments.runtimeType}');
-      developer.log('  • Arguments: ${call.arguments}');
+       
+       
+       
+       
+       
+       
       
       if (call.method == 'onNotificationReceived') {
-        developer.log('✅ Method matches: onNotificationReceived');
-        developer.log('  → This is a notification from service extension');
-        developer.log('  → Processing notification data...');
+         
+         
+         
         
         final data = call.arguments as Map<dynamic, dynamic>?;
         if (data != null) {
-          developer.log('  • Data is not null');
-          developer.log('  • Data keys: ${data.keys}');
-          developer.log('  • Data size: ${data.length} entries');
+           
+           
+           
           
           // Convert Map<dynamic, dynamic> to Map<String, dynamic>
           final notificationData = Map<String, dynamic>.from(
             data.map((key, value) => MapEntry(key.toString(), value)),
           );
           
-          developer.log('✅ Notification data converted successfully');
-          developer.log('  • Converted keys: ${notificationData.keys}');
-          developer.log('  • Notification data: $notificationData');
-          developer.log('  → Calling _processNotification()...');
+           
+           
+           
+           
           
           try {
             // Process through the same handler as OneSignal notifications
             // This matches KMP's PushNotificationHandler.handleNotification(json, database)
             await _processNotification(notificationData);
-            developer.log('✅ Notification processed successfully');
+             
           } catch (e, stackTrace) {
             developer.log(
               '❌ Error processing notification: $e',
@@ -282,22 +282,22 @@ if (!isPayloadNotification || showNotification == '0') {
             );
           }
         } else {
-          developer.log('⚠️ Notification data is null');
-          developer.log('  → Cannot process notification');
+           
+           
         }
       } else {
-        developer.log('⚠️ Unknown method: ${call.method}');
-        developer.log('  → Expected: onNotificationReceived');
+         
+         
       }
       
-      developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+       
     });
     
-    developer.log('✅ Firebase Messaging Service method channel set up successfully');
-    developer.log('  • Channel name: com.foms.schedule/firebase_notifications');
-    developer.log('  • Handler registered: true');
-    developer.log('  • Ready to receive notifications from service extension');
-    developer.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+     
+     
+     
+     
+     
   }
 
   /// Process stored notifications from SharedPreferences
@@ -308,7 +308,7 @@ if (!isPayloadNotification || showNotification == '0') {
       // Check if user is logged in (don't process if not logged in)
       final isLoggedIn = await StorageHelper.getIsUserLogin();
       if (isLoggedIn != '1') {
-        developer.log('PushNotificationHelper: User not logged in, skipping stored notifications');
+         
         return;
       }
 
@@ -316,18 +316,18 @@ if (!isPayloadNotification || showNotification == '0') {
       final pendingNotifications = await StorageHelper.getPendingNotifications();
       
       if (pendingNotifications.isEmpty) {
-        developer.log('PushNotificationHelper: No pending notifications to process');
+         
         return;
       }
 
-      developer.log('PushNotificationHelper: Processing ${pendingNotifications.length} stored notifications');
+       
 
       // Get SyncProvider instance
       SyncProvider? syncProvider;
       try {
         syncProvider = GetIt.instance<SyncProvider>();
       } catch (e) {
-        developer.log('PushNotificationHelper: SyncProvider not available: $e');
+         
         return;
       }
 
@@ -342,7 +342,7 @@ if (!isPayloadNotification || showNotification == '0') {
           final data = notification['data'] as Map<String, dynamic>?;
           
           if (timestamp == null || data == null) {
-            developer.log('PushNotificationHelper: Invalid notification format, skipping');
+             
             continue;
           }
 
@@ -355,13 +355,13 @@ if (!isPayloadNotification || showNotification == '0') {
           
           // Skip if we've already processed this exact notification
           if (processedDataIds.contains(dataIdsKey)) {
-            developer.log('PushNotificationHelper: Duplicate notification detected, skipping (timestamp: $timestamp)');
+             
             // Still remove it to prevent reprocessing
             processedTimestamps.add(timestamp);
             continue;
           }
 
-          developer.log('PushNotificationHelper: Processing stored notification (timestamp: $timestamp)');
+           
 
           // Process notification
           await PushNotificationHandler.handleNotification(
@@ -372,7 +372,7 @@ if (!isPayloadNotification || showNotification == '0') {
           // Mark as processed
           processedTimestamps.add(timestamp);
           processedDataIds.add(dataIdsKey);
-          developer.log('PushNotificationHelper: Successfully processed notification (timestamp: $timestamp)');
+           
         } catch (e, stackTrace) {
           developer.log(
             'PushNotificationHelper: Error processing stored notification: $e',
@@ -388,7 +388,7 @@ if (!isPayloadNotification || showNotification == '0') {
         await StorageHelper.removePendingNotification(timestamp);
       }
 
-      developer.log('PushNotificationHelper: Processed ${processedTimestamps.length} stored notifications');
+       
     } catch (e, stackTrace) {
       developer.log(
         'PushNotificationHelper: Error in processStoredNotifications: $e',

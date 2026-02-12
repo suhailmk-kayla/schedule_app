@@ -50,11 +50,11 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
       context.read<ProductsProvider>().loadBaseUnits();
       if (widget.productId != null) {
         // Edit mode: Load existing product data
-        developer.log('CreateProductScreen: initState() - widget.productId: ${widget.productId}-Edit mode');
+         
         await _loadProductData(widget.productId!);
       } else {
         // Create mode: Reset form
-        developer.log('CreateProductScreen: initState() - Create mode');
+         
         provider.resetForm();
         // Sync controllers with provider default values
         _syncControllersFromProvider(provider);
@@ -79,7 +79,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
   }
 
   Future<void> _loadProductData(int productId) async {
-    developer.log('<--------------------CreateProductScreen: _loadProductData() of productId: $productId-------------------->');
+     
     setState(() {
       _isLoadingProduct = true;
     });
@@ -222,7 +222,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (!didPop) {
-          developer.log('CreateProductScreen: _onPopInvokedWithResult() - didPop: $didPop');
+           
           final shouldPop = await _onWillPop();
           if (shouldPop && mounted) {
           
@@ -683,9 +683,9 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
   }
 
   void _showBaseUnitBottomSheet(BuildContext context, ProductsProvider provider) {
-    developer.log('Base unit list: ${provider.unitList}');
+     
     if (provider.unitList.isEmpty) {
-      developer.log('Base unit not found');
+       
       ToastHelper.showError('Base unit not found');
       return;
     }

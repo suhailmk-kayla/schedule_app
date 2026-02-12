@@ -109,7 +109,7 @@ class UnitsProvider extends ChangeNotifier {
       (existingUnit) {
         if (existingUnit != null) {
           _errorMessage = 'Item code already exist';
-          developer.log('UnitsProvider: Error creating unit: ${_errorMessage}');
+           
           notifyListeners();
           return;
         }
@@ -126,7 +126,7 @@ class UnitsProvider extends ChangeNotifier {
       (existingUnit) {
         if (existingUnit != null) {
           _errorMessage = 'Item name already exist';
-          developer.log('UnitsProvider: Error creating unit: ${_errorMessage}');
+           
           notifyListeners();
           return;
         }
@@ -167,7 +167,7 @@ class UnitsProvider extends ChangeNotifier {
           dataIds: dataIds,
           message: 'Unit updates',
         ).catchError((e) {
-          developer.log('UnitsProvider: Error sending push notification: $e');
+           
         });
 
         _isLoading = false;
@@ -252,12 +252,12 @@ class UnitsProvider extends ChangeNotifier {
           dataIds: dataIds,
           message: 'Unit updates',
         ).catchError((e) {
-          developer.log('UnitsProvider: Error sending push notification: $e');
+           
         });
 
         // Refresh units list to reflect the changes
         getUnits().catchError((e) {
-          developer.log('UnitsProvider: Error refreshing units after update: $e');
+           
         });
 
         _isLoading = false;

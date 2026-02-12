@@ -336,9 +336,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                           overflow: TextOverflow.ellipsis),
                                      
                                         const SizedBox(height: 2),
-                                        Text('Sub Brand: ${p.sub_brand}',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis),
+                                        // Text('Sub Brand: ${p.sub_brand}',
+                                        //     maxLines: 1,
+                                        //     overflow: TextOverflow.ellipsis),
                                      
                                       const SizedBox(height: 4),
                                       Text(

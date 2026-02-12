@@ -218,10 +218,10 @@ class UsersRepository {
       );
 
       final users = maps.map((map) => User.fromMap(map)).toList();
-      developer.log('checkPhoneNumberTaken users: ${users.isNotEmpty}');
+       
       return Right(users.isNotEmpty);
     } catch (e) {
-      developer.log('checkPhoneNumberTaken error: $e');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -419,7 +419,7 @@ class UsersRepository {
       });
       return const Right(null);
     } catch (e) {
-      developer.log('addUsers error: $e');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -447,7 +447,7 @@ class UsersRepository {
       );
       return const Right(null);
     } catch (e) {
-      developer.log('updateUserLocal error: $e');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -673,19 +673,19 @@ class UsersRepository {
           dataIds: dataIds,
           message: 'User updates',
         ).catchError((e) {
-          developer.log('UsersRepository: Error sending push notification: $e');
+           
         });
       } else {
-        developer.log('UsersRepository: PushNotificationSender not available, skipping push notification');
+         
       }
 
       return Right(createdUser);
     } on DioException catch (e) {
-      developer.log('createUser DioException: $e');
+       
 
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
-      developer.log('createUser error: $e');
+       
       if (e.toString().contains('Code already Exist')) {
         return Left(ValidationFailure.fromError('Code already Exist'));
       }
@@ -820,7 +820,7 @@ class UsersRepository {
           dataIds: dataIds,
           message: 'User updates',
         ).catchError((e) {
-          developer.log('UsersRepository: Error sending push notification: $e');
+           
         });
       }
 
@@ -1022,7 +1022,7 @@ class UsersRepository {
           dataIds: dataIds,
           message: 'User deleted',
         ).catchError((e) {
-          developer.log('UsersRepository: Error sending push notification: $e');
+           
         });
       }
 

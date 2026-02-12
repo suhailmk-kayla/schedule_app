@@ -418,7 +418,7 @@ class OutOfStockRepository {
       );
 
       if (maps.isEmpty) {
-        developer.log('OutOfStockRepository: No out of stock sub found for ID: $oospId');
+         
         return const Right(null);
       }
 
@@ -511,6 +511,11 @@ class OutOfStockRepository {
     int isViewed = 0,
   }) async {
     try {
+      // TRACE: log what we write to local OutOfStockMaster (orderSubId = path 1 from master)
+      developer.log(
+        'OutOfStockRepository.addOutOfStockMaster: writing oospMasterId=${outOfStock.outOfStockId}, orderSubId=${outOfStock.outosOrderSubId}',
+        name: 'OutOfStockRepository.trace',
+      );
       final db = await _database;
       // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
@@ -730,6 +735,11 @@ class OutOfStockRepository {
         final batch = txn.batch();
         // Use INSERT OR REPLACE (matches KMP pattern)
         for (final outOfStockSub in outOfStockSubs) {
+          // TRACE: log what we write to local OutOfStockProducts (orderSubId = path 2 from sub)
+          developer.log(
+            'OutOfStockRepository.addOutOfStockProducts: writing oospId=${outOfStockSub.outOfStockSubId}, oospMasterId=${outOfStockSub.outosSubOutosId}, orderSubId=${outOfStockSub.outosSubOrderSubId}',
+            name: 'OutOfStockRepository.trace',
+          );
           batch.rawInsert(
             '''
             INSERT OR REPLACE INTO OutOfStockProducts (
@@ -1156,10 +1166,10 @@ class OutOfStockRepository {
 
       return Right(outOfStockApi.data);
     } on DioException catch (e) {
-      developer.log('createOutOfStock:error creating out of stock: ${e.toString()}');
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
-      developer.log('createOutOfStock:error creating out of stock: ${e.toString()}');
+       
       return Left(UnknownFailure.fromError(e));
     }
   }

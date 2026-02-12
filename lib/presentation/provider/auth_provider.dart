@@ -82,13 +82,13 @@ class AuthProvider extends ChangeNotifier {
         
         // If still empty, try to fetch from OneSignal (like KMP does)
         if (token.isEmpty) {
-          developer.log('Device token not in storage, fetching from OneSignal...');
+           
           token = await PushNotificationHelper.fetchPushId(maxRetries: 20);
           
           // If we got a token, save it to storage
           if (token != null && token.isNotEmpty) {
             await StorageHelper.setDeviceToken(token);
-            developer.log('OneSignal User ID saved to storage: $token');
+             
           }
         }
       }
@@ -103,22 +103,22 @@ class AuthProvider extends ChangeNotifier {
       // If we still don't have a token after retrying, use placeholder
       if (token != null && token.isNotEmpty) {
         requestPayload['token'] = token;
-        developer.log('Using OneSignal User ID as device token: $token');
+         
       } else {
         // Use placeholder - backend requires non-null device_token
         // This should rarely happen if OneSignal is properly initialized
         requestPayload['token'] = 'not_available';
-        developer.log('Warning: Device token is empty after retries, using placeholder');
+         
       }
 
       // Add TPIN if provided (for admin override when device_token mismatch)
       if (tpin != null && tpin.isNotEmpty) {
         requestPayload['tpin'] = tpin;
-        developer.log('TPIN provided for admin override');
+         
       }
 
       // Debug: Log request payload
-      developer.log('Login request payload: $requestPayload');
+       
 
       // Call login API
       // Use Options to ensure JSON content type (matching KMP's jsonRaw)
@@ -134,9 +134,9 @@ class AuthProvider extends ChangeNotifier {
       );
 
       // Debug: Log response structure
-      developer.log('Login response type: ${response.data.runtimeType}');
-      developer.log('Login response: ${response.data}');
-      developer.log('Login status code: ${response.statusCode}');
+       
+       
+       
 
       // Handle different response types
       // The API might return a List in some error cases, or the response might be wrapped
@@ -146,7 +146,7 @@ class AuthProvider extends ChangeNotifier {
         // If response is a List, it might be an error response
         // Check if it's a single-item list that should be unwrapped
         final listData = response.data as List;
-        developer.log('Warning: Login response is a List with ${listData.length} items');
+         
         
         if (listData.isEmpty) {
           throw Exception('Empty response from server');
@@ -155,7 +155,7 @@ class AuthProvider extends ChangeNotifier {
         // If it's a list with one item that's a map, use that
         if (listData.length == 1 && listData[0] is Map) {
           responseData = Map<String, dynamic>.from(listData[0] as Map);
-          developer.log('Unwrapped single-item list to Map');
+           
         } else {
           // Otherwise, try to construct a proper error response
           throw Exception('Invalid response format: Expected Map but got List with ${listData.length} items');
@@ -166,7 +166,7 @@ class AuthProvider extends ChangeNotifier {
         // Handle Map<dynamic, dynamic>
         responseData = Map<String, dynamic>.from(response.data as Map);
       } else {
-        developer.log('Error: Unexpected response type: ${response.data.runtimeType}');
+         
         throw Exception('Invalid response format: ${response.data.runtimeType}');
       }
 
@@ -198,7 +198,7 @@ class AuthProvider extends ChangeNotifier {
         return Right(userData);
       } else {
         final errorMsg = loginResponse.errorMessage;
-        developer.log('Login error message: $errorMsg');
+         
         _setError(errorMsg);
         _setLoading(false);
         return Left(ServerFailure(
@@ -218,7 +218,7 @@ class AuthProvider extends ChangeNotifier {
         ),
       ));
     } catch (e) {
-      developer.log('Login error: $e');
+       
       final errorMsg = 'An unexpected error occurred. Please try again.';
       _setError(errorMsg);
       _setLoading(false);
@@ -299,7 +299,7 @@ class AuthProvider extends ChangeNotifier {
 
   void _setError(String message) {
     _errorMessage = message;
-    developer.log('Set error message: $message');
+     
     notifyListeners();
   }
 

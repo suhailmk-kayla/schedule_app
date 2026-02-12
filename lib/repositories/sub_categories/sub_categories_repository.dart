@@ -73,7 +73,7 @@ class SubCategoriesRepository {
       final subCategories = maps.map((map) => SubCategory.fromMap(map)).toList();
       return Right(subCategories);
     } catch (e) {
-      developer.log('SubCategoriesRepository: getAllSubCategories error: ${e.toString()}');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -265,10 +265,10 @@ class SubCategoriesRepository {
         }
         await batch.commit(noResult: true);
       });
-      developer.log('SubCategoriesRepository: addSubCategories success: ${subCategories.length}');
+       
       return const Right(null);
     } catch (e) {
-      developer.log('SubCategoriesRepository: addSubCategories error: ${e.toString()}');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -350,10 +350,10 @@ class SubCategoriesRepository {
       final subCategoryListApi = SubCategoryListApi.fromJson(response.data);
       return Right(subCategoryListApi);
     } on DioException catch (e) {
-      developer.log('SubCategoriesRepository: syncSubCategoriesFromApi error: ${e.response?.data}');
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
-      developer.log('SubCategoriesRepository: syncSubCategoriesFromApi error: ${e.toString()}');
+       
       return Left(UnknownFailure.fromError(e));
     }
   }
@@ -396,10 +396,10 @@ class SubCategoriesRepository {
 
       return Right(subCategoryApi.data);
     } on DioException catch (e) {
-      developer.log('SubCategoriesRepository: createSubCategory error: ${e.response?.data}');
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
-      developer.log('SubCategoriesRepository: createSubCategory error: ${e.toString()}');
+       
       return Left(UnknownFailure.fromError(e));
     }
   }

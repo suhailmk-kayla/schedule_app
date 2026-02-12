@@ -27,7 +27,7 @@ class NotificationPermissionEnforcer {
       
       return false;
     } catch (e) {
-      developer.log('Error checking notification permission: $e');
+       
       return false;
     }
   }
@@ -38,7 +38,7 @@ class NotificationPermissionEnforcer {
     try {
       // Request via OneSignal
       final accepted = await OneSignal.Notifications.requestPermission(true);
-      developer.log('Notification permission request result: $accepted');
+       
       
       if (accepted) {
         return true;
@@ -52,7 +52,7 @@ class NotificationPermissionEnforcer {
       
       return false;
     } catch (e) {
-      developer.log('Error requesting notification permission: $e');
+       
       return false;
     }
   }
@@ -63,7 +63,7 @@ class NotificationPermissionEnforcer {
       // Use permission_handler's openAppSettings top-level function
       return await ph.openAppSettings();
     } catch (e) {
-      developer.log('Error opening app settings: $e');
+       
       return false;
     }
   }

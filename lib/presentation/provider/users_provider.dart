@@ -204,13 +204,13 @@ class UsersProvider extends ChangeNotifier {
     final result = await _usersRepository.checkUserActive(userId: userId);
     result.fold(
       (_) {
-        developer.log('User is not active');
+         
         _isUserActive = false;
         notifyListeners();
       },
       (isActive) {
         _isUserActive = isActive;
-        developer.log('User is active: $isActive');
+         
         notifyListeners();
       },
     );
