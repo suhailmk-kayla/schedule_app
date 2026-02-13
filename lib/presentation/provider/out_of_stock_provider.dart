@@ -652,7 +652,8 @@ class OutOfStockProvider extends ChangeNotifier {
       await _createNewSub(
         subItem: subItem,
         qty: subItem.qty - subItem.availQty,
-        availQty: subItem.qty - subItem.availQty,
+        availQty: 0.0,
+        supplierId: -1,
         onFailure: onFailure,
         onSuccess: () async {
           await _outOfStockRepository.updateOospFlag(
@@ -679,12 +680,16 @@ class OutOfStockProvider extends ChangeNotifier {
           userIds.add({'user_id': subItem.supplierId, 'silent_push': 0});
 
           // Fire-and-forget: don't await, just trigger in background
+          // Include table 11 (master) so other admins get full data including new remainder sub
           _pushNotificationSender.sendPushNotification(
-            dataIds: [PushData(table: 12, id: subItem.oospId)],
+            dataIds: [
+              PushData(table: 11, id: subItem.oospMasterId),
+              PushData(table: 12, id: subItem.oospId),
+            ],
             customUserIds: userIds,
             message: 'Order confirmed',
           ).catchError((e) {
-             
+         
           });
 
           _setLoading(false);
@@ -915,7 +920,8 @@ class OutOfStockProvider extends ChangeNotifier {
       await _createNewSub(
         subItem: subItem,
         qty: subItem.qty - subItem.availQty,
-        availQty: subItem.qty - subItem.availQty,
+        availQty: 0.0,
+        supplierId: -1,
         onFailure: onFailure,
         onSuccess: () async {
           await _outOfStockRepository.updateOospFlag(
@@ -942,12 +948,16 @@ class OutOfStockProvider extends ChangeNotifier {
           userIds.add({'user_id': subItem.supplierId, 'silent_push': 0});
 
           // Fire-and-forget: don't await, just trigger in background
+          // Include table 11 (master) so other admins get full data including new remainder sub
           _pushNotificationSender.sendPushNotification(
-            dataIds: [PushData(table: 12, id: subItem.oospId)],
+            dataIds: [
+              PushData(table: 11, id: subItem.oospMasterId),
+              PushData(table: 12, id: subItem.oospId),
+            ],
             customUserIds: userIds,
             message: 'Order confirmed',
           ).catchError((e) {
-             
+         
           });
 
           _setLoading(false);
@@ -1029,7 +1039,11 @@ class OutOfStockProvider extends ChangeNotifier {
 
       // Fire-and-forget: don't await, just trigger in background
       _pushNotificationSender.sendPushNotification(
-        dataIds: [PushData(table: 12, id: subItem.oospId)],
+        dataIds: [
+          PushData(table: 12, id: subItem.oospId),
+          //include master id to get the full order details
+          PushData(table: 11, id: subItem.oospMasterId),
+          ],
         customUserIds: userIds,
         message: 'Supplier response',
       ).catchError((e) {
@@ -1584,7 +1598,7 @@ class OutOfStockProvider extends ChangeNotifier {
         'outos_sub_sales_man_id': subItem.salesmanId,
         'outos_sub_stock_keeper_id': subItem.storekeeperId,
         'outos_sub_date_and_time': dateTimeStr,
-        'outos_sub_supp_id': supplierId == -1 ? subItem.supplierId : supplierId,
+        'outos_sub_supp_id': supplierId,
         'outos_sub_prod_id': subItem.productId,
         'outos_sub_unit_id': subItem.unitId,
         'outos_sub_car_id': subItem.carId,
