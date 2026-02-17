@@ -524,7 +524,7 @@ class _OrderListItem extends StatelessWidget {
               // Invoice No and Date
               Row(
                 children: [
-                    Expanded(
+                  Expanded(
                     child: Text(
                       order.orderInvNo.toString(),
                       style: TextStyle(
@@ -532,19 +532,8 @@ class _OrderListItem extends StatelessWidget {
                         fontWeight: isPending ? FontWeight.bold : FontWeight.bold,
                       ),
                     ),
-                    
                   ),
                   const SizedBox(width: 10),
-                  order.orderIsBilled == 1 ? Container(
-                    padding: EdgeInsets.symmetric(horizontal: 5,vertical: 2),
-                    width: 70,
-                    height: 20,
-                    decoration: BoxDecoration(
-                     border: Border.all(color: Colors.green),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text('Billed'),
-                  ):SizedBox.shrink(),
                   Text(
                     _formatDate(order.updatedAt),
                     style: TextStyle(

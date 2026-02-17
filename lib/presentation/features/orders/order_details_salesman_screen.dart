@@ -40,6 +40,8 @@ class _OrderDetailsSalesmanScreenState
   bool _didInit = false;
   bool _showSendButton = true;
   bool _isHaveReportItem = false;
+  /// True while "Send to Biller & Checker" is in progress; prevents double-tap.
+  bool _isSendingToBillerChecker = false;
 
   @override
   void initState() {
@@ -104,10 +106,54 @@ class _OrderDetailsSalesmanScreenState
   //   );
   // }
 
+  /// Shows confirmation dialog and cancels order if user confirms
+  /// Matching KMP's EditOrder/OrderDetailsSalesman Cancel Order flow
+  Future<void> _handleCancelOrder(
+    BuildContext context,
+    Order order,
+    OrdersProvider ordersProvider,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel Order'),
+        content: const Text('Do you want to cancel this order?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final success = await ordersProvider.cancelOrder(order);
+
+    if (!mounted) return;
+
+    if (success) {
+      ToastHelper.showSuccess('Order cancelled');
+      Navigator.pop(context);
+    } else {
+      ToastHelper.showError(
+        ordersProvider.errorMessage ?? 'Failed to cancel order',
+      );
+    }
+  }
+
   Future<void> _handleSendToBillerAndChecker() async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     final order = ordersProvider.orderDetails?.order;
     if (order == null) return;
+
+    // Prevent double-tap: block if already sending
+    if (_isSendingToBillerChecker) return;
 
     // Double‑check: block forwarding if ANY item is not in stock
     // (matches UI stock status logic in _getStockStatus)
@@ -123,67 +169,64 @@ class _OrderDetailsSalesmanScreenState
       return;
     }
 
-    // Step 1: Send to biller first (just notifications, no flag change, no assignment)
-    // This is essentially a "no-op" for local DB - just sends notifications
-    bool billerSuccess = true;
-    if (order.orderBillerId == -1) {
-      billerSuccess=await ordersProvider.sendToBiller(
-        userId: 0,
-         order: order
-         );
-      // billerSuccess = await ordersProvider.sendToBillerOrChecker(
-      //   isBiller: true,
-      //   userId: 0, 
-      //   order: order,
-      // );
-      
-      if (!billerSuccess) {
-        if (!mounted) return;
-        ToastHelper.showError('failed to send to biller');
-     
-        return; // Stop here if biller notification failed
-      }
-    }
-
-    // Step 2: Send to checker (sets approveFlag to 6)
-    // Run sequentially to avoid race conditions and ensure correct flag update
-    final checkerSuccess = await ordersProvider.sendToCheckers(order);
-
     if (!mounted) return;
+    setState(() => _isSendingToBillerChecker = true);
 
-    if (checkerSuccess) {
-      // Refresh order details to get updated state (flag should now be 6)
-      await _refresh();
-      
-      // Update button visibility based on refreshed order state (matching KMP lines 86-87, 107-108, 130-131)
-      final refreshedOrder = ordersProvider.orderDetails?.order;
-      if (refreshedOrder != null && mounted) {
-        setState(() {
-          // Hide button if biller is assigned OR order is sent to checker/checker is checking
-          // Matching KMP: showSendToBiller = order!!.billerId==-1L
-          // Matching KMP: showSendToChecker = (item.order.approveFlag != OrderApprovalFlag.SEND_TO_CHECKER && item.order.approveFlag != OrderApprovalFlag.CHECKER_IS_CHECKING)
-          _showSendButton = refreshedOrder.orderBillerId == -1 &&
-              refreshedOrder.orderApproveFlag != OrderApprovalFlag.sendToChecker &&
-              refreshedOrder.orderApproveFlag != OrderApprovalFlag.checkerIsChecking;
-        });
-      }
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Order sent to biller and checker')),
+    try {
+      // Step 1: Send to biller first (just notifications, no flag change, no assignment)
+      bool billerSuccess = true;
+      if (order.orderBillerId == -1) {
+        billerSuccess = await ordersProvider.sendToBiller(
+          userId: 0,
+          order: order,
         );
+
+        if (!billerSuccess) {
+          if (!mounted) return;
+          ToastHelper.showError('failed to send to biller');
+          return;
+        }
       }
-    } else {
-      // Show error if checker assignment failed
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Failed to send to checker: ${ordersProvider.errorMessage ?? "Unknown error"}',
+
+      // Step 2: Send to checker (sets approveFlag to 6)
+      final checkerSuccess = await ordersProvider.sendToCheckers(order);
+
+      if (!mounted) return;
+
+      if (checkerSuccess) {
+        await _refresh();
+
+        final refreshedOrder = ordersProvider.orderDetails?.order;
+        if (refreshedOrder != null && mounted) {
+          setState(() {
+            _showSendButton = refreshedOrder.orderBillerId == -1 &&
+                refreshedOrder.orderApproveFlag !=
+                    OrderApprovalFlag.sendToChecker &&
+                refreshedOrder.orderApproveFlag !=
+                    OrderApprovalFlag.checkerIsChecking;
+          });
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Order sent to biller and checker')),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Failed to send to checker: ${ordersProvider.errorMessage ?? "Unknown error"}',
+              ),
+              backgroundColor: Colors.red,
             ),
-            backgroundColor: Colors.red,
-          ),
-        );
+          );
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSendingToBillerChecker = false);
       }
     }
   }
@@ -406,20 +449,25 @@ class _OrderDetailsSalesmanScreenState
         final order = ordersProvider.orderDetails;
         final isLoading = ordersProvider.orderDetailsLoading && !_didInit;
 
+        final canCancel = order != null &&
+            order.order.orderApproveFlag != OrderApprovalFlag.sendToStorekeeper &&
+            order.order.orderApproveFlag != OrderApprovalFlag.completed &&
+            order.order.orderApproveFlag != OrderApprovalFlag.cancelled;
+
         return Scaffold(
           appBar: AppBar(
             title: const Text('Order Details'),
-            // actions: [
-              // if (order != null &&
-              //     order.order.orderApproveFlag !=
-              //         OrderApprovalFlag.sendToStorekeeper &&
-              //     order.order.orderApproveFlag != OrderApprovalFlag.completed &&
-              //     order.order.orderApproveFlag != OrderApprovalFlag.cancelled)
-              //   IconButton(
-              //     icon: const Icon(Icons.edit),
-              //     onPressed: _handleEdit,
-              //   ),
-            // ],
+            actions: [
+              if (canCancel)
+                TextButton.icon(
+                  onPressed: () => _handleCancelOrder(context, order.order, ordersProvider),
+                  icon: const Icon(Icons.cancel, color: Colors.red, size: 20),
+                  label: const Text(
+                    'Cancel Order',
+                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                  ),
+                ),
+            ],
           ),
           body: RefreshIndicator(
             onRefresh: _refresh,
@@ -432,7 +480,11 @@ class _OrderDetailsSalesmanScreenState
           ),
           bottomNavigationBar: () {
             if (order == null) return null;
-            final bar = _buildBottomBar(order.order, ordersProvider);
+            final bar = _buildBottomBar(
+              order.order,
+              ordersProvider,
+              isSendLoading: _isSendingToBillerChecker || ordersProvider.isLoading,
+            );
             return bar != null
                 ? SafeArea(top: false, child: bar)
                 : null;
@@ -642,10 +694,14 @@ final hasReportItem = items.any(
     );
   }
 
-  Widget? _buildBottomBar(Order order, OrdersProvider ordersProvider) {
+  Widget? _buildBottomBar(
+    Order order,
+    OrdersProvider ordersProvider, {
+    bool isSendLoading = false,
+  }) {
     final items = ordersProvider.orderDetailItems;
     final hasEdits = _hasEdits(items);
-    
+
     final shouldShowButton = order.orderApproveFlag !=
             OrderApprovalFlag.sendToStorekeeper &&
         order.orderApproveFlag != OrderApprovalFlag.completed &&
@@ -655,7 +711,6 @@ final hasReportItem = items.any(
     // Show "Check Stock" if there are edits, otherwise show "Send to Biller & Checker"
     final showCheckStock = hasEdits && shouldShowButton;
     final showSendToBillerChecker = !hasEdits && shouldShowButton;
-
 
     // Block send if ANY item is not in stock (outOfStock, reported, notAvailable, etc.)
     final hasAnyNotInStock = items.any(
@@ -729,7 +784,7 @@ final hasReportItem = items.any(
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _handleCheckStock,
+                onPressed: isSendLoading ? null : _handleCheckStock,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.orange,
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -750,28 +805,55 @@ final hasReportItem = items.any(
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: hasAnyNotInStock
-                    ? () {
-                        // Show toast when button is disabled due to out-of-stock items
-                        ToastHelper.showInfo(
-                          'Order cannot be sent. Please ensure all items are in stock.',
-                        );
-                      }
-                    : _handleSendToBillerAndChecker,
+                onPressed: isSendLoading
+                    ? null
+                    : hasAnyNotInStock
+                        ? () {
+                            ToastHelper.showInfo(
+                              'Order cannot be sent. Please ensure all items are in stock.',
+                            );
+                          }
+                        : _handleSendToBillerAndChecker,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: hasAnyNotInStock
-                      ? Colors.grey // Disabled color
-                      : Theme.of(context).primaryColor,
+                  backgroundColor: isSendLoading
+                      ? Colors.grey
+                      : hasAnyNotInStock
+                          ? Colors.grey
+                          : Theme.of(context).primaryColor,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                child: const Text(
-                  'Send to Biller & Checker',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                child: isSendLoading
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Sending...',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      )
+                    : const Text(
+                        'Send to Biller & Checker',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
               ),
             ),
           ],

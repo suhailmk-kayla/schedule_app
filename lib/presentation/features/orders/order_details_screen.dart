@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/order_api.dart';
+import '../../../utils/toast_helper.dart';
 import '../../../models/order_item_detail.dart';
 import '../../../models/order_with_name.dart';
 import '../../../utils/config.dart';
@@ -55,6 +56,47 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     return ordersProvider.loadOrderDetails(widget.orderId);
   }
 
+  /// Shows confirmation dialog and cancels order if user confirms
+  /// Matching KMP's OrderDetailsAdmin Cancel Order flow
+  Future<void> _handleCancelOrder(
+    BuildContext context,
+    Order order,
+    OrdersProvider ordersProvider,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel Order'),
+        content: const Text('Do you want to cancel this order?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final success = await ordersProvider.cancelOrder(order);
+
+    if (!mounted) return;
+
+    if (success) {
+      ToastHelper.showSuccess('Order cancelled');
+      Navigator.pop(context);
+    } else {
+      ToastHelper.showError(
+        ordersProvider.errorMessage ?? 'Failed to cancel order',
+      );
+    }
+  }
+
   @override
   void dispose() {
     // Provider.of<OrdersProvider>(context, listen: false).clearOrderDetails();
@@ -74,8 +116,31 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         final order = ordersProvider.orderDetails;
         final isLoading = ordersProvider.orderDetailsLoading && !_didInit;
 
+        final canCancel = _userType == 1 &&
+            order != null &&
+            order.order.orderApproveFlag != OrderApprovalFlag.sendToStorekeeper &&
+            order.order.orderApproveFlag != OrderApprovalFlag.completed &&
+            order.order.orderApproveFlag != OrderApprovalFlag.cancelled;
+
         return Scaffold(
-          appBar: AppBar(title: const Text('Order Details')),
+          appBar: AppBar(
+            title: const Text('Order Details'),
+            actions: [
+              if (canCancel)
+                TextButton.icon(
+                  onPressed: () => _handleCancelOrder(
+                    context,
+                    order.order,
+                    ordersProvider,
+                  ),
+                  icon: const Icon(Icons.cancel, color: Colors.red, size: 20),
+                  label: const Text(
+                    'Cancel Order',
+                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                  ),
+                ),
+            ],
+          ),
           body: RefreshIndicator(
             onRefresh: _refresh,
             child: _buildBody(

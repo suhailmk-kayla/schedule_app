@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
+import 'package:schedule_frontend_flutter/utils/order_flags.dart';
 import '../../provider/orders_provider.dart';
 import '../../provider/products_provider.dart';
 import '../../../models/order_sub_with_details.dart';
@@ -91,6 +92,47 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     }
     final freight = double.tryParse(_freightChargeController.text) ?? 0.0;
     return total + freight;
+  }
+
+  /// Shows confirmation dialog and cancels order if user confirms
+  /// Matching KMP's EditOrder Cancel Order flow
+  Future<void> _handleCancelOrder(
+    BuildContext context,
+    Order order,
+    OrdersProvider ordersProvider,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel Order'),
+        content: const Text('Do you want to cancel this order?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final success = await ordersProvider.cancelOrder(order);
+
+    if (!mounted) return;
+
+    if (success) {
+      ToastHelper.showSuccess('Order cancelled');
+      Navigator.pop(context);
+    } else {
+      ToastHelper.showError(
+        ordersProvider.errorMessage ?? 'Failed to cancel order',
+      );
+    }
   }
 
   Future<void> _saveAsDraft() async {
@@ -359,17 +401,46 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
         // Return true to allow navigation if user chose save or discard
         return result == 'save' || result == 'discard';
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Create Order'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-        ),
-        body: Consumer<OrdersProvider>(
+      child: Consumer<OrdersProvider>(
+        builder: (context, ordersProvider, _) {
+          final orderMaster = ordersProvider.orderMaster;
+          final canCancel = widget.orderId != null &&
+              widget.orderId!.isNotEmpty &&
+              orderMaster != null &&
+              orderMaster.orderApproveFlag != OrderApprovalFlag.sendToStorekeeper &&
+              orderMaster.orderApproveFlag != OrderApprovalFlag.completed &&
+              orderMaster.orderApproveFlag != OrderApprovalFlag.cancelled;
+
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('Create Order'),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+              actions: [
+                if (canCancel)
+                  TextButton.icon(
+                    onPressed: () => _handleCancelOrder(context, orderMaster, ordersProvider),
+                    icon: const Icon(Icons.cancel, color: Colors.red, size: 20),
+                    label: const Text(
+                      'Cancel Order',
+                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+              ],
+            ),
+            body: _buildCreateOrderBody(context, ordersProvider),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCreateOrderBody(BuildContext context, OrdersProvider ordersProvider) {
+    return Consumer<OrdersProvider>(
           builder: (context, ordersProvider, child) {
             if (ordersProvider.isLoading && ordersProvider.orderMaster == null) {
               return const Center(child: CircularProgressIndicator());
@@ -586,9 +657,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
               ],
             );
           },
-        ),
-      ),
-    );
+        );
   }
 }
 

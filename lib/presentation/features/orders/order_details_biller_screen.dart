@@ -614,51 +614,51 @@ class _FinalBillTabState extends State<_FinalBillTab> {
               ],
             ),
           ),
-          bottomNavigationBar: SafeArea(
-            top: false,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 6,
-                    offset: Offset(0, -2),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _freightController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Freight charge',
-                        hintText: 'Enter freight charge',
-                      ),
-                      onChanged: _onFreightChanged,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: _isSavingFreightCharge ||
-                            _enteredFreightCharge == null
-                        ? null
-                        : _handleSaveFreightCharge,
-                    child: _isSavingFreightCharge
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Save'),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          // bottomNavigationBar: SafeArea(
+          //   top: false,
+          //   child: Container(
+          //     decoration: BoxDecoration(
+          //       color: Theme.of(context).colorScheme.surface,
+          //       boxShadow: const [
+          //         BoxShadow(
+          //           color: Colors.black12,
+          //           blurRadius: 6,
+          //           offset: Offset(0, -2),
+          //         ),
+          //       ],
+          //     ),
+          //     padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          //     child: Row(
+          //       children: [
+          //         Expanded(
+          //           child: TextField(
+          //             controller: _freightController,
+          //             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          //             decoration: const InputDecoration(
+          //               labelText: 'Freight charge',
+          //               hintText: 'Enter freight charge',
+          //             ),
+          //             onChanged: _onFreightChanged,
+          //           ),
+          //         ),
+          //         const SizedBox(width: 12),
+          //         ElevatedButton(
+          //           onPressed: _isSavingFreightCharge ||
+          //                   _enteredFreightCharge == null
+          //               ? null
+          //               : _handleSaveFreightCharge,
+          //           child: _isSavingFreightCharge
+          //               ? const SizedBox(
+          //                   width: 18,
+          //                   height: 18,
+          //                   child: CircularProgressIndicator(strokeWidth: 2),
+          //                 )
+          //               : const Text('Save'),
+          //         ),
+          //       ],
+          //     ),
+          //   ),
+          // ),
         );
       },
     );
@@ -905,14 +905,6 @@ class _EstimatedItemCard extends StatelessWidget {
                 ),
               ],
             ),
-            //checker uploaded images
-            if (item.orderSub.checkerImages != null && item.orderSub.checkerImages!.isNotEmpty)
-            Row(
-              children: [
-                Text('Checker Uploaded Images:'),
-                ...item.orderSub.checkerImages!.map((image) => SmallProductImage(imageUrl: image, size: 40, borderRadius: 5)),
-              ],
-            ),
             const Divider(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1081,6 +1073,34 @@ class _FinalItemCard extends StatelessWidget {
                 ),
               ],
             ),
+            // Checker checked images (only in Final Bill)
+            if (orderSub.checkerImages != null &&
+                orderSub.checkerImages!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Checker Uploaded Images:',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: orderSub.checkerImages!
+                    .map(
+                      (image) => SmallProductImage(
+                        imageUrl: image,
+                        size: 40,
+                        borderRadius: 5,
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+
             const Divider(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

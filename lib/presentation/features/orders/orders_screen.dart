@@ -578,7 +578,7 @@ class _OrderListItem extends StatelessWidget {
               // Invoice No and Date
               Row(
                 children: [
-                    Expanded(
+                  Expanded(
                     child: Text(
                       order.orderInvNo.toString(),
                       style: TextStyle(
@@ -586,19 +586,8 @@ class _OrderListItem extends StatelessWidget {
                         fontWeight: isPending ? FontWeight.bold : FontWeight.bold,
                       ),
                     ),
-                    
                   ),
                   const SizedBox(width: 10),
-                  order.orderIsBilled == 1 ? Container(
-                    padding: EdgeInsets.symmetric(horizontal: 5,vertical: 2),
-                    // width: 70,
-                    height: 20,
-                    decoration: BoxDecoration(
-                     border: Border.all(color: Colors.green),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text('Billed',style: TextStyle(fontSize: 9,color: Colors.green),),
-                  ):SizedBox.shrink(),
                   Text(
                     _formatDate(order.updatedAt),
                     style: TextStyle(
@@ -675,6 +664,26 @@ class _OrderListItem extends StatelessWidget {
                         fontWeight: isPending ? FontWeight.bold : FontWeight.normal,
                         fontStyle: FontStyle.italic,
                         color: _getStatusColor(order, userType, userId),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              // Billed tag at right bottom of list tile
+              if (order.orderIsBilled == 1) ...[
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.green),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        'Billed',
+                        style: TextStyle(fontSize: 10, color: Colors.green.shade700, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],

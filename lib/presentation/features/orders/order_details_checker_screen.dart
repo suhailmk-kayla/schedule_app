@@ -140,12 +140,29 @@ class _OrderDetailsCheckerScreenState
     return items.where(_isItemCountable).length;
   }
 
+  /// Returns true if every countable item has at least one checker image.
+  bool _hasAllItemsWithAtLeastOneImage(List<OrderItemDetail> items) {
+    for (final item in items) {
+      if (!_isItemCountable(item)) continue;
+      final id = item.orderSub.orderSubId;
+      final images = _imageMap[id];
+      if (images == null || images.isEmpty) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   bool _isSubmissionEnabled(List<OrderItemDetail> items) {
     final totalCount = _availableItemCount(items);
     if (totalCount == 0) {
       return false;
     }
-    return _checkedItems.length == totalCount;
+    if (_checkedItems.length != totalCount) {
+      return false;
+    }
+    // Require at least one image per product before submit
+    return _hasAllItemsWithAtLeastOneImage(items);
   }
 
   /// Calculate total price using updated quantities from text fields
@@ -183,8 +200,17 @@ class _OrderDetailsCheckerScreenState
     OrdersProvider provider,
     List<OrderItemDetail> items,
   ) async {
-    if (!_isSubmissionEnabled(items) || _isSubmitting) {
+    if (_isSubmitting) return;
+
+    if (_checkedItems.length != _availableItemCount(items)) {
       ToastHelper.showWarning('Please check all items before submitting');
+      return;
+    }
+
+    if (!_hasAllItemsWithAtLeastOneImage(items)) {
+      ToastHelper.showWarning(
+        'You need to upload minimum one image for each product before submitting.',
+      );
       return;
     }
 

@@ -1379,5 +1379,61 @@ class OutOfStockRepository {
       return Left(UnknownFailure.fromError(e));
     }
   }
+
+  /// Get out of stock products by order sub ID
+  /// Converted from KMP's getOrderByOrderSub (OutOfStockProducts.sq)
+  /// Returns list of OutOfStockSub for building cancel notification payload
+  Future<Either<Failure, List<OutOfStockSub>>> getOutOfStockProductsByOrderSubId(
+    int orderSubId,
+  ) async {
+    try {
+      final db = await _database;
+      final maps = await db.query(
+        'OutOfStockProducts',
+        where: 'flag = 1 AND orderSubId = ?',
+        whereArgs: [orderSubId],
+      );
+      final list = maps.map((m) => OutOfStockSub.fromMap(m)).toList();
+      return Right(list);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Update OutOfStockMaster to cancelled when order is cancelled
+  /// Converted from KMP's updateToCancelled (OutOfStockMaster.sq)
+  Future<Either<Failure, void>> updateMasterToCancelled(int orderSubId) async {
+    try {
+      final db = await _database;
+      final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+      await db.update(
+        'OutOfStockMaster',
+        {'isCompleteflag': 5, 'updatedDateTime': now},
+        where: 'orderSubId = ?',
+        whereArgs: [orderSubId],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Update OutOfStockProducts to cancelled when order is cancelled
+  /// Converted from KMP's oospCancelled/updateToCancelled (OutOfStockProducts.sq)
+  Future<Either<Failure, void>> updateProductToCancelled(int orderSubId) async {
+    try {
+      final db = await _database;
+      final now = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+      await db.update(
+        'OutOfStockProducts',
+        {'oospFlag': 5, 'updatedDateTime': now},
+        where: 'orderSubId = ?',
+        whereArgs: [orderSubId],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
 }
 

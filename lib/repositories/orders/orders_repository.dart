@@ -1698,12 +1698,14 @@ class OrdersRepository {
     required int orderId,
     required int approveFlag,
     Map<String, dynamic>? notification,
+    List<Map<String, dynamic>>? outOfStockData,
   }) async {
     try {
       final params = {
         'order_id': orderId,
         'order_approve_flag': approveFlag,
         if (notification != null) 'notification': notification,
+        if (outOfStockData != null && outOfStockData.isNotEmpty) 'out_of_stock_data': outOfStockData,
       };
 
       final response = await _dio.post(

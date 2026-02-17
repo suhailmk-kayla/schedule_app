@@ -2203,6 +2203,147 @@ _setError(failure.message);
     }
   }
 
+  /// Cancel order
+  /// Converted from KMP's cancelOrder (OrderViewModel.kt lines 2052-2134)
+  /// Salesman and admin can cancel when order is NOT sendToStorekeeper, completed, or cancelled
+  Future<bool> cancelOrder(Order order) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      final currentUserId = await StorageHelper.getUserId();
+
+      // Build user list: admins (exclude current, silent 1), storekeepers (silent 0),
+      // checkers if assigned (silent 0), billers if assigned (silent 0)
+      final List<Map<String, dynamic>> userIds = [];
+
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            if (admin.userId != currentUserId) {
+              userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
+            }
+          }
+        },
+      );
+
+      final storekeepersResult = await _usersRepository.getUsersByCategory(2);
+      storekeepersResult.fold(
+        (_) {},
+        (storekeepers) {
+          for (final sk in storekeepers) {
+            userIds.add({'user_id': sk.userId ?? -1, 'silent_push': 0});
+          }
+        },
+      );
+
+      if (order.orderCheckerId != -1) {
+        final checkersResult = await _usersRepository.getUsersByCategory(6);
+        checkersResult.fold(
+          (_) {},
+          (checkers) {
+            for (final checker in checkers) {
+              userIds.add({'user_id': checker.userId ?? -1, 'silent_push': 0});
+            }
+          },
+        );
+      }
+
+      if (order.orderBillerId != -1) {
+        final billersResult = await _usersRepository.getUsersByCategory(5);
+        billersResult.fold(
+          (_) {},
+          (billers) {
+            for (final biller in billers) {
+              userIds.add({'user_id': biller.userId ?? -1, 'silent_push': 0});
+            }
+          },
+        );
+      }
+
+      // Get order subs for OOS lookup
+      final orderSubsResult = await _ordersRepository.getAllOrderSubAndDetails(order.orderId);
+      if (orderSubsResult.isLeft) {
+        _setError(orderSubsResult.left.message);
+        _setLoading(false);
+        return false;
+      }
+
+      final orderSubs = orderSubsResult.right;
+      final List<Map<String, dynamic>> oosDataIds = [];
+
+      for (final detail in orderSubs) {
+        final orderSubId = detail.orderSub.orderSubId;
+        final oosResult = await _outOfStockRepository.getOutOfStockProductsByOrderSubId(orderSubId);
+        oosResult.fold(
+          (_) {},
+          (outOfStocks) {
+            if (outOfStocks.isNotEmpty) {
+              oosDataIds.add({
+                'table': NotificationId.outOfStock,
+                'id': outOfStocks.first.outosSubOutosId,
+              });
+              for (final oos in outOfStocks) {
+                oosDataIds.add({
+                  'table': NotificationId.outOfStockSub,
+                  'id': oos.outOfStockSubId,
+                });
+                if (oos.outosSubSuppId != -1) {
+                  userIds.add({'user_id': oos.outosSubSuppId, 'silent_push': 1});
+                }
+              }
+            }
+          },
+        );
+      }
+
+      final dataIds = [
+        {'table': NotificationId.order, 'id': order.orderId},
+        ...oosDataIds,
+      ];
+
+      final notificationPayload = {
+        'ids': userIds,
+        'data_message': 'Order Cancelled',
+        'data': {
+          'data_ids': dataIds,
+          'show_notification': '0',
+          'message': 'Order Cancelled',
+          'order_approve_flag': OrderApprovalFlag.cancelled,
+        },
+      };
+
+      final result = await _ordersRepository.updateOrderApproveFlag(
+        orderId: order.orderId,
+        approveFlag: OrderApprovalFlag.cancelled,
+        notification: notificationPayload,
+        outOfStockData: oosDataIds.isNotEmpty ? oosDataIds : null,
+      );
+
+      if (result.isLeft) {
+        _setError(result.left.message);
+        _setLoading(false);
+        return false;
+      }
+
+      // Update out of stock entries to cancelled (matching KMP lines 2126-2129)
+      for (final detail in orderSubs) {
+        final orderSubId = detail.orderSub.orderSubId;
+        await _outOfStockRepository.updateMasterToCancelled(orderSubId);
+        await _outOfStockRepository.updateProductToCancelled(orderSubId);
+      }
+
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
   /// Report single item to admin (creates out of stock entry)
   /// Converted from KMP's reportAdmin (lines 1683-1828)
   Future<bool> reportAdmin(
