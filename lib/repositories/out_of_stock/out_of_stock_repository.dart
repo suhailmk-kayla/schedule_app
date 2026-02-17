@@ -807,6 +807,26 @@ class OutOfStockRepository {
     }
   }
 
+  /// Update out of stock product active flag (column 'flag': 1=active, 0=inactive).
+  /// Used so newly created balance sub appears in getOutOfStockSubsWithDetailsByMasterId (WHERE flag=1).
+  Future<Either<Failure, void>> updateOospActiveFlag({
+    required int oospId,
+    required int flag,
+  }) async {
+    try {
+      final db = await _database;
+      await db.update(
+        'OutOfStockProducts',
+        {'flag': flag},
+        where: 'oospId = ?',
+        whereArgs: [oospId],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
   /// Update out of stock product flag
   Future<Either<Failure, void>> updateOospFlag({
     required int oospId,
@@ -823,6 +843,38 @@ class OutOfStockRepository {
         },
         where: 'oospId = ?',
         whereArgs: [oospId],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Update out of stock product qty, availQty and flag (e.g. after admin accepts partial quantity).
+  /// Ensures local DB matches server so getOopsSub shows correct data without force refresh.
+  Future<Either<Failure, void>> updateOospQtyAvailAndFlag({
+    required int oospId,
+    required double qty,
+    required double availQty,
+    required int oospFlag,
+  }) async {
+    try {
+      final db = await _database;
+      final now = DateTime.now().toIso8601String();
+      final count = await db.update(
+        'OutOfStockProducts',
+        {
+          'qty': qty,
+          'availQty': availQty,
+          'oospFlag': oospFlag,
+          'updatedDateTime': now,
+        },
+        where: 'oospId = ?',
+        whereArgs: [oospId],
+      );
+      developer.log(
+        'updateOospQtyAvailAndFlag: oospId=$oospId qty=$qty availQty=$availQty oospFlag=$oospFlag | rowsUpdated=$count',
+        name: 'OutOfStockRepo',
       );
       return const Right(null);
     } catch (e) {

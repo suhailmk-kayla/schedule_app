@@ -413,11 +413,20 @@ class _OutOfStockDetailsAdminScreenState
   }
 
   bool _isAllSubsFinished(OutOfStockProvider provider) {
-    for (final sub in provider.oospSubList) {
+    final list = provider.oospSubList;
+    for (final sub in list) {
       if (sub.oospFlag == 0 || sub.oospFlag == 1 || sub.oospFlag == 3) {
+        developer.log(
+          '_isAllSubsFinished: false (sub id=${sub.oospId} has flag=${sub.oospFlag}) | list=${list.map((s) => "id=${s.oospId} qty=${s.qty} flag=${s.oospFlag}").join(" | ")}',
+          name: 'OOSAdmin.isAllFinished',
+        );
         return false;
       }
     }
+    developer.log(
+      '_isAllSubsFinished: true (all subs flag 2 or 5) | list=${list.map((s) => "id=${s.oospId} qty=${s.qty} flag=${s.oospFlag}").join(" | ")}',
+      name: 'OOSAdmin.isAllFinished',
+    );
     return true;
   }
 
@@ -469,6 +478,13 @@ class _OutOfStockDetailsAdminScreenState
         final productWithDetails = productsProvider.currentProductWithDetails;
         final isAllFinished = _isAllSubsFinished(oospProvider);
         final isCompleted = _masterWithDetails!.isCompleteflag == 1;
+        final subList = oospProvider.oospSubList;
+        if (subList.length >= 2 || isAllFinished) {
+          developer.log(
+            'OOSAdmin.build: isAllFinished=$isAllFinished isCompleted=$isCompleted showInformSalesman=${isAllFinished && !isCompleted} | subs=${subList.map((s) => "id=${s.oospId} qty=${s.qty} avail=${s.availQty} flag=${s.oospFlag}").join(" | ")}',
+            name: 'OOSAdmin.build',
+          );
+        }
 
         return Scaffold(
           appBar: AppBar(

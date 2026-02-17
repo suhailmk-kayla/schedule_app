@@ -175,7 +175,10 @@ class OutOfStockProvider extends ChangeNotifier {
         },
         (list) {
           _oospSubList = list;
-           
+          developer.log(
+            'getOopsSub: masterId=$masterId, count=${list.length}, subs=${list.map((s) => "id=${s.oospId} qty=${s.qty} avail=${s.availQty} flag=${s.oospFlag}").join(" | ")}',
+            name: 'OutOfStock.getOopsSub',
+          );
         },
       );
     } catch (e) {
@@ -620,6 +623,10 @@ class OutOfStockProvider extends ChangeNotifier {
     required Function(String) onFailure,
     required Function() onSuccess,
   }) async {
+    developer.log(
+      'acceptAvailableQty: START oospId=${subItem.oospId}, qty=${subItem.qty}, availQty=${subItem.availQty}, balance=${subItem.qty - subItem.availQty}',
+      name: 'OutOfStock.accept',
+    );
     _setLoading(true);
     _clearError();
 
@@ -648,6 +655,22 @@ class OutOfStockProvider extends ChangeNotifier {
         onFailure(errorMsg);
         return;
       }
+
+      developer.log(
+        'acceptAvailableQty: first API success, updating local oospId=${subItem.oospId} to qty=${subItem.availQty}, availQty=0, flag=2',
+        name: 'OutOfStock.accept',
+      );
+      // Update local DB with accepted partial qty so getOopsSub shows correct data without force refresh
+      await _outOfStockRepository.updateOospQtyAvailAndFlag(
+        oospId: subItem.oospId,
+        qty: subItem.availQty,
+        availQty: 0.0,
+        oospFlag: 2,
+      );
+      developer.log(
+        'acceptAvailableQty: local update done, creating new sub with balance qty=${subItem.qty - subItem.availQty}',
+        name: 'OutOfStock.accept',
+      );
 
       await _createNewSub(
         subItem: subItem,
@@ -1628,7 +1651,24 @@ class OutOfStockProvider extends ChangeNotifier {
       }
 
       final outOfStockSubApi = OutOfStockSubApi.fromJson(responseData);
+      final responseSub = outOfStockSubApi.data;
+      final acceptedOospId = subItem.oospId;
+      final isSameId = responseSub.outOfStockSubId == acceptedOospId;
+      developer.log(
+        '_createNewSub: API success | responseSubId=${responseSub.outOfStockSubId}, responseQty=${responseSub.outosSubQty}, responseAvailQty=${responseSub.outosSubAvailableQty} | acceptedSubOospId=$acceptedOospId | SAME_ID=$isSameId (if true, add would overwrite accepted sub)',
+        name: 'OutOfStock.createNewSub',
+      );
       await _outOfStockRepository.addOutOfStockProduct(outOfStockSubApi.data);
+      if (responseSub.outosSubFlag != 1) {
+        await _outOfStockRepository.updateOospActiveFlag(
+          oospId: responseSub.outOfStockSubId,
+          flag: 1,
+        );
+      }
+      developer.log(
+        '_createNewSub: addOutOfStockProduct done for id=${responseSub.outOfStockSubId}',
+        name: 'OutOfStock.createNewSub',
+      );
 
       onSuccess();
     } on DioException catch (e) {
