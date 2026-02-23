@@ -1067,6 +1067,33 @@ class _CompletedOrderItemCard extends StatelessWidget {
                   ),
                 ),
               ),
+            // Checker uploaded images (show to admin like biller/salesman)
+            if (item.orderSub.checkerImages != null &&
+                item.orderSub.checkerImages!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Checker Uploaded Images:',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: item.orderSub.checkerImages!
+                    .map(
+                      (image) => SmallProductImage(
+                        imageUrl: image,
+                        size: 40,
+                        borderRadius: 5,
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
             const SizedBox(height: 6),
             _InfoRow(label: 'Brand', value: item.productBrand),
             _InfoRow(label: 'Sub Brand', value: item.productSubBrand),

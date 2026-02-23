@@ -24,7 +24,7 @@ import 'presentation/provider/sub_categories_provider.dart';
 import 'presentation/provider/cars_provider.dart';
 import 'presentation/common_widgets/sync_notification_widget.dart';
 //TODO:change to production server before sending apk
-//
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);

@@ -277,16 +277,21 @@ class _OutOfStockListScreenState extends State<OutOfStockListScreen> {
                                     ),
                                   ),
                                 ).then((_) {
-                                  // Refresh badge counts when returning from detail screen
-                                  // This ensures badge count updates after viewing an item
+                                  // Refresh badge counts and list when returning from detail screen
                                   final homeProvider = Provider.of<HomeProvider>(context, listen: false);
                                   homeProvider.refreshCounts();
+                                  Provider.of<OutOfStockProvider>(context, listen: false).getAllOosp();
                                 });
                               } else if (_userType == 4) {
-                                Navigator.push(context, 
-                                MaterialPageRoute(builder: (_)=>OutOfStockDetailsSupplierScreen(oospId: item.oospMasterId)
-                                )
-                                );
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => OutOfStockDetailsSupplierScreen(oospId: item.oospMasterId),
+                                  ),
+                                ).then((_) {
+                                  Provider.of<HomeProvider>(context, listen: false).refreshCounts();
+                                  Provider.of<OutOfStockProvider>(context, listen: false).getAllOosp();
+                                });
                                 // Supplier - need to get the sub ID from the master
                                 // For supplier, we need to find the sub item for this supplier
                                 // This will be handled differently - supplier sees their own list
