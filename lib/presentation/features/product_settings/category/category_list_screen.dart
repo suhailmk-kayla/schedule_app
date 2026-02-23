@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../../../utils/asset_images.dart';
 import '../../../provider/categories_provider.dart';
 import '../../../../models/master_data_api.dart';
@@ -11,11 +13,14 @@ class CategoryListScreen extends StatefulWidget {
   const CategoryListScreen({super.key});
 
   @override
+  
   State<CategoryListScreen> createState() => _CategoryListScreenState();
 }
 
 class _CategoryListScreenState extends State<CategoryListScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _showSearchBar = false;
   String _errorMessage = '';
 
   @override
@@ -30,19 +35,37 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
   void _handleSearch(String searchKey) {
     final provider = Provider.of<CategoriesProvider>(context, listen: false);
-    provider.getCategories(searchKey: searchKey);
+    provider.getCategories(searchKey: searchKey.trim());
+  }
+
+  void _toggleSearchBar() {
+    setState(() {
+      _showSearchBar = !_showSearchBar;
+      if (!_showSearchBar) {
+        // Clear search when closing
+        _searchController.clear();
+        _handleSearch('');
+      }
+    });
+    // Focus search field when opened
+    if (_showSearchBar) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _searchFocusNode.requestFocus();
+      });
+    }
   }
 
   void _handleEditClick(Category category) {
     _showCategoryDialog(
       isEdit: true,
       categoryName: category.name,
-      categoryId: category.id,
+      categoryId: category.categoryId, // Use server ID, not local DB primary key
     );
   }
 
@@ -93,11 +116,12 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
 
     if (success) {
       // Refresh list
+      ToastHelper.showSuccess('Category saved successfully');
       provider.getCategories(searchKey: _searchController.text);
-      if (!isEdit) {
-        _errorMessage = 'Category Added successfully';
-        _showErrorDialog();
-      }
+      // if (!isEdit) {
+      //   _errorMessage = 'Category Added successfully';
+      //   _showErrorDialog();
+      // }
     } else {
       _errorMessage = provider.errorMessage ?? 'Failed to save category';
       _showErrorDialog();
@@ -124,120 +148,108 @@ class _CategoryListScreenState extends State<CategoryListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Category List'),
+        title: _showSearchBar
+            ? TextField(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                style: const TextStyle(color: Colors.black),
+                decoration: InputDecoration(
+                  hintText: 'Search',
+                  hintStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[200],
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
+                onChanged: (value) {
+                  _handleSearch(value);
+                },
+              )
+            : const Text('Category List'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              // Show search dialog
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Search Category'),
-                  content: TextField(
-                    controller: _searchController,
-                    decoration: const InputDecoration(
-                      hintText: 'Enter search key',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (value) {
-                      Navigator.pop(context);
-                      _handleSearch(value);
-                    },
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _handleSearch(_searchController.text);
-                      },
-                      child: const Text('Search'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                  ],
-                ),
-              );
-            },
+            icon: Icon(_showSearchBar ? Icons.close : Icons.search),
+            onPressed: _toggleSearchBar,
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Search bar
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Search categories...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onChanged: _handleSearch,
-              onSubmitted: _handleSearch,
-            ),
-          ),
-          // Categories list
-          Expanded(
-            child: Consumer<CategoriesProvider>(
-              builder: (context, provider, _) {
-                if (provider.isLoading && provider.categoriesList.isEmpty) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (provider.errorMessage != null &&
-                    provider.categoriesList.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          provider.errorMessage!,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () => provider.getCategories(),
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                if (provider.categoriesList.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      'No Category found',
-                      style: TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
-                  );
-                }
-
-                return ListView.separated(
-                  padding: const EdgeInsets.all(8),
-                  itemCount: provider.categoriesList.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 4),
-                  itemBuilder: (context, index) {
-                    final category = provider.categoriesList[index];
-                    return _CategoryListItem(
-                      category: category,
-                      onEditTap: () => _handleEditClick(category),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          final provider = Provider.of<CategoriesProvider>(context, listen: false);
+          provider.getCategories();
+        },
+        child: Column(
+          children: [
+            // Categories list
+            Expanded(
+              child: Consumer2<CategoriesProvider,NotificationManager>(
+                builder: (context, provider, notificationManager, _) {
+                  if(notificationManager.notificationTrigger){
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      notificationManager.resetTrigger();
+                      provider.getCategories();
+                    });
+                  }
+                  if (provider.isLoading && provider.categoriesList.isEmpty) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+        
+                  if (provider.errorMessage != null &&
+                      provider.categoriesList.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            provider.errorMessage!,
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () => provider.getCategories(),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
                     );
-                  },
-                );
-              },
+                  }
+        
+                  if (provider.categoriesList.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'No Category found',
+                        style: TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                    );
+                  }
+        
+                  return ListView.separated(
+                    padding: const EdgeInsets.all(8),
+                    itemCount: provider.categoriesList.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 4),
+                    itemBuilder: (context, index) {
+                      final category = provider.categoriesList[index];
+                      return _CategoryListItem(
+                        category: category,
+                        onEditTap: () => _handleEditClick(category),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _handleAddClick,
@@ -324,7 +336,7 @@ class _AddCategoryDialog extends StatefulWidget {
 
 class _AddCategoryDialogState extends State<_AddCategoryDialog> {
   late TextEditingController _nameController;
-
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   @override
   void initState() {
     super.initState();
@@ -341,13 +353,22 @@ class _AddCategoryDialogState extends State<_AddCategoryDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(widget.isAddNew ? 'Add Category' : 'Update Category'),
-      content: TextField(
-        controller: _nameController,
-        decoration: const InputDecoration(
-          labelText: 'Category Name',
-          border: OutlineInputBorder(),
+      content: Form(
+        key: _formKey,
+        child: TextFormField(
+          controller: _nameController,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Category name cannot be empty';
+            }
+            return null;
+          },
+          decoration: const InputDecoration(
+            labelText: 'Category Name',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
         ),
-        autofocus: true,
       ),
       actions: [
         TextButton(
@@ -356,10 +377,8 @@ class _AddCategoryDialogState extends State<_AddCategoryDialog> {
         ),
         TextButton(
           onPressed: () {
-            if (_nameController.text.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Enter category name')),
-              );
+            if (!_formKey.currentState!.validate()) {
+              ToastHelper.showError('Please enter category name');
               return;
             }
             widget.onConfirmation(_nameController.text.trim());

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 
 import '../../provider/auth_provider.dart';
 import '../../provider/sync_provider.dart';
@@ -119,12 +120,7 @@ class _AboutScreenState extends State<AboutScreen> {
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
-    );
+    ToastHelper.showError(message);
   }
 
   @override

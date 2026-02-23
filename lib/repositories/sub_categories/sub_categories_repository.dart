@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 import 'package:either_dart/either.dart';
 import 'package:sqflite/sqflite.dart';
@@ -71,6 +73,7 @@ class SubCategoriesRepository {
       final subCategories = maps.map((map) => SubCategory.fromMap(map)).toList();
       return Right(subCategories);
     } catch (e) {
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -208,19 +211,25 @@ class SubCategoriesRepository {
   Future<Either<Failure, void>> addSubCategory(SubCategory subCategory) async {
     try {
       final db = await _database;
+      
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
-        INSERT OR REPLACE INTO SubCategory (id, subCategoryId, parentId, name, remark, flag)
-        VALUES (NULL, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO SubCategory (
+          subCategoryId, parentId, name, remark, flag
+        ) VALUES (
+          ?, ?, ?, ?, ?
+        )
         ''',
         [
-          subCategory.id,
-          subCategory.catId,
+          subCategory.subCategoryId,
+          subCategory.catId, // parentId is catId in SubCategory model
           subCategory.name,
-          subCategory.remark,
-          1,
+          subCategory.remark ?? '',
+          1, // flag (default 1)
         ],
       );
+      
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -234,41 +243,51 @@ class SubCategoriesRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT OR REPLACE INTO SubCategory (id, subCategoryId, parentId, name, remark, flag)
-        VALUES (NULL, ?, ?, ?, ?, ?)
-        ''';
+        final batch = txn.batch();
         for (final subCategory in subCategories) {
-          await txn.rawInsert(
-            sql,
+          // Use INSERT OR REPLACE (matches KMP pattern)
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO SubCategory (
+              subCategoryId, parentId, name, remark, flag
+            ) VALUES (
+              ?, ?, ?, ?, ?
+            )
+            ''',
             [
-              subCategory.id,
+              subCategory.subCategoryId,
               subCategory.catId,
               subCategory.name,
-              subCategory.remark,
+              subCategory.remark ?? '',
               1,
             ],
           );
         }
+        await batch.commit(noResult: true);
       });
+       
       return const Right(null);
     } catch (e) {
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
 
   /// Update sub category in local DB
-  Future<Either<Failure, void>> updateSubCategoryLocal({
-    required int subCategoryId,
-    required String name,
-  }) async {
+  Future<Either<Failure, void>> updateSubCategoryLocal(
+    SubCategory subCategory,
+  ) async {
     try {
       final db = await _database;
       await db.update(
         'SubCategory',
-        {'name': name},
+        {
+          'name': subCategory.name,
+          'parentId': subCategory.catId,
+          'remark': subCategory.remark,
+        },
         where: 'subCategoryId = ?',
-        whereArgs: [subCategoryId],
+        whereArgs: [subCategory.subCategoryId],
       );
       return const Right(null);
     } catch (e) {
@@ -331,8 +350,10 @@ class SubCategoriesRepository {
       final subCategoryListApi = SubCategoryListApi.fromJson(response.data);
       return Right(subCategoryListApi);
     } on DioException catch (e) {
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
+       
       return Left(UnknownFailure.fromError(e));
     }
   }
@@ -375,8 +396,10 @@ class SubCategoriesRepository {
 
       return Right(subCategoryApi.data);
     } on DioException catch (e) {
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
+       
       return Left(UnknownFailure.fromError(e));
     }
   }
@@ -388,7 +411,33 @@ class SubCategoriesRepository {
     required String name,
   }) async {
     try {
-      // 1. Call API
+      // 1. Get existing sub category from local DB to preserve unchanged fields
+      SubCategory? existingSubCategory;
+      try {
+        final db = await _database;
+        final maps = await db.query(
+          'SubCategory',
+          where: 'subCategoryId = ?',
+          whereArgs: [subCategoryId],
+          limit: 1,
+        );
+        if (maps.isNotEmpty) {
+          existingSubCategory = SubCategory.fromMap(maps.first);
+        }
+      } catch (_) {
+        // Ignore fetch errors; we'll still proceed with provided data
+      }
+
+      // Build base sub category with NEW values overlaid on existing fields
+      final baseSubCategory = SubCategory(
+        id: existingSubCategory?.id ?? -1,
+        subCategoryId: existingSubCategory?.subCategoryId ?? subCategoryId,
+        name: name,
+        catId: parentId,
+        remark: existingSubCategory?.remark ?? '',
+      );
+
+      // 2. Call API
       final response = await _dio.post(
         ApiEndpoints.updateSubCategory,
         data: {
@@ -398,19 +447,19 @@ class SubCategoriesRepository {
         },
       );
 
-      // 2. Parse response
-      final subCategoryApi = SubCategoryApi.fromJson(response.data);
+      // 3. Parse response with merge support (handles partial responses)
+      final subCategoryApi = SubCategoryApi.fromJsonWithMerge(
+        response.data,
+        existingSubCategory: baseSubCategory,
+      );
       if (subCategoryApi.status != 1) {
         return Left(ServerFailure.fromError(
           'Failed to update sub category: ${subCategoryApi.message}',
         ));
       }
 
-      // 3. Store in local DB
-      final updateResult = await updateSubCategoryLocal(
-        subCategoryId: subCategoryApi.data.id,
-        name: subCategoryApi.data.name,
-      );
+      // 4. Store in local DB
+      final updateResult = await updateSubCategoryLocal(subCategoryApi.data);
       if (updateResult.isLeft) {
         return updateResult.map((_) => subCategoryApi.data);
       }

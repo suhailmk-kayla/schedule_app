@@ -22,4 +22,28 @@ class OrderSubFlag {
   static const int replaced = 7;
 }
 
+class OrderFlags {
+  static const int deleted = 0;
+  static const int active = 1;
+  static const int temp = 2;
+  static const int draft = 3;
+}
+
+class OrderSubFlags {
+  static const int deleted = 0;
+  static const int active = 1;
+  static const int temp = 2;
+}
+
+/// Out of Stock Product flags (converted from KMP's oospFlag usage)
+/// Used in OutOfStockProducts table (oospFlag column)
+class OutOfStockFlag {
+  static const int notInitialized = 0; // "Not Initialized" / "Pending in Admin"
+  static const int waitingForResponse = 1; // "Waiting for response" / "Waiting for response from supplier" / "Pending"
+  static const int available = 2; // "Available" / "Order Confirmed"
+  static const int outOfStock = 3; // "Out of Stock" / "Only X is left"
+  static const int notAvailable = 4; // "Not Available" (used when orderSubId == -1, no order sub)
+  static const int orderCancelled = 5; // "Order Cancelled" / "Not Available" (used when orderSubId != -1, has order sub)
+}
+
 

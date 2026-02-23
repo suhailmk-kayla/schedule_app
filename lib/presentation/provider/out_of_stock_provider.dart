@@ -104,16 +104,16 @@ class OutOfStockProvider extends ChangeNotifier {
       result.fold(
         (failure) {
           _errorMessage = failure.message;
-          developer.log('OutOfStockProvider: Failed to get OOSP masters: ${failure.message}');
+           
         },
         (list) {
           _oospList = list;
-          developer.log('OutOfStockProvider: Loaded ${list.length} OOSP masters');
+           
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in getAllOosp: $e');
+       
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -143,16 +143,16 @@ class OutOfStockProvider extends ChangeNotifier {
       result.fold(
         (failure) {
           _errorMessage = failure.message;
-          developer.log('OutOfStockProvider: Failed to get OOSP subs: ${failure.message}');
+           
         },
         (list) {
           _oospSubList = list;
-          developer.log('OutOfStockProvider: Loaded ${list.length} OOSP subs');
+           
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in getAllOospSub: $e');
+       
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -171,16 +171,19 @@ class OutOfStockProvider extends ChangeNotifier {
       result.fold(
         (failure) {
           _errorMessage = failure.message;
-          developer.log('OutOfStockProvider: Failed to get OOSP subs by master: ${failure.message}');
+           
         },
         (list) {
           _oospSubList = list;
-          developer.log('OutOfStockProvider: Loaded ${list.length} OOSP subs for master $masterId');
+          developer.log(
+            'getOopsSub: masterId=$masterId, count=${list.length}, subs=${list.map((s) => "id=${s.oospId} qty=${s.qty} avail=${s.availQty} flag=${s.oospFlag}").join(" | ")}',
+            name: 'OutOfStock.getOopsSub',
+          );
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in getOopsSub: $e');
+       
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -195,17 +198,17 @@ class OutOfStockProvider extends ChangeNotifier {
       return result.fold(
         (failure) {
           _errorMessage = failure.message;
-          developer.log('OutOfStockProvider: Failed to get OOSP master: ${failure.message}');
+           
           return null;
         },
         (master) {
-          developer.log('OutOfStockProvider: Loaded OOSP master $masterId');
+           
           return master;
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in getOopsMaster: $e');
+       
       return null;
     }
   }
@@ -221,16 +224,16 @@ class OutOfStockProvider extends ChangeNotifier {
       result.fold(
         (failure) {
           _errorMessage = failure.message;
-          developer.log('OutOfStockProvider: Failed to add packed sub: ${failure.message}');
+           
           notifyListeners();
         },
         (_) {
-          developer.log('OutOfStockProvider: Added packed sub for orderSubId $orderSubId');
+           
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in addPackedSub: $e');
+       
       notifyListeners();
     }
   }
@@ -243,16 +246,16 @@ class OutOfStockProvider extends ChangeNotifier {
       result.fold(
         (failure) {
           _errorMessage = failure.message;
-          developer.log('OutOfStockProvider: Failed to delete packed sub: ${failure.message}');
+           
           notifyListeners();
         },
         (_) {
-          developer.log('OutOfStockProvider: Deleted packed sub for orderSubId $orderSubId');
+           
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in deletePackedSub: $e');
+       
       notifyListeners();
     }
   }
@@ -272,13 +275,13 @@ class OutOfStockProvider extends ChangeNotifier {
           return null;
         },
         (sub) {
-          developer.log('OutOfStockProvider: Loaded OOSP sub $oospId');
+           
           return sub;
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in getOopsSubBySub: $e');
+       
       return null;
     }
   }
@@ -310,7 +313,7 @@ class OutOfStockProvider extends ChangeNotifier {
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in updateIsMasterViewedFlag: $e');
+       
       notifyListeners();
     }
   }
@@ -335,12 +338,12 @@ class OutOfStockProvider extends ChangeNotifier {
           notifyListeners();
         },
         (_) {
-          developer.log('OutOfStockProvider: Updated sub viewed flag for $oospId');
+           
         },
       );
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      developer.log('OutOfStockProvider: Error in updateIsSubViewedFlag: $e');
+       
       notifyListeners();
     }
   }
@@ -375,23 +378,16 @@ class OutOfStockProvider extends ChangeNotifier {
         return false;
       }
 
-      // If supplier was -1, update flag to 4, otherwise update flag
+      // Do not change oospFlag when only selecting/changing supplier.
+      // Flags are updated only on submission (e.g. Send to Supplier, Not Available),
+      // so that "Send to Supplier" remains visible after changing supplier and admin
+      // can send the request to the new supplier.
       final sub = _oospSubList.firstWhere(
         (s) => s.oospId == oospId,
         orElse: () => throw Exception('Sub not found'),
       );
 
-      if (sub.supplierId == -1) {
-        // Just update supplier
-      } else {
-        // Update flag to 4 (replaced)
-        await _outOfStockRepository.updateOospFlag(
-          oospId: oospId,
-          oospFlag: 4,
-        );
-      }
-
-      // Reload subs
+      // Reload subs so UI shows updated supplierId
       if (sub.oospMasterId != -1) {
         await getOopsSub(sub.oospMasterId);
       }
@@ -435,32 +431,11 @@ class OutOfStockProvider extends ChangeNotifier {
   }
 
   /// Mark as not available (matching KMP's notAvailable)
+  /// Calls API first to update server, then updates local DB
+  /// Server is the source of truth - fixes KMP's design flaw
   Future<void> notAvailable({
     required int oospId,
     required int masterId,
-    required Function() onSuccess,
-  }) async {
-    try {
-      // Update flag to 4 (not available) and isCheckedFlag to 1
-      await _outOfStockRepository.updateOospFlag(
-        oospId: oospId,
-        oospFlag: 4,
-      );
-      await _outOfStockRepository.updateIsCheckedFlag(
-        oospId: oospId,
-        isCheckedFlag: 1,
-      );
-
-      await getOopsSub(masterId);
-      onSuccess();
-    } catch (e) {
-      _setError('Error marking as not available: $e');
-      notifyListeners();
-    }
-  }
-
-  /// Send order to supplier (matching KMP's sendOrderToSupplier)
-  Future<void> sendOrderToSupplier({
     required OutOfStockSubWithDetails subItem,
     required Function(String) onFailure,
     required Function() onSuccess,
@@ -469,10 +444,131 @@ class OutOfStockProvider extends ChangeNotifier {
     _clearError();
 
     try {
+      // Call API first to update server (flag 5 = not available)
+      final payload = _buildUpdateOutOfStockSubParams(
+        subItem: subItem,
+        flag: OutOfStockFlag.notAvailable,
+        isChecked: 1,
+        note: subItem.note,
+        availQty: 0.0,
+      );
+
+      final response = await _dio.post(
+        ApiEndpoints.updateOutOfStockSub,
+        data: payload,
+      );
+
+      final responseData = response.data as Map<String, dynamic>;
+      if (responseData['status'] != 1) {
+        final errorMsg = responseData['message']?.toString() ??
+            responseData['data']?.toString() ??
+            'Failed to mark as not available';
+        _setError(errorMsg);
+        _setLoading(false);
+        onFailure(errorMsg);
+        return;
+      }
+
+      // Update local DB after successful API call (server is source of truth)
+      await _outOfStockRepository.rejectAvailableQty(
+        oospId: oospId,
+        availQty: 0.0,
+        note: subItem.note,
+        oospFlag: OutOfStockFlag.notAvailable, // Not available flag
+      );
+
+      await getOopsSub(masterId);
+
+      // Send push notifications to admins, storekeepers, and salesman
+      final currentUserId = await StorageHelper.getUserId();
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      final storekeepersResult = await _usersRepository.getUsersByCategory(2);
+      final List<Map<String, dynamic>> userIds = [];
+
+      // Add admins (silent push, excluding current user)
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            if (admin.userId != currentUserId) {
+              userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
+            }
+          }
+        },
+      );
+
+      // Add storekeepers (silent push, excluding current user)
+      storekeepersResult.fold(
+        (_) {},
+        (storekeepers) {
+          for (final storekeeper in storekeepers) {
+            if (storekeeper.userId != currentUserId) {
+              userIds.add({'user_id': storekeeper.userId ?? -1, 'silent_push': 1});
+            }
+          }
+        },
+      );
+
+      // Add salesman (visible notification)
+      if (subItem.salesmanId != -1) {
+        userIds.add({'user_id': subItem.salesmanId, 'silent_push': 0});
+      } else if (subItem.storekeeperId != -1) {
+        // If no salesman, notify storekeeper (visible notification)
+        userIds.add({'user_id': subItem.storekeeperId, 'silent_push': 0});
+      }
+
+      // Fire-and-forget: don't await, just trigger in background
+      _pushNotificationSender.sendPushNotification(
+        dataIds: [
+          PushData(table: 11, id: subItem.oospMasterId),
+          PushData(table: 12, id: subItem.oospId),
+        ],
+        customUserIds: userIds,
+        message: 'Order cancelled',
+      ).catchError((e) {
+         
+      });
+
+      _setLoading(false);
+      onSuccess();
+    } on DioException catch (e) {
+      final errorMsg = e.response?.data?.toString() ?? e.message ?? 'Network error';
+      _setError(errorMsg);
+      _setLoading(false);
+      onFailure(errorMsg);
+    } catch (e) {
+      final errorMsg = 'Error marking as not available: $e';
+      _setError(errorMsg);
+      _setLoading(false);
+      onFailure(errorMsg);
+    }
+  }
+
+  /// Send order to supplier (matching KMP's sendOrderToSupplier)
+  /// [supplierIdOverride] Optional. When supplier returned "out of stock", admin selects
+  /// a new supplier (stored in UI state). Pass that ID here to send without persisting first.
+  /// Fix: 2026-02-03, by AI - Enables "Change Supplier" → "Send to Supplier" two-step workflow.
+  Future<void> sendOrderToSupplier({
+    required OutOfStockSubWithDetails subItem,
+    required Function(String) onFailure,
+    required Function() onSuccess,
+    int? supplierIdOverride,
+  }) async {
+    _setLoading(true);
+    _clearError();
+    final effectiveSupplierId = supplierIdOverride ?? subItem.supplierId;
+    if (effectiveSupplierId == -1) {
+      _setError('No supplier selected');
+      _setLoading(false);
+      onFailure('No supplier selected');
+      return;
+    }
+    try {
       final payload = _buildUpdateOutOfStockSubParams(
         subItem: subItem,
         flag: 1,
         isChecked: 0,
+        supplierIdOverride: supplierIdOverride,
       );
 
       final response = await _dio.post(
@@ -499,9 +595,9 @@ class OutOfStockProvider extends ChangeNotifier {
           _pushNotificationSender.sendPushNotification(
             dataIds: [PushData(table: 12, id: subItem.oospId)],
             customUserIds: [
-              {'user_id': subItem.supplierId, 'silent_push': 0}
+              {'user_id': effectiveSupplierId, 'silent_push': 0}
             ],
-            message: 'New order received',
+            message: 'Out of stock order received',
           );
           _setLoading(false);
           onSuccess();
@@ -527,6 +623,10 @@ class OutOfStockProvider extends ChangeNotifier {
     required Function(String) onFailure,
     required Function() onSuccess,
   }) async {
+    developer.log(
+      'acceptAvailableQty: START oospId=${subItem.oospId}, qty=${subItem.qty}, availQty=${subItem.availQty}, balance=${subItem.qty - subItem.availQty}',
+      name: 'OutOfStock.accept',
+    );
     _setLoading(true);
     _clearError();
 
@@ -556,10 +656,27 @@ class OutOfStockProvider extends ChangeNotifier {
         return;
       }
 
+      developer.log(
+        'acceptAvailableQty: first API success, updating local oospId=${subItem.oospId} to qty=${subItem.availQty}, availQty=0, flag=2',
+        name: 'OutOfStock.accept',
+      );
+      // Update local DB with accepted partial qty so getOopsSub shows correct data without force refresh
+      await _outOfStockRepository.updateOospQtyAvailAndFlag(
+        oospId: subItem.oospId,
+        qty: subItem.availQty,
+        availQty: 0.0,
+        oospFlag: 2,
+      );
+      developer.log(
+        'acceptAvailableQty: local update done, creating new sub with balance qty=${subItem.qty - subItem.availQty}',
+        name: 'OutOfStock.accept',
+      );
+
       await _createNewSub(
         subItem: subItem,
         qty: subItem.qty - subItem.availQty,
-        availQty: subItem.qty - subItem.availQty,
+        availQty: 0.0,
+        supplierId: -1,
         onFailure: onFailure,
         onSuccess: () async {
           await _outOfStockRepository.updateOospFlag(
@@ -576,8 +693,8 @@ class OutOfStockProvider extends ChangeNotifier {
             (_) {},
             (admins) {
               for (final admin in admins) {
-                if (admin.id != currentUserId) {
-                  userIds.add({'user_id': admin.id, 'silent_push': 1});
+                if (admin.userId != currentUserId) {
+                  userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
                 }
               }
             },
@@ -586,12 +703,16 @@ class OutOfStockProvider extends ChangeNotifier {
           userIds.add({'user_id': subItem.supplierId, 'silent_push': 0});
 
           // Fire-and-forget: don't await, just trigger in background
+          // Include table 11 (master) so other admins get full data including new remainder sub
           _pushNotificationSender.sendPushNotification(
-            dataIds: [PushData(table: 12, id: subItem.oospId)],
+            dataIds: [
+              PushData(table: 11, id: subItem.oospMasterId),
+              PushData(table: 12, id: subItem.oospId),
+            ],
             customUserIds: userIds,
             message: 'Order confirmed',
           ).catchError((e) {
-            developer.log('OutOfStockProvider: Error sending push notification: $e');
+         
           });
 
           _setLoading(false);
@@ -669,8 +790,8 @@ class OutOfStockProvider extends ChangeNotifier {
             (_) {},
             (admins) {
               for (final admin in admins) {
-                if (admin.id != currentUserId) {
-                  userIds.add({'user_id': admin.id, 'silent_push': 1});
+                if (admin.userId != currentUserId) {
+                  userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
                 }
               }
             },
@@ -682,7 +803,7 @@ class OutOfStockProvider extends ChangeNotifier {
             customUserIds: userIds,
             message: 'Order cancelled',
           ).catchError((e) {
-            developer.log('OutOfStockProvider: Error sending push notification: $e');
+             
           });
 
           _setLoading(false);
@@ -750,8 +871,8 @@ class OutOfStockProvider extends ChangeNotifier {
         (_) {},
         (admins) {
           for (final admin in admins) {
-            if (admin.id != currentUserId) {
-              userIds.add({'user_id': admin.id, 'silent_push': 1});
+            if (admin.userId != currentUserId) {
+              userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
             }
           }
         },
@@ -765,7 +886,7 @@ class OutOfStockProvider extends ChangeNotifier {
         customUserIds: userIds,
         message: 'Order confirmed',
       ).catchError((e) {
-        developer.log('OutOfStockProvider: Error sending push notification: $e');
+         
       });
 
       _setLoading(false);
@@ -822,7 +943,8 @@ class OutOfStockProvider extends ChangeNotifier {
       await _createNewSub(
         subItem: subItem,
         qty: subItem.qty - subItem.availQty,
-        availQty: subItem.qty - subItem.availQty,
+        availQty: 0.0,
+        supplierId: -1,
         onFailure: onFailure,
         onSuccess: () async {
           await _outOfStockRepository.updateOospFlag(
@@ -839,8 +961,8 @@ class OutOfStockProvider extends ChangeNotifier {
             (_) {},
             (admins) {
               for (final admin in admins) {
-                if (admin.id != currentUserId) {
-                  userIds.add({'user_id': admin.id, 'silent_push': 1});
+                if (admin.userId != currentUserId) {
+                  userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
                 }
               }
             },
@@ -849,12 +971,16 @@ class OutOfStockProvider extends ChangeNotifier {
           userIds.add({'user_id': subItem.supplierId, 'silent_push': 0});
 
           // Fire-and-forget: don't await, just trigger in background
+          // Include table 11 (master) so other admins get full data including new remainder sub
           _pushNotificationSender.sendPushNotification(
-            dataIds: [PushData(table: 12, id: subItem.oospId)],
+            dataIds: [
+              PushData(table: 11, id: subItem.oospMasterId),
+              PushData(table: 12, id: subItem.oospId),
+            ],
             customUserIds: userIds,
             message: 'Order confirmed',
           ).catchError((e) {
-            developer.log('OutOfStockProvider: Error sending push notification: $e');
+         
           });
 
           _setLoading(false);
@@ -929,18 +1055,22 @@ class OutOfStockProvider extends ChangeNotifier {
         (_) {},
         (admins) {
           for (final admin in admins) {
-            userIds.add({'user_id': admin.id, 'silent_push': 0});
+            userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 0});
           }
         },
       );
 
       // Fire-and-forget: don't await, just trigger in background
       _pushNotificationSender.sendPushNotification(
-        dataIds: [PushData(table: 12, id: subItem.oospId)],
+        dataIds: [
+          PushData(table: 12, id: subItem.oospId),
+          //include master id to get the full order details
+          PushData(table: 11, id: subItem.oospMasterId),
+          ],
         customUserIds: userIds,
         message: 'Supplier response',
       ).catchError((e) {
-        developer.log('OutOfStockProvider: Error sending push notification: $e');
+         
       });
 
       _setLoading(false);
@@ -997,14 +1127,21 @@ class OutOfStockProvider extends ChangeNotifier {
         oospMasterId: subItem.oospMasterId,
         onFailure: onFailure,
         onSuccess: () async {
-          await _outOfStockRepository.updateOospFlag(
+          // Update local DB: availQty, note, oospFlag, and isCheckedflag together
+          // Matching KMP's rejectAvailableQty SQL query
+          final updateResult = await _outOfStockRepository.rejectAvailableQty(
             oospId: subItem.oospId,
+            availQty: 0.0,
+            note: note,
             oospFlag: 4,
           );
-          await _outOfStockRepository.updateIsCheckedFlag(
-            oospId: subItem.oospId,
-            isCheckedFlag: 1,
-          );
+
+          if (updateResult.isLeft) {
+            _setError(updateResult.left.message);
+            _setLoading(false);
+            onFailure(updateResult.left.message);
+            return;
+          }
 
           await getOopsSub(subItem.oospMasterId);
 
@@ -1016,8 +1153,8 @@ class OutOfStockProvider extends ChangeNotifier {
             (_) {},
             (admins) {
               for (final admin in admins) {
-                if (admin.id != currentUserId) {
-                  userIds.add({'user_id': admin.id, 'silent_push': 1});
+                if (admin.userId != currentUserId) {
+                  userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
                 }
               }
             },
@@ -1067,9 +1204,37 @@ class OutOfStockProvider extends ChangeNotifier {
     _clearError();
 
     try {
-      // Get order sub by sub ID - need to find order sub with matching orderSubId
-      final orderResult = await _ordersRepository.getOrderWithNamesById(master.orderSubId);
+      // TRACE: log which orderSubId we use from master (path 1 – from OutOfStockMaster)
+      developer.log(
+        'informSalesman: entry master.oospMasterId=${master.oospMasterId}, master.orderSubId=${master.orderSubId} (from OutOfStockMaster)',
+        name: 'OutOfStockProvider.trace',
+      );
+
+      // changes made by ai on 28/01/2026 as a fix for informSalesman using wrong id (oospMasterId) as orderId; now resolve orderId from order sub so the correct order is loaded and salesman receives the stock update
+      final orderSubByIdResult = await _ordersRepository.getOrderSubById(master.orderSubId);
+      if (orderSubByIdResult.isLeft) {
+         
+        _setError('Order sub not found');
+        _setLoading(false);
+        onFailure('Order sub not found');
+        return;
+      }
+      final orderSubForOrderId = orderSubByIdResult.right;
+      if (orderSubForOrderId == null) {
+        _setError('Order sub not found');
+        _setLoading(false);
+        onFailure('Order sub not found');
+        return;
+      }
+      final orderId = orderSubForOrderId.orderSubOrdrId;
+      // TRACE: log which order/sub we resolved to (getOrderSubById(master.orderSubId))
+      developer.log(
+        'informSalesman: getOrderSubById(master.orderSubId) resolved to orderId=$orderId, orderSubId=${orderSubForOrderId.orderSubId}',
+        name: 'OutOfStockProvider.trace',
+      );
+      final orderResult = await _ordersRepository.getOrderWithNamesById(orderId);
       if (orderResult.isLeft || orderResult.right == null) {
+         
         _setError('Order not found');
         _setLoading(false);
         onFailure('Order not found');
@@ -1078,10 +1243,11 @@ class OutOfStockProvider extends ChangeNotifier {
 
       final orderWithName = orderResult.right!;
       final orderSubsResult = await _ordersRepository.getAllOrderSubAndDetails(
-        orderWithName.order.id,
+        orderWithName.order.orderId,
       );
 
       if (orderSubsResult.isLeft) {
+         
         _setError('Order sub not found');
         _setLoading(false);
         onFailure('Order sub not found');
@@ -1089,8 +1255,10 @@ class OutOfStockProvider extends ChangeNotifier {
       }
 
       final orderSubs = orderSubsResult.right;
+      // Match by server OrderSub ID, not local DB primary key
+      // updated by ai on 28/01/2026
       final orderSub = orderSubs.firstWhere(
-        (sub) => sub.orderSub.id == master.orderSubId,
+        (sub) => sub.orderSub.orderSubId == master.orderSubId,
         orElse: () {
           if (orderSubs.isNotEmpty) return orderSubs.first;
           throw Exception('Order sub not found');
@@ -1099,13 +1267,34 @@ class OutOfStockProvider extends ChangeNotifier {
 
       final order = orderWithName.order;
 
+      // TRACE: log which order sub we matched and will update (must match master.orderSubId)
+      developer.log(
+        'informSalesman: matched orderSub orderSubId=${orderSub.orderSub.orderSubId}, orderId=${order.orderId} (will send update for this line)',
+        name: 'OutOfStockProvider.trace',
+      );
+
+      // DEBUG: Log initial context for salesman notification
+      developer.log(
+        'informSalesman: start '
+        'oospMasterId=${master.oospMasterId}, '
+        'orderId=${order.orderId}, '
+        'orderSubId=${orderSub.orderSub.orderSubId}, '
+        'orderFlagBefore=${orderSub.orderSub.orderSubOrdrFlag}, '
+        'orderQty=${orderSub.orderSub.orderSubQty}, '
+        'orderAvailBefore=${orderSub.orderSub.orderSubAvailableQty}, '
+        'availableQtyFromAdmin=$availableQty',
+        name: 'OutOfStockProvider',
+      );
+
       // Build user IDs for push notification
       final currentUserId = await StorageHelper.getUserId();
       final List<Map<String, dynamic>> userIds = [];
 
       if (master.salesmanId != -1) {
+         
         userIds.add({'user_id': master.salesmanId, 'silent_push': 0});
       } else {
+         
         userIds.add({'user_id': master.storekeeperId, 'silent_push': 0});
       }
 
@@ -1114,8 +1303,8 @@ class OutOfStockProvider extends ChangeNotifier {
         (_) {},
         (admins) {
           for (final admin in admins) {
-            if (admin.id != currentUserId) {
-              userIds.add({'user_id': admin.id, 'silent_push': 1});
+            if (admin.userId != currentUserId) {
+              userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
             }
           }
         },
@@ -1130,7 +1319,7 @@ class OutOfStockProvider extends ChangeNotifier {
             (_) {},
             (checkers) {
               for (final checker in checkers) {
-                userIds.add({'user_id': checker.id, 'silent_push': 1});
+                userIds.add({'user_id': checker.userId ?? -1, 'silent_push': 1});
               }
             },
           );
@@ -1143,7 +1332,7 @@ class OutOfStockProvider extends ChangeNotifier {
             (_) {},
             (billers) {
               for (final biller in billers) {
-                userIds.add({'user_id': biller.id, 'silent_push': 1});
+                userIds.add({'user_id': biller.userId ?? -1, 'silent_push': 1});
               }
             },
           );
@@ -1162,11 +1351,19 @@ class OutOfStockProvider extends ChangeNotifier {
       final updateOrderFlag = (availableQty == neededQty &&
               order.orderApproveFlag != OrderApprovalFlag.completed)
           ? OrderSubFlag.inStock
-          : OrderSubFlag.outOfStock;
+          : OrderSubFlag.notAvailable;
+
+      // DEBUG: Log computed quantities and flag
+      developer.log(
+        'informSalesman: computed '
+        'neededQty=$neededQty, lastQty=$lastQty, '
+        'updateOrderFlag=$updateOrderFlag',
+        name: 'OutOfStockProvider',
+      );
 
       // Build order sub update payload
       final orderSubPayload = {
-        'id': orderSub.orderSub.id,
+        'id': orderSub.orderSub.orderSubId,
         'order_sub_prd_id': orderSub.orderSub.orderSubPrdId,
         'order_sub_unit_id': orderSub.orderSub.orderSubUnitId,
         'order_sub_car_id': orderSub.orderSub.orderSubCarId,
@@ -1185,6 +1382,12 @@ class OutOfStockProvider extends ChangeNotifier {
       };
 
       // Call API to update order sub
+      developer.log(
+        'informSalesman: sending updateOrderSub '
+        'payloadFlag=${orderSubPayload['order_sub_ordr_flag']} '
+        'availQty=${orderSubPayload['order_sub_available_qty']}',
+        name: 'OutOfStockProvider',
+      );
       final orderSubResponse = await _dio.post(
         ApiEndpoints.updateOrderSub,
         data: orderSubPayload,
@@ -1206,16 +1409,23 @@ class OutOfStockProvider extends ChangeNotifier {
         onFailure: onFailure,
         onSuccess: () async {
           final orderSubApi = OrderSubApi.fromJson(orderSubResponseData);
+          developer.log(
+            'informSalesman: API OK, updating local OrderSub '
+            'id=${orderSubApi.data.orderSubId}, '
+            'flag=${orderSubApi.data.orderSubOrdrFlag}, '
+            'availQty=${orderSubApi.data.orderSubAvailableQty}',
+            name: 'OutOfStockProvider',
+          );
           await _ordersRepository.addOrderSub(orderSubApi.data);
           await _outOfStockRepository.updateCompleteFlag(master.oospMasterId);
 
           // Fire-and-forget: don't await, just trigger in background
           _pushNotificationSender.sendPushNotification(
-            dataIds: [PushData(table: 9, id: orderSubApi.data.id)],
+            dataIds: [PushData(table: 9, id: orderSubApi.data.orderSubId)],
             customUserIds: userIds,
             message: 'Update from admin',
           ).catchError((e) {
-            developer.log('OutOfStockProvider: Error sending push notification: $e');
+             
           });
 
           _setLoading(false);
@@ -1307,8 +1517,8 @@ class OutOfStockProvider extends ChangeNotifier {
         (_) {},
         (admins) {
           for (final admin in admins) {
-            if (admin.id != currentUserId) {
-              userIds.add({'user_id': admin.id, 'silent_push': 1});
+            if (admin.userId != currentUserId) {
+              userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
             }
           }
         },
@@ -1326,7 +1536,7 @@ class OutOfStockProvider extends ChangeNotifier {
         customUserIds: userIds,
         message: 'Order cancelled',
       ).catchError((e) {
-        developer.log('OutOfStockProvider: Error sending push notification: $e');
+         
       });
 
       onSuccess();
@@ -1354,6 +1564,8 @@ class OutOfStockProvider extends ChangeNotifier {
   // ============================================================================
 
   /// Build update out of stock sub params (matching KMP's updateOutOfStockSubParams)
+  /// [supplierIdOverride] Optional. Used when sending to a newly selected supplier
+  /// before persisting. Fix: 2026-02-03, by AI.
   Map<String, dynamic> _buildUpdateOutOfStockSubParams({
     required OutOfStockSubWithDetails subItem,
     required int flag,
@@ -1361,7 +1573,9 @@ class OutOfStockProvider extends ChangeNotifier {
     String? note,
     double? availQty,
     double? qty,
+    int? supplierIdOverride,
   }) {
+    final supplierId = supplierIdOverride ?? subItem.supplierId;
     return {
       'id': subItem.oospId,
       'outos_sub_outos_id': subItem.oospMasterId,
@@ -1370,7 +1584,7 @@ class OutOfStockProvider extends ChangeNotifier {
       'outos_sub_sales_man_id': subItem.salesmanId,
       'outos_sub_stock_keeper_id': subItem.storekeeperId,
       'outos_sub_date_and_time': subItem.dateAndTime,
-      'outos_sub_supp_id': subItem.supplierId,
+      'outos_sub_supp_id': supplierId,
       'outos_sub_prod_id': subItem.productId,
       'outos_sub_unit_id': subItem.unitId,
       'outos_sub_car_id': subItem.carId,
@@ -1407,7 +1621,7 @@ class OutOfStockProvider extends ChangeNotifier {
         'outos_sub_sales_man_id': subItem.salesmanId,
         'outos_sub_stock_keeper_id': subItem.storekeeperId,
         'outos_sub_date_and_time': dateTimeStr,
-        'outos_sub_supp_id': supplierId == -1 ? subItem.supplierId : supplierId,
+        'outos_sub_supp_id': supplierId,
         'outos_sub_prod_id': subItem.productId,
         'outos_sub_unit_id': subItem.unitId,
         'outos_sub_car_id': subItem.carId,
@@ -1437,7 +1651,24 @@ class OutOfStockProvider extends ChangeNotifier {
       }
 
       final outOfStockSubApi = OutOfStockSubApi.fromJson(responseData);
+      final responseSub = outOfStockSubApi.data;
+      final acceptedOospId = subItem.oospId;
+      final isSameId = responseSub.outOfStockSubId == acceptedOospId;
+      developer.log(
+        '_createNewSub: API success | responseSubId=${responseSub.outOfStockSubId}, responseQty=${responseSub.outosSubQty}, responseAvailQty=${responseSub.outosSubAvailableQty} | acceptedSubOospId=$acceptedOospId | SAME_ID=$isSameId (if true, add would overwrite accepted sub)',
+        name: 'OutOfStock.createNewSub',
+      );
       await _outOfStockRepository.addOutOfStockProduct(outOfStockSubApi.data);
+      if (responseSub.outosSubFlag != 1) {
+        await _outOfStockRepository.updateOospActiveFlag(
+          oospId: responseSub.outOfStockSubId,
+          flag: 1,
+        );
+      }
+      developer.log(
+        '_createNewSub: addOutOfStockProduct done for id=${responseSub.outOfStockSubId}',
+        name: 'OutOfStock.createNewSub',
+      );
 
       onSuccess();
     } on DioException catch (e) {

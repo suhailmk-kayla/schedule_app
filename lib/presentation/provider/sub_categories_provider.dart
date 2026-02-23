@@ -137,13 +137,13 @@ class SubCategoriesProvider extends ChangeNotifier {
       (createdSubCategory) {
         // Send push notification (matches KMP lines 71-73)
         final dataIds = [
-          PushData(table: NotificationId.subCategory, id: createdSubCategory.id),
+          PushData(table: NotificationId.subCategory, id: createdSubCategory.subCategoryId),
         ];
         _pushNotificationSender.sendPushNotification(
           dataIds: dataIds,
           message: 'Sub-Category updates',
         ).catchError((e) {
-          developer.log('SubCategoriesProvider: Error sending push notification: $e');
+           
         });
 
         _isLoading = false;
@@ -206,7 +206,7 @@ class SubCategoriesProvider extends ChangeNotifier {
           dataIds: dataIds,
           message: 'Sub-Category updates',
         ).catchError((e) {
-          developer.log('SubCategoriesProvider: Error sending push notification: $e');
+           
         });
 
         _isLoading = false;

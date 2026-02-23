@@ -113,13 +113,13 @@ class RoutesProvider extends ChangeNotifier {
       (route) {
         // Send push notification (matches KMP lines 138-140)
         final dataIds = [
-          PushData(table: NotificationId.routes, id: route.id),
+          PushData(table: NotificationId.routes, id: route.routeId ?? -1),
         ];
         _pushNotificationSender.sendPushNotification(
           dataIds: dataIds,
           message: 'Route updates',
         ).catchError((e) {
-          developer.log('RoutesProvider: Error sending push notification: $e');
+           
         });
 
         _setLoading(false);
@@ -170,13 +170,13 @@ class RoutesProvider extends ChangeNotifier {
       (route) {
         // Send push notification (matches KMP lines 165-167)
         final dataIds = [
-          PushData(table: NotificationId.routes, id: route.id),
+          PushData(table: NotificationId.routes, id: route.routeId ?? -1),
         ];
         _pushNotificationSender.sendPushNotification(
           dataIds: dataIds,
           message: 'Route updates',
         ).catchError((e) {
-          developer.log('RoutesProvider: Error sending push notification: $e');
+           
         });
 
         _setLoading(false);

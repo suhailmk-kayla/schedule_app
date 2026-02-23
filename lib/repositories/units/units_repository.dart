@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 import 'package:either_dart/either.dart';
 import 'package:sqflite/sqflite.dart';
@@ -219,35 +221,29 @@ class UnitsRepository {
   Future<Either<Failure, void>> addUnit(Units unit) async {
     try {
       final db = await _database;
+      
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
         INSERT OR REPLACE INTO Units (
-          id,
-          unitId,
-          code,
-          name,
-          displayName,
-          type,
-          baseId,
-          baseQty,
-          comment,
-          flag
+          unitId, code, name, displayName, type, baseId, baseQty, comment, flag
         ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
-          unit.id,
+          unit.unitId,
           unit.code,
           unit.name,
           unit.displayName,
           unit.type,
           unit.baseId,
           unit.baseQty,
-          unit.comment,
-          1,
+          unit.comment ?? '',
+          1, // flag (default 1)
         ],
       );
+      
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -259,38 +255,31 @@ class UnitsRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT OR REPLACE INTO Units (
-          id,
-          unitId,
-          code,
-          name,
-          displayName,
-          type,
-          baseId,
-          baseQty,
-          comment,
-          flag
-        ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-        ''';
+        final batch = txn.batch();
         for (final unit in units) {
-          await txn.rawInsert(
-            sql,
+          // Use INSERT OR REPLACE (matches KMP pattern)
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO Units (
+              unitId, code, name, displayName, type, baseId, baseQty, comment, flag
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ''',
             [
-              unit.id,
+              unit.unitId,
               unit.code,
               unit.name,
               unit.displayName,
               unit.type,
               unit.baseId,
               unit.baseQty,
-              unit.comment,
+              unit.comment ?? '',
               1,
             ],
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -299,19 +288,51 @@ class UnitsRepository {
   }
 
   /// Update unit in local DB
+  /// Only updates fields that are provided in the unit object
+  /// Preserves unchanged fields from the original unit
   Future<Either<Failure, void>> updateUnitLocal(Units unit) async {
     try {
       final db = await _database;
-      await db.update(
-        'Units',
-        {
-          'name': unit.name,
-          'displayName': unit.displayName,
-          'comment': unit.comment,
-        },
-        where: 'unitId = ?',
-        whereArgs: [unit.id],
+      
+      // Get the original unit to compare and only update changed fields
+      final originalResult = await getUnitByUnitId(unit.unitId);
+      if (originalResult.isLeft) {
+        // If unit doesn't exist, this is an error
+        return originalResult.map((_) => null);
+      }
+      
+      final originalUnit = originalResult.fold(
+        (_) => null,
+        (u) => u,
       );
+      
+      if (originalUnit == null) {
+        return Left(DatabaseFailure.fromError('Unit not found in local database'));
+      }
+      
+      // Build update map with only changed fields
+      final Map<String, dynamic> updateMap = {};
+      
+      if (unit.name != originalUnit.name) {
+        updateMap['name'] = unit.name;
+      }
+      if (unit.displayName != originalUnit.displayName) {
+        updateMap['displayName'] = unit.displayName;
+      }
+      if (unit.comment != originalUnit.comment) {
+        updateMap['comment'] = unit.comment;
+      }
+      
+      // Only perform update if there are changes
+      if (updateMap.isNotEmpty) {
+        await db.update(
+          'Units',
+          updateMap,
+          where: 'unitId = ?',
+          whereArgs: [unit.unitId], // Use server ID, not local id
+        );
+      }
+      
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -323,8 +344,10 @@ class UnitsRepository {
     try {
       final db = await _database;
       await db.delete('Units');
+       
       return const Right(null);
     } catch (e) {
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -408,32 +431,69 @@ class UnitsRepository {
 
       return Right(unitApi.data);
     } on DioException catch (e) {
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
+       
       return Left(UnknownFailure.fromError(e));
     }
   }
 
   /// Update unit via API and update local DB
+  /// Only sends changed fields to API (id, name, display_name)
+  /// Matches KMP's updateUnit implementation (UnitsViewModel.kt lines 140-165)
+  /// Uses server ID (unitId) for updates, not local ID
   Future<Either<Failure, Units>> updateUnit({
     required Units unit,
+    String? name,
+    String? displayName,
   }) async {
     try {
-      // 1. Call API
-      final response = await _dio.post(
-        ApiEndpoints.updateUnit,
-        data: unit.toJson(),
+      // Prepare base unit with NEW values overlaid on the existing unit
+      final baseUnit = Units(
+        id: unit.id,
+        unitId: unit.unitId,
+        name: name ?? unit.name,
+        code: unit.code,
+        displayName: displayName ?? unit.displayName,
+        type: unit.type,
+        baseId: unit.baseId,
+        baseQty: unit.baseQty,
+        comment: unit.comment,
       );
 
-      // 2. Parse response
-      final unitApi = UnitApi.fromJson(response.data);
+      // Build API payload with only changed fields
+      // KMP sends: id (unitId), name, display_name
+      final Map<String, dynamic> payload = {
+        'id': unit.unitId, // Always use server ID (unitId), not local id
+      };
+
+      // Only include fields that are being updated
+      if (name != null) {
+        payload['name'] = name;
+      }
+      if (displayName != null) {
+        payload['display_name'] = displayName;
+      }
+
+      // 1. Call API with minimal payload (only changed fields)
+      final response = await _dio.post(
+        ApiEndpoints.updateUnit,
+        data: payload,
+      );
+
+      // 2. Parse response with merge support (handles partial responses)
+      final unitApi = UnitApi.fromJsonWithMerge(
+        response.data,
+        existingUnit: baseUnit,
+      );
       if (unitApi.status != 1) {
         return Left(ServerFailure.fromError(
           'Failed to update unit: ${unitApi.message}',
         ));
       }
 
-      // 3. Store in local DB
+      // 3. Store in local DB (only update changed fields)
       final updateResult = await updateUnitLocal(unitApi.data);
       if (updateResult.isLeft) {
         return updateResult.map((_) => unitApi.data);

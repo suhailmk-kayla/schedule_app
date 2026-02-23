@@ -127,10 +127,10 @@ class SuppliersRepository {
       await db.rawInsert(
         '''
         INSERT OR REPLACE INTO Suppliers(
-          id, supplierId, userId, code, name, phone, address,
+          supplierId, userId, code, name, phone, address,
           deviceToken, createdDateTime, updatedDateTime, flag
         ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
@@ -166,10 +166,10 @@ class SuppliersRepository {
           batch.rawInsert(
             '''
             INSERT OR REPLACE INTO Suppliers(
-              id, supplierId, userId, code, name, phone, address,
+              supplierId, userId, code, name, phone, address,
               deviceToken, createdDateTime, updatedDateTime, flag
             ) VALUES (
-              NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             ''',
             [
@@ -189,7 +189,7 @@ class SuppliersRepository {
         // CRITICAL: Commit all inserts at once - matches SQLDelight's optimized behavior
         await batch.commit(noResult: true);
       });
-      developer.log('SuppliersRepository: ${suppliers.length} suppliers added successfully');
+       
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -236,6 +236,7 @@ class SuppliersRepository {
         where: 'supplierId = ?',
         whereArgs: [supplierId],
       );
+       
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));

@@ -15,8 +15,10 @@ class OrderItemDetail {
 
   OrderSub get orderSub => details.orderSub;
   String get productName => details.productName ?? '';
+  String get productCode => details.productCode ?? '';
   String get productBrand => details.productBrand ?? '';
   String get productSubBrand => details.productSubBrand ?? '';
+  String get productPhoto => details.productPhoto ?? '';
   String get unitName => details.unitName ?? '';
   String get unitDisplayName =>
       details.unitDispName?.isNotEmpty == true ? details.unitDispName! : unitName;

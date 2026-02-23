@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 import 'package:either_dart/either.dart';
 import 'package:sqflite/sqflite.dart';
@@ -200,29 +202,23 @@ class RoutesRepository {
   Future<Either<Failure, void>> addRoute(Route route) async {
     try {
       final db = await _database;
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
         INSERT OR REPLACE INTO Routes (
-          id,
-          routeId,
-          code,
-          name,
-          salesmanId,
-          createdDateTime,
-          updatedDateTime,
-          flag
+          routeId, code, name, salesmanId, createdDateTime, updatedDateTime, flag
         ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
-          route.id,
+          route.routeId ?? -1, // Server ID
           route.code,
           route.name,
           route.salesmanId,
           route.createdAt ?? '',
           route.updatedAt ?? '',
-          1,
+          1, // flag
         ],
       );
       return const Right(null);
@@ -236,34 +232,29 @@ class RoutesRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT OR REPLACE INTO Routes (
-          id,
-          routeId,
-          code,
-          name,
-          salesmanId,
-          createdDateTime,
-          updatedDateTime,
-          flag
-        ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?
-        )
-        ''';
+        final batch = txn.batch();
         for (final route in routes) {
-          await txn.rawInsert(
-            sql,
+          // Use INSERT OR REPLACE (matches KMP pattern)
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO Routes (
+              routeId, code, name, salesmanId, createdDateTime, updatedDateTime, flag
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?
+            )
+            ''',
             [
-              route.id,
+              route.routeId ?? -1, // Server ID
               route.code,
               route.name,
               route.salesmanId,
               route.createdAt ?? '',
               route.updatedAt ?? '',
-              1,
+              1, // flag
             ],
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -271,15 +262,20 @@ class RoutesRepository {
     }
   }
 
-  /// Update route in local DB
+  /// Update route in local DB (uses server ID)
   Future<Either<Failure, void>> updateRouteLocal(Route route) async {
     try {
       final db = await _database;
       await db.update(
         'Routes',
-        {'name': route.name},
-        where: 'routeId = ?',
-        whereArgs: [route.id],
+        {
+          'name': route.name,
+          'code': route.code,
+          'salesmanId': route.salesmanId,
+          'updatedDateTime': route.updatedAt ?? '',
+        },
+        where: 'routeId = ?', // Use server ID, not local id
+        whereArgs: [route.routeId ?? -1],
       );
       return const Right(null);
     } catch (e) {
@@ -397,7 +393,35 @@ class RoutesRepository {
     required String name,
   }) async {
     try {
-      // 1. Call API
+      // 1. Get existing route from local DB to preserve unchanged fields (code, salesmanId)
+      Route? existingRoute;
+      try {
+        final db = await _database;
+        final maps = await db.query(
+          'Routes',
+          where: 'routeId = ?',
+          whereArgs: [routeId],
+          limit: 1,
+        );
+        if (maps.isNotEmpty) {
+          existingRoute = Route.fromMap(maps.first);
+        }
+      } catch (_) {
+        // Ignore fetch errors; proceed with provided data
+      }
+
+      // Build base route with NEW values overlaid on existing fields
+      final baseRoute = Route(
+        id: existingRoute?.id,
+        routeId: existingRoute?.routeId ?? routeId,
+        name: name,
+        code: existingRoute?.code ?? '',
+        salesmanId: existingRoute?.salesmanId ?? -1,
+        createdAt: existingRoute?.createdAt,
+        updatedAt: existingRoute?.updatedAt,
+      );
+
+      // 2. Call API
       final response = await _dio.post(
         ApiEndpoints.updateRoute,
         data: {
@@ -406,15 +430,19 @@ class RoutesRepository {
         },
       );
 
-      // 2. Parse response
-      final addRouteApi = AddRouteApi.fromJson(response.data);
+      // 3. Parse response with merge support (handles partial responses)
+      final addRouteApi = AddRouteApi.fromJsonWithMerge(
+        response.data,
+        existingRoute: baseRoute,
+      );
       if (addRouteApi.status != 1) {
+         
         return Left(ServerFailure.fromError(
           'Failed to update route: ${addRouteApi.message}',
         ));
       }
 
-      // 3. Store in local DB
+      // 4. Store in local DB
       final updateResult = await updateRouteLocal(addRouteApi.data);
       if (updateResult.isLeft) {
         return updateResult.map((_) => addRouteApi.data);
@@ -422,8 +450,10 @@ class RoutesRepository {
 
       return Right(addRouteApi.data);
     } on DioException catch (e) {
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
+       
       return Left(UnknownFailure.fromError(e));
     }
   }

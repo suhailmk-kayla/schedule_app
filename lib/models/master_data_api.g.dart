@@ -34,13 +34,13 @@ Map<String, dynamic> _$CategoryListApiToJson(CategoryListApi instance) =>
     };
 
 Category _$CategoryFromJson(Map<String, dynamic> json) => Category(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  categoryId: (json['id'] as num?)?.toInt() ?? -1,
   name: json['name'] as String? ?? '',
   remark: json['remark'] as String? ?? '',
 );
 
 Map<String, dynamic> _$CategoryToJson(Category instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.categoryId,
   'name': instance.name,
   'remark': instance.remark,
 };
@@ -74,7 +74,7 @@ Map<String, dynamic> _$SubCategoryListApiToJson(SubCategoryListApi instance) =>
     };
 
 SubCategory _$SubCategoryFromJson(Map<String, dynamic> json) => SubCategory(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  subCategoryId: (json['id'] as num?)?.toInt() ?? -1,
   name: json['name'] as String? ?? '',
   catId: (json['cat_id'] as num?)?.toInt() ?? -1,
   remark: json['remark'] as String? ?? '',
@@ -82,7 +82,7 @@ SubCategory _$SubCategoryFromJson(Map<String, dynamic> json) => SubCategory(
 
 Map<String, dynamic> _$SubCategoryToJson(SubCategory instance) =>
     <String, dynamic>{
-      'id': instance.id,
+      'id': instance.subCategoryId,
       'name': instance.name,
       'cat_id': instance.catId,
       'remark': instance.remark,
@@ -114,7 +114,7 @@ Map<String, dynamic> _$UnitListApiToJson(UnitListApi instance) =>
     };
 
 Units _$UnitsFromJson(Map<String, dynamic> json) => Units(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  unitId: (json['id'] as num?)?.toInt() ?? -1,
   name: json['name'] as String? ?? '',
   code: json['code'] as String? ?? '',
   displayName: json['display_name'] as String? ?? '',
@@ -125,7 +125,7 @@ Units _$UnitsFromJson(Map<String, dynamic> json) => Units(
 );
 
 Map<String, dynamic> _$UnitsToJson(Units instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.unitId,
   'name': instance.name,
   'code': instance.code,
   'display_name': instance.displayName,
@@ -164,7 +164,7 @@ Map<String, dynamic> _$CustomerListApiToJson(CustomerListApi instance) =>
     };
 
 Customer _$CustomerFromJson(Map<String, dynamic> json) => Customer(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  customerId: (json['id'] as num?)?.toInt() ?? -1,
   name: json['name'] as String? ?? '',
   code: json['code'] as String? ?? '',
   phoneNo: json['phone_no'] as String? ?? '',
@@ -178,7 +178,7 @@ Customer _$CustomerFromJson(Map<String, dynamic> json) => Customer(
 );
 
 Map<String, dynamic> _$CustomerToJson(Customer instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.customerId,
   'name': instance.name,
   'code': instance.code,
   'phone_no': instance.phoneNo,
@@ -241,7 +241,7 @@ Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
 };
 
 UserDown _$UserDownFromJson(Map<String, dynamic> json) => UserDown(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  userId: (json['id'] as num?)?.toInt() ?? -1,
   name: json['name'] as String? ?? '',
   code: json['code'] as String? ?? '',
   phoneNo: json['phone_no'] as String? ?? '',
@@ -253,7 +253,7 @@ UserDown _$UserDownFromJson(Map<String, dynamic> json) => UserDown(
 );
 
 Map<String, dynamic> _$UserDownToJson(UserDown instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.userId,
   'name': instance.name,
   'code': instance.code,
   'phone_no': instance.phoneNo,
@@ -329,7 +329,7 @@ Map<String, dynamic> _$RouteListApiToJson(RouteListApi instance) =>
     };
 
 Route _$RouteFromJson(Map<String, dynamic> json) => Route(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  routeId: (json['id'] as num?)?.toInt() ?? -1,
   name: json['name'] as String? ?? '',
   code: json['code'] as String? ?? '',
   salesmanId: (json['salesman_id'] as num?)?.toInt() ?? -1,
@@ -338,7 +338,7 @@ Route _$RouteFromJson(Map<String, dynamic> json) => Route(
 );
 
 Map<String, dynamic> _$RouteToJson(Route instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.routeId,
   'name': instance.name,
   'code': instance.code,
   'salesman_id': instance.salesmanId,
@@ -407,23 +407,44 @@ Map<String, dynamic> _$OutOfStockSubListApiToJson(
 };
 
 OutOfStock _$OutOfStockFromJson(Map<String, dynamic> json) => OutOfStock(
-  id: (json['id'] as num?)?.toInt() ?? -1,
-  outosOrderSubId: (json['outos_order_sub_id'] as num?)?.toInt() ?? -1,
-  outosCustId: (json['outos_cust_id'] as num?)?.toInt() ?? -1,
-  outosSalesManId: (json['outos_sales_man_id'] as num?)?.toInt() ?? -1,
-  outosStockKeeperId: (json['outos_stock_keeper_id'] as num?)?.toInt() ?? -1,
-  outosDateAndTime: json['outos_date_and_time'] as String? ?? '',
-  outosProdId: (json['outos_prod_id'] as num?)?.toInt() ?? -1,
-  outosUnitId: (json['outos_unit_id'] as num?)?.toInt() ?? -1,
-  outosCarId: (json['outos_car_id'] as num?)?.toInt() ?? -1,
-  outosQty: (json['outos_qty'] as num?)?.toDouble() ?? 0.0,
-  outosAvailableQty: (json['outos_available_qty'] as num?)?.toDouble() ?? 0.0,
-  outosUnitBaseQty: (json['outos_unit_base_qty'] as num?)?.toDouble() ?? 0.0,
+  outOfStockId: json['id'] == null ? -1 : parseInt(json['id']),
+  outosOrderSubId: json['outos_order_sub_id'] == null
+      ? -1
+      : parseInt(json['outos_order_sub_id']),
+  outosCustId: json['outos_cust_id'] == null
+      ? -1
+      : parseInt(json['outos_cust_id']),
+  outosSalesManId: json['outos_sales_man_id'] == null
+      ? -1
+      : parseInt(json['outos_sales_man_id']),
+  outosStockKeeperId: json['outos_stock_keeper_id'] == null
+      ? -1
+      : parseInt(json['outos_stock_keeper_id']),
+  outosDateAndTime: json['outos_date_and_time'] == null
+      ? ''
+      : parseString(json['outos_date_and_time']),
+  outosProdId: json['outos_prod_id'] == null
+      ? -1
+      : parseInt(json['outos_prod_id']),
+  outosUnitId: json['outos_unit_id'] == null
+      ? -1
+      : parseInt(json['outos_unit_id']),
+  outosCarId: json['outos_car_id'] == null
+      ? -1
+      : parseInt(json['outos_car_id']),
+  outosQty: json['outos_qty'] == null ? 0.0 : parseDouble(json['outos_qty']),
+  outosAvailableQty: json['outos_available_qty'] == null
+      ? 0.0
+      : parseDouble(json['outos_available_qty']),
+  outosUnitBaseQty: json['outos_unit_base_qty'] == null
+      ? 0.0
+      : parseDouble(json['outos_unit_base_qty']),
   outosNote: json['outos_note'] as String?,
   outosNarration: json['outos_narration'] as String?,
-  outosIsCompleatedFlag:
-      (json['outos_is_compleated_flag'] as num?)?.toInt() ?? -1,
-  outosFlag: (json['outos_flag'] as num?)?.toInt(),
+  outosIsCompleatedFlag: json['outos_is_compleated_flag'] == null
+      ? -1
+      : parseInt(json['outos_is_compleated_flag']),
+  outosFlag: parseInt(json['outos_flag']),
   uuid: json['uuid'] as String? ?? '',
   createdAt: json['created_at'] as String?,
   updatedAt: json['updated_at'] as String?,
@@ -434,7 +455,7 @@ OutOfStock _$OutOfStockFromJson(Map<String, dynamic> json) => OutOfStock(
 
 Map<String, dynamic> _$OutOfStockToJson(OutOfStock instance) =>
     <String, dynamic>{
-      'id': instance.id,
+      'id': instance.outOfStockId,
       'outos_order_sub_id': instance.outosOrderSubId,
       'outos_cust_id': instance.outosCustId,
       'outos_sales_man_id': instance.outosSalesManId,
@@ -459,7 +480,7 @@ Map<String, dynamic> _$OutOfStockToJson(OutOfStock instance) =>
 OutOfStockSub _$OutOfStockSubFromJson(
   Map<String, dynamic> json,
 ) => OutOfStockSub(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  outOfStockSubId: (json['id'] as num?)?.toInt() ?? -1,
   outosSubOutosId: (json['outos_sub_outos_id'] as num?)?.toInt() ?? -1,
   outosSubOrderSubId: (json['outos_sub_order_sub_id'] as num?)?.toInt() ?? -1,
   outosSubCustId: (json['outos_sub_cust_id'] as num?)?.toInt() ?? -1,
@@ -492,7 +513,7 @@ OutOfStockSub _$OutOfStockSubFromJson(
 
 Map<String, dynamic> _$OutOfStockSubToJson(OutOfStockSub instance) =>
     <String, dynamic>{
-      'id': instance.id,
+      'id': instance.outOfStockSubId,
       'outos_sub_outos_id': instance.outosSubOutosId,
       'outos_sub_order_sub_id': instance.outosSubOrderSubId,
       'outos_sub_cust_id': instance.outosSubCustId,

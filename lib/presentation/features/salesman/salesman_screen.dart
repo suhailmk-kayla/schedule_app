@@ -6,6 +6,7 @@ import '../../provider/salesman_provider.dart';
 import '../../../models/salesman_model.dart';
 import 'create_salesman_screen.dart';
 import 'salesman_details_screen.dart';
+import '../orders/orders_screen.dart';
 
 /// Salesman Screen
 /// Displays list of salesmen with search and navigation
@@ -71,13 +72,14 @@ class _SalesmanScreenState extends State<SalesmanScreen> {
   }
 
   void _handleReportViewClick(int userId) {
-    // Navigate to SalesmanOrders screen (TODO: implement SalesmanOrdersScreen)
-    // Navigator.push(
-    //   context,
-    //   MaterialPageRoute(
-    //     builder: (_) => SalesmanOrdersScreen(userId: userId),
-    //   ),
-    // );
+    // Navigate to OrdersScreen filtered by this salesman
+    // Matches KMP's reportViewClicked behavior (BaseScreen.kt line 809-812)
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OrdersScreen(salesmanId: userId),
+      ),
+    );
   }
 
   void _handleAddNew() {

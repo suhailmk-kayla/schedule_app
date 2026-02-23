@@ -29,7 +29,7 @@ class PushNotificationBuilder {
     final usersResult = await _usersRepository.getAllUsers();
     usersResult.fold(
       (failure) {
-        developer.log('PushNotificationBuilder: Failed to get users: ${failure.message}');
+         
       },
       (users) {
         for (final user in users) {
@@ -62,7 +62,7 @@ class PushNotificationBuilder {
     final usersResult = await _usersRepository.getAllUsers();
     usersResult.fold(
       (failure) {
-        developer.log('PushNotificationBuilder: Failed to get users: ${failure.message}');
+         
       },
       (users) {
         for (final user in users) {
@@ -78,7 +78,7 @@ class PushNotificationBuilder {
           }
 
           userIds.add({
-            'user_id': user.id,
+            'user_id': user.userId,
             'silent_push': 1,
           });
         }
@@ -116,7 +116,7 @@ class PushNotificationBuilder {
     final usersResult = await _usersRepository.getAllUsers();
     usersResult.fold(
       (failure) {
-        developer.log('PushNotificationBuilder: Failed to get users: ${failure.message}');
+         
       },
       (users) {
         for (final user in users) {
@@ -152,7 +152,7 @@ class PushNotificationBuilder {
     final usersResult = await _usersRepository.getAllUsers();
     usersResult.fold(
       (failure) {
-        developer.log('PushNotificationBuilder: Failed to get users: ${failure.message}');
+         
       },
       (users) {
         for (final user in users) {
@@ -272,7 +272,7 @@ class PushNotificationBuilder {
     final usersResult = await _usersRepository.getAllUsers();
     usersResult.fold(
       (failure) {
-        developer.log('PushNotificationBuilder: Failed to get users: ${failure.message}');
+         
       },
       (users) {
         for (final user in users) {

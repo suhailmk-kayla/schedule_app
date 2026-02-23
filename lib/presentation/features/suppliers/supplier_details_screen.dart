@@ -30,7 +30,6 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
   bool _passwordError = false;
 
   int _userType = 0;
-  bool _isUserActive = true;
 
   @override
   void initState() {
@@ -57,23 +56,27 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
     });
   }
 
-  void _handleEdit() {
-    Navigator.push(
+  Future<void> _handleEdit() async {
+    final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => CreateSupplierScreen(
           userId: widget.userId,
         ),
       ),
-    ).then((result) {
-      // Reload supplier details if supplier was updated
-      if (result == true && mounted) {
-        final usersProvider = Provider.of<UsersProvider>(context, listen: false);
-        usersProvider.loadUserById(widget.userId);
-        final suppliersProvider = Provider.of<SuppliersProvider>(context, listen: false);
-        suppliersProvider.getSuppliers();
-      }
-    });
+    );
+    
+    // Reload supplier details if supplier was updated
+    if (result == true && mounted) {
+      final usersProvider = Provider.of<UsersProvider>(context, listen: false);
+      // Wait for user data to reload before continuing
+      await usersProvider.loadUserById(widget.userId);
+      // Also reload user active status
+      await usersProvider.checkUserActive(widget.userId);
+      // Reload suppliers list
+      final suppliersProvider = Provider.of<SuppliersProvider>(context, listen: false);
+      await suppliersProvider.getSuppliers();
+    }
   }
 
   void _handleDelete() {
@@ -86,7 +89,8 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
   }
 
   void _handleLogoutDevice() {
-    if (!_isUserActive) return;
+    final usersProvider = Provider.of<UsersProvider>(context, listen: false);
+    if (!usersProvider.isUserActive) return;
     setState(() {
       _confirmMessage = 'Do you want to logout this supplier from all devices?';
       _confirmDialogType = 2;
@@ -130,6 +134,9 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
             categoryId: 4, // Supplier category ID
           );
           if (success && mounted) {
+            // Reload suppliers list before popping
+            final suppliersProvider = Provider.of<SuppliersProvider>(context, listen: false);
+            await suppliersProvider.getSuppliers();
             Navigator.of(context).pop();
           }
         }
@@ -346,214 +353,220 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
           }
 
           final user = userWithCategory.user;
-          _isUserActive = usersProvider.isUserActive;
+          final isUserActive = usersProvider.isUserActive;
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Card(
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Stack(
+          return Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Content
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      Card(
+                        elevation: 4,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Stack(
                           children: [
-                            Text(
-                              user.name.toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                const Text(
-                                  'Code : ',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                Text(
-                                  user.code,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.black,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                const Text(
-                                  'Category : ',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                Text(
-                                  userWithCategory.categoryName,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.black,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                const Text(
-                                  'Phone : ',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                Text(
-                                  user.phoneNo,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.black,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Address : ',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    user.address,
+                            // Content
+                            Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    user.name.toUpperCase(),
                                     style: const TextStyle(
-                                      fontSize: 14,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
                                       color: Colors.black,
                                     ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      const Text(
+                                        'Code : ',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                      Text(
+                                        user.code,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      const Text(
+                                        'Category : ',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                      Text(
+                                        userWithCategory.categoryName,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      const Text(
+                                        'Phone : ',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                      Text(
+                                        user.phoneNo,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Address : ',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Text(
+                                          user.address,
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.black,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      const Text(
+                                        'Status : ',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                      Text(
+                                        isUserActive ? 'Active' : 'Inactive',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: isUserActive
+                                              ? Colors.green.shade700
+                                              : Colors.red,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                const Text(
-                                  'Status : ',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                Text(
-                                  _isUserActive ? 'Active' : 'Inactive',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: _isUserActive
-                                        ? Colors.green.shade700
-                                        : Colors.red,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
+                            // Edit button - top right
+                            Positioned(
+                              top: 0,
+                              right: 0,
+                              child: IconButton(
+                                icon: const Icon(Icons.edit, size: 24),
+                                onPressed: _handleEdit,
+                              ),
+                            ),
+                            // Delete button - bottom right
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: IconButton(
+                                icon: const Icon(Icons.delete, size: 24, color: Colors.red),
+                                onPressed: _handleDelete,
+                              ),
                             ),
                           ],
-                        ),
-                      ),
-                      // Edit button - top right
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        child: IconButton(
-                          icon: const Icon(Icons.edit, size: 24),
-                          onPressed: _handleEdit,
-                        ),
-                      ),
-                      // Delete button - bottom right
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: IconButton(
-                          icon: const Icon(Icons.delete, size: 24, color: Colors.red),
-                          onPressed: _handleDelete,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          );
-        },
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            // mainAxisSize: MainAxisSize.min,
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: _handleChangePassword,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).primaryColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: const Text(
-                    'Change Password',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                    ),
+              ),
+              // Bottom buttons - inside Consumer to access usersProvider
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _handleChangePassword,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Theme.of(context).primaryColor,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: const Text(
+                            'Change Password',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (isUserActive) ...[
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _handleLogoutDevice,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.redAccent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: const Text(
+                              'Logout Device',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
-              if (_isUserActive) ...[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _handleLogoutDevice,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: const Text(
-                      'Logout Device',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ],
-          ),
-        ),
+          );
+        },
       ),
     );
   }

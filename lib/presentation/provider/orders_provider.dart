@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/foundation.dart';
 import '../../repositories/orders/orders_repository.dart';
 import '../../repositories/routes/routes_repository.dart';
@@ -16,7 +18,11 @@ import '../../utils/config.dart';
 import '../../utils/storage_helper.dart';
 import '../../utils/order_flags.dart';
 import '../../utils/push_notification_builder.dart';
+import '../../utils/push_notification_sender.dart';
+import '../../models/push_data.dart';
+import '../../utils/notification_id.dart';
 import 'package:intl/intl.dart';
+import 'package:get_it/get_it.dart';
 
 /// Orders Provider
 /// Manages order-related state and operations
@@ -31,6 +37,10 @@ class OrdersProvider extends ChangeNotifier {
   final ProductsRepository? _productsRepository;
   final PushNotificationBuilder _pushNotificationBuilder;
   final OutOfStockRepository _outOfStockRepository;
+  
+  /// Get PushNotificationSender lazily to avoid circular dependency
+  PushNotificationSender get _pushNotificationSender =>
+      GetIt.instance<PushNotificationSender>();
 
   OrdersProvider({
     required UsersRepository usersRepository,
@@ -59,8 +69,8 @@ class OrdersProvider extends ChangeNotifier {
   // State Variables
   // ============================================================================
 
-  List<Order> _orderList = [];
-  List<Order> get orderList => _orderList;
+  List<OrderWithName> _orderList = [];
+  List<OrderWithName> get orderList => _orderList;
 
   Order? _currentOrder;
   Order? get currentOrder => _currentOrder;
@@ -92,11 +102,17 @@ class OrdersProvider extends ChangeNotifier {
   final Map<int, OrderItemDetail> _replacedOrderItems = {};
   Map<int, OrderItemDetail> get replacedOrderItems => _replacedOrderItems;
 
+  // Track original order sub IDs when order is first loaded (to identify new items)
+  final Set<int> _originalOrderSubIds = {};
+
   List<Route> _routeList = [];
   List<Route> get routeList => _routeList;
 
   String _searchKey = '';
   String get searchKey => _searchKey;
+
+  int? _filterSalesmanId;
+  int? get filterSalesmanId => _filterSalesmanId;
 
 //2025-08-13 16:21:36
   String _date = '';
@@ -177,14 +193,37 @@ class OrdersProvider extends ChangeNotifier {
   }
 
   /// Load orders with filters
-  Future<void> loadOrders() async {
+  /// Set salesman filter for order list
+  /// When set, only orders for this salesman will be shown
+  /// Matches KMP's SalesmanOrderListScreen behavior
+  void setSalesmanFilter(int salesmanId) {
+    _filterSalesmanId = salesmanId;
+    notifyListeners();
+  }
+
+  /// Clear salesman filter
+  void clearSalesmanFilter() {
+    _filterSalesmanId = null;
+    notifyListeners();
+  }
+
+  Future<void> loadOrders({bool toRefresh=false}) async {
+    if(toRefresh){
+       
+    }else{
+       
+    }
     _setLoading(true);
     _clearError();
 
     final userType = await StorageHelper.getUserType();
     final userId = await StorageHelper.getUserId();
-    final int? salesmanId = userType == 3 ? userId : null;
-    final result = await _ordersRepository.getAllOrders(
+    
+    // Use filterSalesmanId if set, otherwise use userId if userType == 3 (salesman)
+    // Matches KMP's SalesmanOrderListScreen behavior
+    final int? salesmanId = _filterSalesmanId ?? (userType == 3 ? userId : null);
+    
+    final result = await _ordersRepository.getAllOrdersWithNames(
       searchKey: _searchKey,
       routeId: _routeId == -1 ? -1 : _routeId,
       date: _date,
@@ -193,8 +232,43 @@ class OrdersProvider extends ChangeNotifier {
 
     result.fold(
       (failure) => _setError(failure.message),
-      (orders) {
-        _orderList = orders;
+      (ordersWithNames) {
+        _orderList = ordersWithNames;
+        notifyListeners();
+      },
+    );
+
+    _setLoading(false);
+  }
+
+  /// Load draft orders (flag = 3) only
+  /// Used by DraftOrdersScreen for admin
+  Future<void> loadDraftOrders({bool toRefresh = false}) async {
+    if (toRefresh) {
+       
+    } else {
+       
+    }
+    _setLoading(true);
+    _clearError();
+
+    final userType = await StorageHelper.getUserType();
+    final userId = await StorageHelper.getUserId();
+
+    // Use filterSalesmanId if set, otherwise use userId if userType == 3 (salesman)
+    final int? salesmanId = _filterSalesmanId ?? (userType == 3 ? userId : null);
+
+    final result = await _ordersRepository.getAllDraftOrdersWithNames(
+      searchKey: _searchKey,
+      routeId: _routeId == -1 ? -1 : _routeId,
+      date: _date,
+      salesmanId: salesmanId,
+    );
+
+    result.fold(
+      (failure) => _setError(failure.message),
+      (ordersWithNames) {
+        _orderList = ordersWithNames;
         notifyListeners();
       },
     );
@@ -214,7 +288,7 @@ class OrdersProvider extends ChangeNotifier {
       (order) {
         _currentOrder = order;
         if (order != null) {
-          loadOrderSubs(order.id);
+          loadOrderSubs(order.orderId);
         }
         notifyListeners();
       },
@@ -268,18 +342,21 @@ class OrdersProvider extends ChangeNotifier {
 
     final details = itemsResult.right;
     final List<OrderItemDetail> builtItems = [];
-    final Map<int, int> replacementIds = {};
-    final Map<int, OrderItemDetail> replacementItems = {};
+    
+    // DON'T clear _replacedOrderSubIds - preserve in-memory tracking
+    // Only collect replacements from DB notes if any (for merge), but preserve existing tracking
+    final Map<int, int> replacementIdsFromDb = {};
+    final Map<int, OrderItemDetail> replacementItemsFromDb = {};
 
     for (final detail in details) {
       final suggestionsResult =
-          await _orderSubSuggestionsRepository.getAllSuggestionsBySubId(detail.orderSub.id);
+          await _orderSubSuggestionsRepository.getAllSuggestionsBySubId(detail.orderSub.orderSubId);
       final suggestions = suggestionsResult.fold(
         (_) => <OrderSubSuggestion>[],
         (value) => value,
       );
 
-      final packedResult = await _packedSubsRepository.getPackedList(detail.orderSub.id);
+      final packedResult = await _packedSubsRepository.getPackedList(detail.orderSub.orderSubId);
       final isPacked = packedResult.fold(
         (_) => false,
         (packedList) => packedList.isNotEmpty,
@@ -292,21 +369,40 @@ class OrdersProvider extends ChangeNotifier {
       );
       builtItems.add(item);
 
+      // Only extract from notes for DB tracking (but don't clear existing tracking)
       final replacedId = _extractReplacedOrderSubId(detail.orderSub.orderSubNote);
       if (replacedId != null) {
-        replacementIds[replacedId] = detail.orderSub.id;
-        replacementItems[detail.orderSub.id] = item;
+        replacementIdsFromDb[replacedId] = detail.orderSub.orderSubId;
+        replacementItemsFromDb[detail.orderSub.orderSubId] = item;
       }
     }
 
     _orderDetails = orderWithName;
     _orderDetailItems = builtItems;
-    _replacedOrderSubIds
-      ..clear()
-      ..addAll(replacementIds);
-    _replacedOrderItems
-      ..clear()
-      ..addAll(replacementItems);
+
+    // DEBUG: Log loaded order detail items (flags and available qty)
+    for (final item in builtItems) {
+      developer.log(
+        'OrdersProvider.loadOrderDetails: '
+        'orderId=$orderId '
+        'subId=${item.orderSub.orderSubId} '
+        'flag=${item.orderSub.orderSubOrdrFlag} '
+        'availQty=${item.orderSub.orderSubAvailableQty}',
+        name: 'OrdersProvider',
+      );
+    }
+    
+    // CRITICAL: Store original order sub IDs to identify new items later
+    // This prevents sending existing items as "new" which causes duplicates
+    _originalOrderSubIds.clear();
+    for (final item in builtItems) {
+      _originalOrderSubIds.add(item.orderSub.orderSubId);
+    }
+    
+    // Merge DB replacements with existing in-memory tracking (preserve in-memory over DB)
+    // Don't clear - this preserves tracking set by addProductToExistingOrder
+    _replacedOrderSubIds.addAll(replacementIdsFromDb);
+    _replacedOrderItems.addAll(replacementItemsFromDb);
     _orderDetailsLoading = false;
     notifyListeners();
   }
@@ -316,6 +412,7 @@ class OrdersProvider extends ChangeNotifier {
     _orderDetailItems = [];
     _replacedOrderSubIds.clear();
     _replacedOrderItems.clear();
+    _originalOrderSubIds.clear();
     _orderDetailsError = null;
     notifyListeners();
   }
@@ -375,7 +472,7 @@ class OrdersProvider extends ChangeNotifier {
       (_) {
         success = true;
         if (_currentOrder != null) {
-          loadOrderSubs(_currentOrder!.id);
+          loadOrderSubs(_currentOrder!.orderId);
         }
       },
     );
@@ -397,7 +494,7 @@ class OrdersProvider extends ChangeNotifier {
       (_) {
         success = true;
         if (_currentOrder != null) {
-          loadOrderSubs(_currentOrder!.id);
+          loadOrderSubs(_currentOrder!.orderId);
         }
       },
     );
@@ -419,7 +516,7 @@ class OrdersProvider extends ChangeNotifier {
       (_) {
         success = true;
         if (_currentOrder != null) {
-          loadOrderSubs(_currentOrder!.id);
+          loadOrderSubs(_currentOrder!.orderId);
         }
       },
     );
@@ -444,6 +541,17 @@ class OrdersProvider extends ChangeNotifier {
       (_) => success = true,
     );
 
+    // Refresh order details so UI updates `isPacked` immediately.
+    // `isPacked` is derived during `loadOrderDetails()` by checking the PackedSubs table.
+    if (success) {
+      final orderId = _orderDetails?.order.orderId ?? _currentOrder?.orderId;
+      if (orderId != null) {
+        await loadOrderDetails(orderId);
+      } else {
+        notifyListeners();
+      }
+    }
+
     return success;
   }
 
@@ -456,6 +564,16 @@ class OrdersProvider extends ChangeNotifier {
       (failure) => _setError(failure.message),
       (_) => success = true,
     );
+
+    // Refresh order details so UI updates `isPacked` immediately.
+    if (success) {
+      final orderId = _orderDetails?.order.orderId ?? _currentOrder?.orderId;
+      if (orderId != null) {
+        await loadOrderDetails(orderId);
+      } else {
+        notifyListeners();
+      }
+    }
 
     return success;
   }
@@ -472,12 +590,61 @@ class OrdersProvider extends ChangeNotifier {
         success = true;
         // Reload order details to reflect changes
         if (_orderDetails != null) {
-          loadOrderDetails(_orderDetails!.order.id);
+          loadOrderDetails(_orderDetails!.order.orderId);
         }
       },
     );
 
     return success;
+  }
+
+  /// Add suggestion for an order sub (local DB only; sent with inform updates)
+  Future<bool> addSuggestionToOrderSub({
+    required int orderSubId,
+    required int productId,
+    required double price,
+    String? note,
+  }) async {
+    final suggestion = OrderSubSuggestion(
+      id: -1, // autoincrement in DB
+      orderSubId: orderSubId,
+      prodId: productId,
+      price: price,
+      note: note ?? '',
+      flag: 1,
+    );
+
+    final result = await _orderSubSuggestionsRepository.addSuggestion(suggestion);
+
+    bool success = false;
+    result.fold(
+      (failure) {
+        _setError(failure.message);
+        success = false;
+      },
+      (_) {
+        success = true;
+      },
+    );
+
+    // Reload order details to reflect the new suggestion (fire and forget for now)
+    if (success && _orderDetails != null) {
+      loadOrderDetails(_orderDetails!.order.orderId);
+    }
+
+    return success;
+  }
+
+  /// Check if a suggestion already exists for a given order sub and product
+  Future<bool> suggestionExistsForSub({
+    required int orderSubId,
+    required int productId,
+  }) async {
+    final result = await _orderSubSuggestionsRepository.getSuggestionExist(
+      orderSubId: orderSubId,
+      productId: productId,
+    );
+    return result.fold((_) => false, (list) => list.isNotEmpty);
   }
 
   /// Clear current order
@@ -502,7 +669,7 @@ class OrdersProvider extends ChangeNotifier {
     _setLoading(true);
     _clearError();
 
-    final orderId = _orderMaster!.id;
+    final orderId = _orderMaster!.orderId;
     final result = await _ordersRepository.deleteOrderAndSub(orderId);
 
     bool success = false;
@@ -527,9 +694,13 @@ class OrdersProvider extends ChangeNotifier {
 
     final result = await _ordersRepository.getTempOrders();
     result.fold(
-      (failure) => _setError(failure.message),
+      (failure){
+         
+_setError(failure.message);
+      } ,
       (orders) async {
         if (orders.isNotEmpty) {
+           
           _orderMaster = orders.first;
           _customerId = _orderMaster!.orderCustId;
           _customerName = _orderMaster!.orderCustName.isNotEmpty
@@ -537,7 +708,7 @@ class OrdersProvider extends ChangeNotifier {
               : 'Select customer';
           
           // Load order subs with details
-          final subsResult = await _ordersRepository.getTempOrderSubAndDetails(_orderMaster!.id);
+          final subsResult = await _ordersRepository.getTempOrderSubAndDetails(_orderMaster!.orderId);
           subsResult.fold(
             (failure) => _setError(failure.message),
             (subs) {
@@ -545,7 +716,9 @@ class OrdersProvider extends ChangeNotifier {
               notifyListeners();
             },
           );
-        } else {
+        }
+         else 
+        {
           // Create new temp order
           await createTempOrder();
         }
@@ -572,13 +745,33 @@ class OrdersProvider extends ChangeNotifier {
               ? _orderMaster!.orderCustName
               : 'Select customer';
           
-          // Load order subs with details
-          final subsResult = await _ordersRepository.getAllOrderSubAndDetails(_orderMaster!.id);
-          subsResult.fold(
-            (failure) => _setError(failure.message),
-            (subs) {
-              _orderSubsWithDetails = subs;
-              notifyListeners();
+          // Load order subs with details.
+          // NOTE: Draft/temp subs may still have orderFlag == 0 until stock-check happens.
+          // In that case getAllOrderSubAndDetails() can return empty, so we fallback to
+          // getTempOrderSubAndDetails() (KMP parity).
+          final subsResult =
+              await _ordersRepository.getAllOrderSubAndDetails(_orderMaster!.orderId);
+
+          await subsResult.fold(
+            (failure) async => _setError(failure.message),
+            (subs) async {
+              if (subs.isNotEmpty) {
+                _orderSubsWithDetails = subs;
+                notifyListeners();
+                return;
+              }
+
+              final tempSubsResult = await _ordersRepository.getTempOrderSubAndDetails(
+                _orderMaster!.orderId,
+              );
+
+              tempSubsResult.fold(
+                (failure) => _setError(failure.message),
+                (tempSubs) {
+                  _orderSubsWithDetails = tempSubs;
+                  notifyListeners();
+                },
+              );
             },
           );
         }
@@ -591,17 +784,19 @@ class OrdersProvider extends ChangeNotifier {
   /// Create new temp order (flag = 2)
   /// Converted from KMP's createTempOrder
   Future<void> createTempOrder() async {
+     
     _setLoading(true);
     _clearError();
 
     // Get last order entry to determine next orderId
     final lastEntryResult = await _ordersRepository.getLastOrderEntry();
+     
     int nextOrderId = 1;
     lastEntryResult.fold(
       (_) {},
       (lastOrder) {
         if (lastOrder != null) {
-          nextOrderId = lastOrder.id + 1;
+          nextOrderId = lastOrder.orderId + 1;
         }
       },
     );
@@ -612,9 +807,11 @@ class OrdersProvider extends ChangeNotifier {
     final deviceToken = await StorageHelper.getDeviceToken();
 
     final tempOrder = Order(
-      id: nextOrderId,
+      id:0,
+      orderId: nextOrderId,
+      // id: nextOrderId,
       uuid: '${now.millisecondsSinceEpoch}$deviceToken$userId',
-      orderInvNo: 0,
+      orderInvNo: 'ORDER$nextOrderId',
       orderCustId: -1,
       orderCustName: '',
       orderSalesmanId: userId,
@@ -631,12 +828,13 @@ class OrdersProvider extends ChangeNotifier {
       updatedAt: dateTimeStr,
     );
 
-    final addResult = await _ordersRepository.addOrder(tempOrder);
+    final addResult = await _ordersRepository.addOrder(tempOrder,isTemp: true);
     addResult.fold(
       (failure) => _setError(failure.message),
       (_) {
         _orderMaster = tempOrder;
         _orderSubsWithDetails = [];
+         
         notifyListeners();
       },
     );
@@ -644,12 +842,20 @@ class OrdersProvider extends ChangeNotifier {
     _setLoading(false);
   }
 
+  /// Synchronously removes an order sub from the in-memory list.
+  /// Required for Dismissible: item must leave the tree immediately when onDismissed fires.
+  /// Call this first, then deleteOrderSub() in background.
+  void removeOrderSubOptimistically(int orderSubId) {
+    _orderSubsWithDetails.removeWhere((s) => s.orderSub.orderSubId == orderSubId);
+    notifyListeners();
+  }
+
   /// Get all order subs with details for current order
   /// Converted from KMP's getAllOrderSubAndDetails
   Future<void> getAllOrderSubAndDetails() async {
     if (_orderMaster == null) return;
 
-    final result = await _ordersRepository.getAllOrderSubAndDetails(_orderMaster!.id);
+    final result = await _ordersRepository.getAllOrderSubAndDetails(_orderMaster!.orderId);
     result.fold(
       (failure) => _setError(failure.message),
       (subs) {
@@ -665,7 +871,7 @@ class OrdersProvider extends ChangeNotifier {
     if (_orderMaster == null) return;
 
     final result = await _ordersRepository.updateOrderNote(
-      orderId: _orderMaster!.id,
+      orderId: _orderMaster!.orderId,
       note: note,
     );
 
@@ -674,6 +880,7 @@ class OrdersProvider extends ChangeNotifier {
       (_) {
         _orderMaster = Order(
           id: _orderMaster!.id,
+          orderId: _orderMaster!.orderId,
           uuid: _orderMaster!.uuid,
           orderInvNo: _orderMaster!.orderInvNo,
           orderCustId: _orderMaster!.orderCustId,
@@ -702,7 +909,7 @@ class OrdersProvider extends ChangeNotifier {
     if (_orderMaster == null) return;
 
     final result = await _ordersRepository.updateOrderCustomer(
-      orderId: _orderMaster!.id,
+      orderId: _orderMaster!.orderId,
       customerId: customerId,
       customerName: customerName,
     );
@@ -714,6 +921,7 @@ class OrdersProvider extends ChangeNotifier {
         _customerName = customerName;
         _orderMaster = Order(
           id: _orderMaster!.id,
+          orderId: _orderMaster!.orderId,
           uuid: _orderMaster!.uuid,
           orderInvNo: _orderMaster!.orderInvNo,
           orderCustId: customerId,
@@ -749,7 +957,8 @@ class OrdersProvider extends ChangeNotifier {
 
     // Update flag to 3 (draft)
     final flagResult = await _ordersRepository.updateOrderFlag(
-      orderId: _orderMaster!.id,
+      // KMP parity: update by Orders.orderId (works for temp/draft and server orders)
+      orderId: _orderMaster!.orderId,
       flag: 3,
     );
 
@@ -759,9 +968,15 @@ class OrdersProvider extends ChangeNotifier {
       return false;
     }
 
+    await _ordersRepository.updateCustomer(
+      orderId: _orderMaster!.orderId,
+      customerId: _orderMaster!.orderCustId,
+      customerName: _orderMaster!.orderCustName,
+    );
+
     // Update freight and total
     final updateResult = await _ordersRepository.updateFreightAndTotal(
-      orderId: _orderMaster!.id,
+      orderId: _orderMaster!.orderId,
       freightCharge: freightCharge,
       total: total,
     );
@@ -774,9 +989,10 @@ class OrdersProvider extends ChangeNotifier {
 
     // Update updated date
     await _ordersRepository.updateUpdatedDate(
-      orderId: _orderMaster!.id,
+      orderId: _orderMaster!.orderId,
       updatedDateTime: dateTimeStr,
     );
+    loadOrders();
 
     _setLoading(false);
     return true;
@@ -801,7 +1017,7 @@ class OrdersProvider extends ChangeNotifier {
     try {
       // Update each order sub with notes, available qty, and out of stock flag
       for (final item in _orderDetailItems) {
-        final orderSubId = item.orderSub.id;
+        final orderSubId = item.orderSub.orderSubId;
         final orderSub = item.orderSub;
 
         // Get note from map or use existing
@@ -864,7 +1080,7 @@ class OrdersProvider extends ChangeNotifier {
 
       // Update order flag to 3 (draft)
       final flagResult = await _ordersRepository.updateOrderFlag(
-        orderId: _orderDetails!.order.id,
+        orderId: _orderDetails!.order.orderId,
         flag: 3,
       );
 
@@ -875,7 +1091,7 @@ class OrdersProvider extends ChangeNotifier {
       }
 
       // Reload order details to reflect changes
-      await loadOrderDetails(_orderDetails!.order.id);
+      await loadOrderDetails(_orderDetails!.order.orderId);
 
       _setLoading(false);
       return true;
@@ -942,8 +1158,8 @@ class OrdersProvider extends ChangeNotifier {
         (admins) {
           for (final admin in admins) {
             userIds.add({
-              'user_id': admin.id,
-              'silent_push': 1,
+              'user_id': admin.userId,
+              'silent_push': 0,
             });
           }
         },
@@ -957,8 +1173,8 @@ class OrdersProvider extends ChangeNotifier {
           for (final storekeeper in storekeepers) {
             if (storekeeper.id != currentUserId) {
               userIds.add({
-                'user_id': storekeeper.id,
-                'silent_push': 1,
+                'user_id': storekeeper.userId,
+                'silent_push': 0,
               });
             }
           }
@@ -973,8 +1189,8 @@ class OrdersProvider extends ChangeNotifier {
           (billers) {
             for (final biller in billers) {
               userIds.add({
-                'user_id': biller.id,
-                'silent_push': 1,
+                'user_id': biller.userId,
+                'silent_push': 0,
               });
             }
           },
@@ -995,8 +1211,9 @@ class OrdersProvider extends ChangeNotifier {
         'data_message': 'Updates from storekeeper',
         'data': {
           'data_ids': [
-            {'table': 8, 'id': order.id} // Order table
+            {'table': 8, 'id': order.orderId} // Order table
           ],
+          //0 means visible notification and 1 means silent notification
           'show_notification': '0',
           'message': 'Updates from storekeeper',
         },
@@ -1007,7 +1224,7 @@ class OrdersProvider extends ChangeNotifier {
 
       for (final item in _orderDetailItems) {
         final orderSub = item.orderSub;
-        final orderSubId = orderSub.id;
+        final orderSubId = orderSub.orderSubId;
 
         // Extract note (remove split delimiter if present)
         String note = noteMap[orderSubId] ?? '';
@@ -1069,7 +1286,7 @@ class OrdersProvider extends ChangeNotifier {
 
       // 4. Build order update payload
       final payload = {
-        'order_id': order.id,
+        'order_id': order.orderId,
         'uuid': order.uuid,
         'order_cust_id': order.orderCustId,
         'order_cust_name': order.orderCustName,
@@ -1097,7 +1314,8 @@ class OrdersProvider extends ChangeNotifier {
         },
         (updatedOrder) {
           // Reload order details to reflect changes
-          loadOrderDetails(order.id);
+          loadOrderDetails(order.orderId);
+          loadOrders();
           _setLoading(false);
           onSuccess();
         },
@@ -1135,7 +1353,7 @@ class OrdersProvider extends ChangeNotifier {
 
     try {
       // Get all order subs with details (matches KMP line 728)
-      final subsResult = await _ordersRepository.getAllOrderSubAndDetails(_orderMaster!.id);
+      final subsResult = await _ordersRepository.getAllOrderSubAndDetails(_orderMaster!.orderId);
       if (subsResult.isLeft) {
         _setError(subsResult.left.message);
         _setLoading(false);
@@ -1154,7 +1372,7 @@ class OrdersProvider extends ChangeNotifier {
         (admins) {
           for (final admin in admins) {
             userIds.add({
-              'user_id': admin.id,
+              'user_id': admin.userId ?? -1,
               'silent_push': 1,
             });
           }
@@ -1166,7 +1384,7 @@ class OrdersProvider extends ChangeNotifier {
         (storekeepers) {
           for (final storekeeper in storekeepers) {
             userIds.add({
-              'user_id': storekeeper.id,
+              'user_id': storekeeper.userId ?? -1,
               'silent_push': 0,
             });
           }
@@ -1181,10 +1399,18 @@ class OrdersProvider extends ChangeNotifier {
         'data_message': 'New Order Received',
         'data': {
           'data_ids': <Map<String, dynamic>>[], // Empty array as per KMP line 738
-          'show_notification': '0',
+          'show_notification': '1',
           'message': 'New Order Received',
         },
       };
+
+      // Generate a NEW UUID for this order send operation
+      // This matches KMP's UUID generation pattern from createTempOrder (line 367-368)
+      // and ensures server creates a new order instead of matching by UUID
+      final now = DateTime.now();
+      final userId = await StorageHelper.getUserId();
+      final deviceToken = await StorageHelper.getDeviceToken();
+      final newUuid = '${now.millisecondsSinceEpoch}$deviceToken$userId';
 
       // Build order params (matches KMP line 740-747)
       final params = _createOrderParams(
@@ -1194,6 +1420,7 @@ class OrdersProvider extends ChangeNotifier {
         freightCharge,
         storekeeperId,
         notificationJsonObject,
+        newUuid, // Pass new UUID instead of reusing temp order's UUID
       );
 
       // Call API (matches KMP line 749-750)
@@ -1210,10 +1437,10 @@ class OrdersProvider extends ChangeNotifier {
 
       // Save order to local DB (matches KMP lines 758-778)
       // CRITICAL: Primary key 'id' is auto-generated by SQLite (set to NULL in repository)
-      // The Order model's 'id' field maps to 'orderId' column (stores API response id)
+      // The Order model's 'orderId' field stores the server ID from API response
       // KMP: id = 0 (primary key, auto-generated), orderId = API response id
       final newOrder = Order(
-        id: order.id, // This maps to 'orderId' column, NOT the primary key - matches KMP line 760: orderId = id
+        orderId: order.orderId, // Server ID from API response
         uuid: order.uuid,
         orderInvNo: order.orderInvNo,
         orderCustId: order.orderCustId,
@@ -1237,6 +1464,9 @@ class OrdersProvider extends ChangeNotifier {
         _setError(addOrderResult.left.message);
         _setLoading(false);
         return false;
+      }else{
+         
+        loadOrders();
       }
 
       // Save order subs to local DB (matches KMP lines 781-815)
@@ -1244,10 +1474,10 @@ class OrdersProvider extends ChangeNotifier {
         for (int index = 0; index < order.items!.length; index++) {
           final sub = order.items![index];
           // CRITICAL: Primary key 'id' is auto-generated by SQLite (not included in repository INSERT)
-          // The OrderSub model's 'id' field maps to 'orderSubId' column (stores API response id)
+          // The OrderSub model's 'orderSubId' field stores the server ID from API response
           // KMP: First param = 0 (primary key, auto-generated), second param = API response id
           final orderSub = OrderSub(
-            id: sub.id, // This maps to 'orderSubId' column, NOT the primary key - matches KMP line 785: orderSubId = s.id
+            orderSubId: sub.orderSubId, // Server ID from API response
             orderSubOrdrInvId: sub.orderSubOrdrInvId,
             orderSubOrdrId: sub.orderSubOrdrId,
             orderSubCustId: sub.orderSubCustId,
@@ -1279,7 +1509,6 @@ class OrdersProvider extends ChangeNotifier {
           }
         }
       }
-
       _setLoading(false);
       return true;
     } catch (e) {
@@ -1299,9 +1528,10 @@ class OrdersProvider extends ChangeNotifier {
     double freight,
     int storekeeperId,
     Map<String, dynamic> notificationJsonObject,
+    String uuid, // Add this parameter - new UUID generated for each order send
   ) {
     final params = <String, dynamic>{
-      'uuid': orderMaster.uuid,
+      'uuid': uuid, // Use passed UUID instead of orderMaster.uuid
       'order_cust_id': orderMaster.orderCustId,
       'order_cust_name': orderMaster.orderCustName,
       'order_salesman_id': orderMaster.orderSalesmanId,
@@ -1312,7 +1542,7 @@ class OrdersProvider extends ChangeNotifier {
       'order_total': total,
       'order_freight_charge': freight,
       'order_note': orderMaster.orderNote ?? '',
-      'order_approve_flag': 1,
+      'order_approve_flag': OrderApprovalFlag.sendToStorekeeper,
       'items': subList.map((item) {
         return {
           'order_sub_prd_id': item.orderSub.orderSubPrdId,
@@ -1364,7 +1594,7 @@ class OrdersProvider extends ChangeNotifier {
         (_) {},
         (lastOrderSub) {
           if (lastOrderSub != null) {
-            orderSubId = (lastOrderSub.id + 100000000) + 1;
+            orderSubId = (lastOrderSub.orderSubId + 100000000) + 1;
           }
         },
       );
@@ -1385,7 +1615,7 @@ class OrdersProvider extends ChangeNotifier {
 
       // Check if product already exists in order
       final existResult = await _ordersRepository.getExistOrderSub(
-        orderId: order.id,
+        orderId: order.orderId,
         productId: productId,
         unitId: unitId,
         rate: rate,
@@ -1399,7 +1629,7 @@ class OrdersProvider extends ChangeNotifier {
         (_) {},
         (existList) {
           if (existList.isNotEmpty) {
-            orderSubId = existList.first.id;
+            orderSubId = existList.first.orderSubId;
             if (!isUpdate) {
               // Merge quantities
               newQuantity += existList.first.orderSubQty;
@@ -1414,7 +1644,7 @@ class OrdersProvider extends ChangeNotifier {
 
       // Handle replace order sub note
       if (replaceOrderSub != null) {
-        noteSt = '***\$###\$***OrderSubId=${replaceOrderSub.id}';
+        noteSt = '***\$###\$***OrderSubId=${replaceOrderSub.orderSubId}';
         isChecked = 1;
       }
 
@@ -1423,9 +1653,9 @@ class OrdersProvider extends ChangeNotifier {
       final dateTimeStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
 
       final newOrderSub = OrderSub(
-        id: orderSubId,
+        orderSubId: orderSubId, // Server ID - must be set for repository to find existing records
         orderSubOrdrInvId: order.orderInvNo,
-        orderSubOrdrId: order.id,
+        orderSubOrdrId: order.orderId,
         orderSubCustId: order.orderCustId,
         orderSubSalesmanId: order.orderSalesmanId,
         orderSubStockKeeperId: order.orderStockKeeperId,
@@ -1442,7 +1672,9 @@ class OrdersProvider extends ChangeNotifier {
         orderSubNarration: narration.isEmpty ? null : narration,
         orderSubOrdrFlag: 0, // Temp order flag (matches KMP line 543)
         orderSubIsCheckedFlag: isChecked,
-        orderSubFlag: 0, // Temp order flag (matches KMP line 546 where flag=1 for normal, 0 for temp)
+        // IMPORTANT (KMP parity): temp/draft OrderSub rows still have DB flag=1 (active),
+        // while workflow state is kept in orderSubOrdrFlag (orderFlag column).
+        orderSubFlag: 1,
         createdAt: dateTimeStr,
         updatedAt: dateTimeStr,
       );
@@ -1461,6 +1693,239 @@ class OrdersProvider extends ChangeNotifier {
 
       _setLoading(false);
       return success;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Add product to existing order (for sent orders, not drafts)
+  /// This function only updates in-memory state, does NOT save to DB or call API
+  /// API is called only when "Check Stock" button is clicked
+  /// Converted from KMP's ProductViewModel.addProductToOrder with isEdit=true
+  Future<bool> addProductToExistingOrder({
+    required int orderId,
+    required int productId,
+    required double productPrice,
+    required double rate,
+    required double quantity,
+    required String narration,
+    required int unitId,
+    OrderSub? replaceOrderSub,
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      // 1. Ensure order details are loaded
+      if (_orderDetails == null || _orderDetailItems.isEmpty) {
+        await loadOrderDetails(orderId);
+      }
+
+      if (_orderDetails == null) {
+        _setError('Order details not loaded');
+        _setLoading(false);
+        return false;
+      }
+
+      final order = _orderDetails!.order;
+
+      // 2. Get last order sub entry for generating new ID
+      final lastEntryResult = await _ordersRepository.getLastOrderSubEntry();
+      int defaultOrderSubId = 100000000; // Default starting ID
+      lastEntryResult.fold(
+        (_) {},
+        (lastOrderSub) {
+          if (lastOrderSub != null) {
+            defaultOrderSubId = (lastOrderSub.orderSubId + 100000000) + 1;
+          }
+        },
+      );
+      int orderSubId = defaultOrderSubId;
+
+      // 3. Get unit to get baseQty
+      double baseQty = 1.0;
+      String? unitName;
+      String? unitDispName;
+      if (_unitsRepository != null) {
+        final unitResult = await _unitsRepository.getUnitByUnitId(unitId);
+        unitResult.fold(
+          (_) {},
+          (unit) {
+            if (unit != null) {
+              baseQty = unit.baseQty > 0 ? unit.baseQty : 1.0;
+              unitName = unit.name;
+              unitDispName = unit.displayName;
+            }
+          },
+        );
+      }
+
+      // 4. Check if product already exists in current in-memory items (only if not replacing)
+      OrderItemDetail? existingItem;
+      if (replaceOrderSub == null) {
+        // Only check for existing items if we're not replacing
+        for (final item in _orderDetailItems) {
+          if (item.orderSub.orderSubPrdId == productId &&
+              item.orderSub.orderSubUnitId == unitId &&
+              item.orderSub.orderSubUpdateRate == rate) {
+            existingItem = item;
+            break;
+          }
+        }
+      }
+
+      double newQuantity = quantity;
+      String noteSt = '';
+      int isChecked = 0;
+
+      if (replaceOrderSub != null) {
+        // This is a replacement - KEEP THE ORIGINAL ID (backend updates in place)
+        // Don't generate new ID - backend will update the existing order sub
+        orderSubId = replaceOrderSub.orderSubId; // Use original ID
+        noteSt = 'Product replaced from suggestion';
+        isChecked = 1;
+      } else if (existingItem != null) {
+        // Merge with existing item
+        orderSubId = existingItem.orderSub.orderSubId;
+        newQuantity += existingItem.orderSub.orderSubQty;
+        if (existingItem.orderSub.orderSubIsCheckedFlag == 1) {
+          isChecked = 1;
+        }
+      }
+
+      // 6. Create OrderSub with flag=0 (temp/edit flag for existing orders)
+      final now = DateTime.now();
+      final dateTimeStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
+
+      final newOrderSub = OrderSub(
+        orderSubId: orderSubId,
+        orderSubOrdrInvId: order.orderInvNo,
+        orderSubOrdrId: order.orderId,
+        orderSubCustId: order.orderCustId,
+        orderSubSalesmanId: order.orderSalesmanId,
+        orderSubStockKeeperId: order.orderStockKeeperId,
+        orderSubDateTime: order.orderDateTime,
+        orderSubPrdId: productId,
+        orderSubUnitId: unitId,
+        orderSubCarId: -1,
+        orderSubRate: productPrice,
+        orderSubUpdateRate: rate,
+        orderSubQty: newQuantity,
+        orderSubAvailableQty: 0.0,
+        orderSubUnitBaseQty: baseQty,
+        orderSubNote: noteSt.isEmpty ? null : noteSt,
+        orderSubNarration: narration.isEmpty ? null : narration,
+        orderSubOrdrFlag: 0, // Temp order flag
+        orderSubIsCheckedFlag: isChecked,
+        orderSubFlag: 0, // Temp flag for edited orders
+        createdAt: dateTimeStr,
+        updatedAt: dateTimeStr,
+        isReplaced: replaceOrderSub != null, // Set to true if this is a replacement
+      );
+
+      // 7. Get product details for OrderSubWithDetails
+      String productName = '';
+      String productCode = '';
+      String productPhoto = '';
+      String productBrand = '';
+      String productSubBrand = '';
+      
+      if (_productsRepository != null) {
+        final productResult = await _productsRepository.getProductById(productId);
+        productResult.fold(
+          (_) {},
+          (product) {
+            if (product != null) {
+              productName = product.name;
+              productCode = product.code;
+              productPhoto = product.photo;
+              productBrand = product.brand;
+              productSubBrand = product.sub_brand;
+            }
+          },
+        );
+      }
+
+      // 8. Create OrderSubWithDetails
+      final orderSubWithDetails = OrderSubWithDetails(
+        unitName: unitName,
+        unitDispName: unitDispName,
+        productName: productName,
+        productCode: productCode,
+        productPhoto: productPhoto,
+        productBrand: productBrand,
+        productSubBrand: productSubBrand,
+        orderSub: newOrderSub,
+      );
+
+      // 9. Create OrderItemDetail
+      final newItem = OrderItemDetail(
+        details: orderSubWithDetails,
+        suggestions: existingItem?.suggestions ?? [],
+        isPacked: existingItem?.isPacked ?? false,
+      );
+
+      // 10. Update in-memory state only (NO DB, NO API)
+      if (replaceOrderSub != null) {
+        // This is a replacement - find and replace the original item in the list
+        final originalItemIndex = _orderDetailItems.indexWhere(
+          (item) => item.orderSub.orderSubId == replaceOrderSub.orderSubId,
+        );
+        
+        if (originalItemIndex != -1) {
+          // Replace the original item with the new replacement item
+          _orderDetailItems[originalItemIndex] = newItem;
+        } else {
+          // Original item not found - add as new item (shouldn't happen, but handle gracefully)
+           
+          _orderDetailItems.add(newItem);
+        }
+        
+        // Track that this order sub was replaced (for API call)
+        // The ID stays the same, so we just mark it as replaced
+        _replacedOrderSubIds[replaceOrderSub.orderSubId] = replaceOrderSub.orderSubId; // Same ID
+        _replacedOrderItems[replaceOrderSub.orderSubId] = newItem;
+        
+        // Keep the ID in original set (it's still the same ID, just updated)
+        // No need to remove/add since ID doesn't change
+      } else if (existingItem != null) {
+        // Update existing item in list (quantity merge, etc.)
+        final index = _orderDetailItems.indexOf(existingItem);
+        if (index != -1) {
+          _orderDetailItems[index] = newItem;
+        }
+      } else {
+        // Add new item to list
+        _orderDetailItems.add(newItem);
+        // Note: We don't add it to _originalOrderSubIds because it's truly new
+      }
+
+      // 11. Rebuild replacement mappings from notes (to ensure consistency)
+      // Clear and rebuild to include any existing replacements from DB
+      final Map<int, int> newReplacedIds = {};
+      final Map<int, OrderItemDetail> newReplacedItems = {};
+      
+      for (final item in _orderDetailItems) {
+        final replacedId = _extractReplacedOrderSubId(item.orderSub.orderSubNote);
+        if (replacedId != null) {
+          newReplacedIds[replacedId] = item.orderSub.orderSubId;
+          newReplacedItems[item.orderSub.orderSubId] = item;
+        }
+      }
+      
+      // Update the mappings (this preserves any manually set mappings from replacements)
+      _replacedOrderSubIds.clear();
+      _replacedOrderSubIds.addAll(newReplacedIds);
+      _replacedOrderItems.clear();
+      _replacedOrderItems.addAll(newReplacedItems);
+
+      // 13. Notify listeners to update UI
+      notifyListeners();
+
+      _setLoading(false);
+      return true;
     } catch (e) {
       _setError(e.toString());
       _setLoading(false);
@@ -1529,7 +1994,7 @@ class OrdersProvider extends ChangeNotifier {
         (admins) {
           for (final admin in admins) {
             userIds.add({
-              'user_id': admin.id,
+              'user_id': admin.userId ?? -1,
               'silent_push': 1,
             });
           }
@@ -1542,10 +2007,13 @@ class OrdersProvider extends ChangeNotifier {
           (_) {},
           (billers) {
             for (final biller in billers) {
-              userIds.add({
-                'user_id': biller.id,
-                'silent_push': 0,
-              });
+              // Exclude the claiming biller (matches pattern for checkers)
+              if (userId != biller.userId) {
+                userIds.add({
+                  'user_id': biller.userId ?? -1,
+                  'silent_push': 1, // Silent notification for billers
+                });
+              }
             }
           },
         );
@@ -1561,11 +2029,11 @@ class OrdersProvider extends ChangeNotifier {
           (_) {},
           (checkers) {
             for (final checker in checkers) {
-              if (userId != checker.id) {
-                userIds.add({
-                  'user_id': checker.id,
-                  'silent_push': 1,
-                });
+              if (userId != checker.userId) {
+            userIds.add({
+              'user_id': checker.userId ?? -1,
+              'silent_push': 1,
+            });
               }
             }
           },
@@ -1574,7 +2042,7 @@ class OrdersProvider extends ChangeNotifier {
 
       // Build notification data
       final dataIds = [
-        {'table': 8, 'id': order.id}
+        {'table': 8, 'id': order.orderId}
       ];
 
       final notificationJsonObject = {
@@ -1589,7 +2057,7 @@ class OrdersProvider extends ChangeNotifier {
 
       // Build API params
       final params = {
-        'order_id': order.id,
+        'order_id': order.orderId,
         'is_biller': isBiller ? 1 : 0,
         'user_Id': userId,
         'order_approve_flag': approvalFlag ?? order.orderApproveFlag,
@@ -1604,17 +2072,30 @@ class OrdersProvider extends ChangeNotifier {
         (failure) => _setError(failure.message),
         (_) {
           success = true;
-          // Update local DB if needed
-          if (approvalFlag != null) {
+          // Update local DB for biller only if userId != 0 (meaning a specific user is being assigned)
+          // When userId == 0, we're just notifying billers, not assigning anyone
+          // Actual biller assignment happens when biller opens the order
+          if (isBiller) {
+            _ordersRepository.updateBillerLocal(
+              orderId: order.orderId,
+              billerId: userId,
+            );
+          }
+          // Update local DB for checker (matching KMP's updateChecker - line 2180)
+          if (!isBiller && approvalFlag != null) {
+            _ordersRepository.updateCheckerLocal(
+              orderId: order.orderId,
+              checkerId: userId,
+            );
             _ordersRepository.updateOrderApproveFlag(
-              orderId: order.id,
+              orderId: order.orderId,
               approveFlag: OrderApprovalFlag.checkerIsChecking,
               notification: null,
             );
           }
         },
       );
-
+      loadOrders();
       _setLoading(false);
       return success;
     } catch (e) {
@@ -1626,12 +2107,34 @@ class OrdersProvider extends ChangeNotifier {
 
   /// Send order to checkers
   /// Converted from KMP's sendToCheckers
+  /// Also populates estimated fields when order flag is updated to 6
   Future<bool> sendToCheckers(Order order) async {
     _setLoading(true);
     _clearError();
 
     try {
-      // Get users for notifications
+      // Step 1: Populate estimated fields by calling updateBillerOrChecker with approveFlag=6
+      // This triggers the backend to populate estimated_qty, estimated_available_qty, estimated_total
+      // We use is_biller=0 and user_Id=0 since we're just populating estimated fields
+      final populateEstimatedParams = {
+        'order_id': order.orderId,
+        'is_biller': 0,
+        'user_Id': 0,
+        'order_approve_flag': OrderApprovalFlag.sendToChecker,
+      };
+      
+      final populateResult = await _ordersRepository.updateBillerOrChecker(populateEstimatedParams);
+      populateResult.fold(
+        (failure) {
+          // Log error but continue - estimated fields population is not critical
+           
+        },
+        (_) {
+           
+        },
+      );
+
+      // Step 2: Get users for notifications
       final adminsResult = await _usersRepository.getUsersByCategory(1);
       final checkersResult = await _usersRepository.getUsersByCategory(6);
       final List<Map<String, dynamic>> userIds = [];
@@ -1641,7 +2144,7 @@ class OrdersProvider extends ChangeNotifier {
         (admins) {
           for (final admin in admins) {
             userIds.add({
-              'user_id': admin.id,
+              'user_id': admin.userId ?? -1,
               'silent_push': 1,
             });
           }
@@ -1653,16 +2156,16 @@ class OrdersProvider extends ChangeNotifier {
         (checkers) {
           for (final checker in checkers) {
             userIds.add({
-              'user_id': checker.id,
+              'user_id': checker.userId ?? -1,
               'silent_push': 0,
             });
           }
         },
       );
 
-      // Build notification data
+      // Step 3: Build notification data
       final dataIds = [
-        {'table': 8, 'id': order.id}
+        {'table': 8, 'id': order.orderId}
       ];
 
       final notificationJsonObject = {
@@ -1675,9 +2178,9 @@ class OrdersProvider extends ChangeNotifier {
         },
       };
 
-      // Call API
+      // Step 4: Update order approval flag and send notifications
       final result = await _ordersRepository.updateOrderApproveFlag(
-        orderId: order.id,
+        orderId: order.orderId,
         approveFlag: OrderApprovalFlag.sendToChecker,
         notification: notificationJsonObject,
       );
@@ -1693,6 +2196,147 @@ class OrdersProvider extends ChangeNotifier {
 
       _setLoading(false);
       return success;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Cancel order
+  /// Converted from KMP's cancelOrder (OrderViewModel.kt lines 2052-2134)
+  /// Salesman and admin can cancel when order is NOT sendToStorekeeper, completed, or cancelled
+  Future<bool> cancelOrder(Order order) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      final currentUserId = await StorageHelper.getUserId();
+
+      // Build user list: admins (exclude current, silent 1), storekeepers (silent 0),
+      // checkers if assigned (silent 0), billers if assigned (silent 0)
+      final List<Map<String, dynamic>> userIds = [];
+
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            if (admin.userId != currentUserId) {
+              userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
+            }
+          }
+        },
+      );
+
+      final storekeepersResult = await _usersRepository.getUsersByCategory(2);
+      storekeepersResult.fold(
+        (_) {},
+        (storekeepers) {
+          for (final sk in storekeepers) {
+            userIds.add({'user_id': sk.userId ?? -1, 'silent_push': 0});
+          }
+        },
+      );
+
+      if (order.orderCheckerId != -1) {
+        final checkersResult = await _usersRepository.getUsersByCategory(6);
+        checkersResult.fold(
+          (_) {},
+          (checkers) {
+            for (final checker in checkers) {
+              userIds.add({'user_id': checker.userId ?? -1, 'silent_push': 0});
+            }
+          },
+        );
+      }
+
+      if (order.orderBillerId != -1) {
+        final billersResult = await _usersRepository.getUsersByCategory(5);
+        billersResult.fold(
+          (_) {},
+          (billers) {
+            for (final biller in billers) {
+              userIds.add({'user_id': biller.userId ?? -1, 'silent_push': 0});
+            }
+          },
+        );
+      }
+
+      // Get order subs for OOS lookup
+      final orderSubsResult = await _ordersRepository.getAllOrderSubAndDetails(order.orderId);
+      if (orderSubsResult.isLeft) {
+        _setError(orderSubsResult.left.message);
+        _setLoading(false);
+        return false;
+      }
+
+      final orderSubs = orderSubsResult.right;
+      final List<Map<String, dynamic>> oosDataIds = [];
+
+      for (final detail in orderSubs) {
+        final orderSubId = detail.orderSub.orderSubId;
+        final oosResult = await _outOfStockRepository.getOutOfStockProductsByOrderSubId(orderSubId);
+        oosResult.fold(
+          (_) {},
+          (outOfStocks) {
+            if (outOfStocks.isNotEmpty) {
+              oosDataIds.add({
+                'table': NotificationId.outOfStock,
+                'id': outOfStocks.first.outosSubOutosId,
+              });
+              for (final oos in outOfStocks) {
+                oosDataIds.add({
+                  'table': NotificationId.outOfStockSub,
+                  'id': oos.outOfStockSubId,
+                });
+                if (oos.outosSubSuppId != -1) {
+                  userIds.add({'user_id': oos.outosSubSuppId, 'silent_push': 1});
+                }
+              }
+            }
+          },
+        );
+      }
+
+      final dataIds = [
+        {'table': NotificationId.order, 'id': order.orderId},
+        ...oosDataIds,
+      ];
+
+      final notificationPayload = {
+        'ids': userIds,
+        'data_message': 'Order Cancelled',
+        'data': {
+          'data_ids': dataIds,
+          'show_notification': '0',
+          'message': 'Order Cancelled',
+          'order_approve_flag': OrderApprovalFlag.cancelled,
+        },
+      };
+
+      final result = await _ordersRepository.updateOrderApproveFlag(
+        orderId: order.orderId,
+        approveFlag: OrderApprovalFlag.cancelled,
+        notification: notificationPayload,
+        outOfStockData: oosDataIds.isNotEmpty ? oosDataIds : null,
+      );
+
+      if (result.isLeft) {
+        _setError(result.left.message);
+        _setLoading(false);
+        return false;
+      }
+
+      // Update out of stock entries to cancelled (matching KMP lines 2126-2129)
+      for (final detail in orderSubs) {
+        final orderSubId = detail.orderSub.orderSubId;
+        await _outOfStockRepository.updateMasterToCancelled(orderSubId);
+        await _outOfStockRepository.updateProductToCancelled(orderSubId);
+      }
+
+      _setLoading(false);
+      return true;
     } catch (e) {
       _setError(e.toString());
       _setLoading(false);
@@ -1739,7 +2383,7 @@ class OrdersProvider extends ChangeNotifier {
         final timestamp = DateTime.now().millisecondsSinceEpoch;
         final deviceToken = await StorageHelper.getDeviceToken();
         final userId = await StorageHelper.getUserId();
-        finalUuid = '$timestamp$deviceToken$userId${orderSub.id}';
+        finalUuid = '$timestamp$deviceToken$userId${orderSub.orderSubId}';
       }
 
       // 3. Get current date/time in DB format
@@ -1747,9 +2391,14 @@ class OrdersProvider extends ChangeNotifier {
       final dateTimeStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
 
       // 4. Create OutOfStockMaster (matching KMP lines 1695-1717)
+      // TRACE: log orderSubId we write to master and sub when storekeeper creates OOS (reportAdmin)
+      developer.log(
+        'OrdersProvider.reportAdmin: creating OOS master and sub with orderSub.orderSubId=${orderSub.orderSubId}, orderSub.orderSubOrdrId=${orderSub.orderSubOrdrId}',
+        name: 'OrdersProvider.trace',
+      );
       final oospMaster = OutOfStock(
         id: 0,
-        outosOrderSubId: orderSub.id,
+        outosOrderSubId: orderSub.orderSubId,
         outosCustId: orderSub.orderSubCustId,
         outosSalesManId: orderSub.orderSubSalesmanId,
         outosStockKeeperId: orderSub.orderSubStockKeeperId,
@@ -1760,7 +2409,7 @@ class OrdersProvider extends ChangeNotifier {
         outosQty: orderSub.orderSubQty - orderSub.orderSubAvailableQty,
         outosAvailableQty: orderSub.orderSubQty - orderSub.orderSubAvailableQty,
         outosUnitBaseQty: orderSub.orderSubUnitBaseQty,
-        outosNote: '',
+        outosNote: orderSub.orderSubNote ?? '',
         outosNarration: orderSub.orderSubNarration ?? '',
         outosIsCompleatedFlag: 0,
         outosFlag: 1,
@@ -1773,7 +2422,7 @@ class OrdersProvider extends ChangeNotifier {
       final oosp = OutOfStockSub(
         id: 0,
         outosSubOutosId: 0,
-        outosSubOrderSubId: orderSub.id,
+        outosSubOrderSubId: orderSub.orderSubId,
         outosSubCustId: orderSub.orderSubCustId,
         outosSubSalesManId: orderSub.orderSubSalesmanId,
         outosSubStockKeeperId: orderSub.orderSubStockKeeperId,
@@ -1797,32 +2446,8 @@ class OrdersProvider extends ChangeNotifier {
         updatedAt: dateTimeStr,
       );
 
-      // 6. Build notification payload (matching KMP lines 1746-1753)
-      final adminsResult = await _usersRepository.getUsersByCategory(1);
-      final List<Map<String, dynamic>> userIds = [];
-      adminsResult.fold(
-        (_) {},
-        (admins) {
-          for (final admin in admins) {
-            userIds.add({
-              'user_id': admin.id,
-              'silent_push': 0, // Matching KMP: PushUserData(it.userId, 0)
-            });
-          }
-        },
-      );
-
-      final notificationPayload = {
-        'ids': userIds,
-        'data_message': 'Product out of stock reported',
-        'data': {
-          'data_ids': [],
-          'show_notification': '0',
-          'message': 'Product out of stock reported',
-        },
-      };
-
-      // 7. Call API (matching KMP lines 1754-1827)
+      // 6. Call API (matching KMP lines 1754-1827)
+      // Note: Endpoint doesn't support notification payload, so we send it separately
       final result = await _outOfStockRepository.createOutOfStock(
         OutOfStock(
           id: 0,
@@ -1846,7 +2471,6 @@ class OrdersProvider extends ChangeNotifier {
           updatedAt: dateTimeStr,
           items: [oosp],
         ),
-        notificationPayload: notificationPayload,
       );
 
       return await result.fold(
@@ -1856,7 +2480,7 @@ class OrdersProvider extends ChangeNotifier {
           return false;
         },
         (outOfStock) async {
-          // 8. Store sub items in local DB with current DB format dates and isViewed=1
+          // 7. Store sub items in local DB with current DB format dates and isViewed=1
           // KMP uses getDBFormatDateTime() when storing from API response (lines 1780-1781, 1811-1812)
           // KMP sets isViewed=1 for reportAdmin (lines 1785, 1816)
           final now = DateTime.now();
@@ -1898,8 +2522,42 @@ class OrdersProvider extends ChangeNotifier {
             }
           }
 
+          // 8. Send push notification separately (endpoint doesn't support notification payload)
+          // Build user IDs list for admins (matching KMP lines 1746-1753)
+          final adminsResult = await _usersRepository.getUsersByCategory(1);
+          final List<Map<String, dynamic>> userIds = [];
+          adminsResult.fold(
+            (_){},
+            (admins)async{
+              for (final admin in admins){
+                userIds.add({
+                  'user_id': admin.userId,
+                  'silent_push': 0, // Matching KMP: PushUserData(it.userId, 0)
+                });
+              }
+            },
+          );
+
+          // Send notification with empty data_ids (matching KMP pattern)
+          // Fire-and-forget: don't await, just trigger in background
+          _pushNotificationSender.sendPushNotification(
+            dataIds: [PushData(table: 12, id: outOfStock.items![0].outOfStockSubId)], // Empty array as per KMP pattern
+            message: 'Product out of stock reported',
+            customUserIds: userIds,
+          ).catchError((e) {
+             
+          });
+
+          // 9. Optimistically update OrderSub flag to "reported" for immediate UI feedback
+          // This matches the pattern in reportAllAdmin (line 2158-2161)
+          // The server will also update the flag, but this provides immediate feedback
+          await _ordersRepository.updateOrderSubFlag(
+            orderSubId: orderSub.orderSubId,
+            flag: OrderSubFlag.reported,
+          );
+
           // Note: KMP's reportAdmin does NOT update order flag (only reportAllAdmin does)
-          // Matching KMP lines 1787-1823: Only stores records, no flag update
+          // However, we update it optimistically for better UX
           _setLoading(false);
           return true;
         },
@@ -1953,7 +2611,7 @@ class OrdersProvider extends ChangeNotifier {
           final timestamp = DateTime.now().millisecondsSinceEpoch;
           final deviceToken = await StorageHelper.getDeviceToken();
           final userId = await StorageHelper.getUserId();
-          final finalUuid = '$timestamp$deviceToken$userId${orderSub.id}';
+          final finalUuid = '$timestamp$deviceToken$userId${orderSub.orderSubId}';
 
           // Get current date/time
           final now = DateTime.now();
@@ -1962,7 +2620,7 @@ class OrdersProvider extends ChangeNotifier {
           // Create OutOfStockMaster (matching KMP lines 1535-1557)
           final oospMaster = OutOfStock(
             id: 0,
-            outosOrderSubId: orderSub.id,
+            outosOrderSubId: orderSub.orderSubId,
             outosCustId: orderSub.orderSubCustId,
             outosSalesManId: orderSub.orderSubSalesmanId,
             outosStockKeeperId: orderSub.orderSubStockKeeperId,
@@ -1986,7 +2644,7 @@ class OrdersProvider extends ChangeNotifier {
           final oosp = OutOfStockSub(
             id: 0,
             outosSubOutosId: 0,
-            outosSubOrderSubId: orderSub.id,
+            outosSubOrderSubId: orderSub.orderSubId,
             outosSubCustId: orderSub.orderSubCustId,
             outosSubSalesManId: orderSub.orderSubSalesmanId,
             outosSubStockKeeperId: orderSub.orderSubStockKeeperId,
@@ -2020,39 +2678,19 @@ class OrdersProvider extends ChangeNotifier {
         await Future.delayed(Duration(milliseconds: stopwatch.elapsedMilliseconds));
       }
 
-      // 2. Build notification payload (matching KMP lines 1593-1600)
-      final adminsResult = await _usersRepository.getUsersByCategory(1);
-      final List<Map<String, dynamic>> userIds = [];
-      adminsResult.fold(
-        (_) {},
-        (admins) {
-          for (final admin in admins) {
-            userIds.add({
-              'user_id': admin.id,
-              'silent_push': 0, // Matching KMP: PushUserData(it.userId, 0)
-            });
-          }
-        },
-      );
-
-      final notificationPayload = {
-        'ids': userIds,
-        'data_message': 'Product out of stock reported',
-        'data': {
-          'data_ids': [],
-          'show_notification': '0',
-          'message': 'Product out of stock reported',
-        },
-      };
-
-      // 3. Call API (matching KMP lines 1601-1679)
+      // 2. Call API (matching KMP lines 1601-1679)
+      // Note: Endpoint doesn't support notification payload, so we send it separately
       final mastersList = outOfStocks.keys.toList();
       final subsList = outOfStocks.values.toList();
+      // TRACE: log orderSubIds we write to OOS master/sub when storekeeper creates OOS (reportAllAdmin)
+      developer.log(
+        'OrdersProvider.reportAllAdmin: creating OOS for masters with outosOrderSubIds=${mastersList.map((m) => m.outosOrderSubId).toList()}, subs outosSubOrderSubIds=${subsList.map((s) => s.outosSubOrderSubId).toList()}',
+        name: 'OrdersProvider.trace',
+      );
 
       final result = await _outOfStockRepository.createOutOfStockAll(
         outOfStockMasters: mastersList,
         outOfStockSubs: subsList,
-        notificationPayload: notificationPayload,
       );
 
       return await result.fold(
@@ -2062,7 +2700,7 @@ class OrdersProvider extends ChangeNotifier {
           return false;
         },
         (outOfStockList) async {
-          // 4. Update flags and reload order details (matching KMP lines 1610-1674)
+          // 3. Update flags and reload order details (matching KMP lines 1610-1674)
           // Note: Records are already stored in createOutOfStockAll with correct dates and isViewed
           for (int index = 0; index < outOfStockList.length; index++) {
             final outOfStock = outOfStockList[index];
@@ -2076,10 +2714,47 @@ class OrdersProvider extends ChangeNotifier {
             // On last item, reload order details (matching KMP line 1675-1677)
             if (index == outOfStockList.length - 1) {
               if (_orderDetails != null) {
-                await loadOrderDetails(_orderDetails!.order.id);
+                await loadOrderDetails(_orderDetails!.order.orderId);
               }
             }
           }
+
+          // 4. Send push notification separately (endpoint doesn't support notification payload)
+          // Build user IDs list for admins (matching KMP lines 1593-1600)
+          final adminsResult = await _usersRepository.getUsersByCategory(1);
+          final List<Map<String, dynamic>> userIds = [];
+          adminsResult.fold(
+            (_) {},
+            (admins)async{
+              for (final admin in admins) {
+                userIds.add({
+                  'user_id': admin.userId,
+                  'silent_push': 0, // Matching KMP: PushUserData(it.userId, 0)
+                });
+              }
+            },
+          );
+
+             // Build data IDs from all out of stock sub items
+          // This allows notification listeners to know what data to download
+          final List<PushData> dataIds = [];
+          for (final outOfStock in outOfStockList) {
+            if (outOfStock.items != null && outOfStock.items!.isNotEmpty) {
+              for (final subItem in outOfStock.items!) {
+                dataIds.add(PushData(table: 12, id: subItem.outOfStockSubId));
+              }
+            }
+          }
+
+          // Send notification with empty data_ids (matching KMP pattern)
+          // Fire-and-forget: don't await, just trigger in background
+          _pushNotificationSender.sendPushNotification(
+            dataIds: dataIds, // Empty array as per KMP pattern
+            message: 'Product out of stock reported',
+            customUserIds: userIds,
+          ).catchError((e) {
+             
+          });
 
           _setLoading(false);
           return true;
@@ -2111,6 +2786,7 @@ class OrdersProvider extends ChangeNotifier {
   Future<bool> sendCheckedReport({
     required Map<int, double> updatedQtyMap,
     required Map<int, String> noteMap,
+    Map<int, List<String>> imageMap = const {}, // orderSubId -> list of base64 data URIs
   }) async {
     if (_orderDetails == null) {
       _setError('Order not loaded');
@@ -2123,14 +2799,14 @@ class OrdersProvider extends ChangeNotifier {
     try {
       final order = _orderDetails!.order;
 
-      final orderSubsResult = await _ordersRepository.getAllOrderSubAndDetails(order.id);
+      final orderSubsResult = await _ordersRepository.getAllOrderSubAndDetails(order.orderId);
       if (orderSubsResult.isLeft) {
         _setError(orderSubsResult.left.message);
         _setLoading(false);
         return false;
       }
 
-      final tempSubsResult = await _ordersRepository.getTempOrderSubAndDetails(order.id);
+      final tempSubsResult = await _ordersRepository.getTempOrderSubAndDetails(order.orderId);
       if (tempSubsResult.isLeft) {
         _setError(tempSubsResult.left.message);
         _setLoading(false);
@@ -2150,6 +2826,34 @@ class OrdersProvider extends ChangeNotifier {
         includeBillers: true,
       );
 
+      //get all billers for notifying the change
+      final billersResult = await _usersRepository.getUsersByCategory(5);
+      billersResult.fold(
+        (_) {},
+        (billers) {
+          for (final biller in billers) {
+            notificationIds.add({
+              'user_id': biller.userId,
+              'silent_push': 0,
+            });
+          }
+        },
+      );
+
+      //get all admins for notifying the change
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            notificationIds.add({
+              'user_id': admin.userId,
+              'silent_push': 0,
+            });
+          }
+        },
+      );
+
       if (order.orderSalesmanId != -1) {
         notificationIds.add({
           'user_id': order.orderSalesmanId,
@@ -2157,12 +2861,14 @@ class OrdersProvider extends ChangeNotifier {
         });
       }
 
+
       final notificationPayload = {
         'ids': notificationIds,
         'data_message': 'Order checked and completed',
         'data': {
           'data_ids': [
-            {'table': 8, 'id': order.id},
+            {'table': 8, 'id': order.orderId},
+            //add table and id for ordersub items
           ],
           'show_notification': '0',
           'message': 'Order checked and completed',
@@ -2177,7 +2883,8 @@ class OrdersProvider extends ChangeNotifier {
             detail: detail,
             updatedQtyMap: updatedQtyMap,
             noteMap: noteMap,
-            markAsReplaced: _replacedOrderSubIds.containsKey(detail.orderSub.id),
+            imageMap: imageMap,
+            markAsReplaced: _replacedOrderSubIds.containsKey(detail.orderSub.orderSubId),
           ),
         );
       }
@@ -2188,12 +2895,13 @@ class OrdersProvider extends ChangeNotifier {
             detail: detail,
             updatedQtyMap: updatedQtyMap,
             noteMap: noteMap,
+            imageMap: imageMap,
           ),
         );
       }
 
       final payload = {
-        'order_id': order.id,
+        'order_id': order.orderId,
         'uuid': order.uuid,
         'order_cust_id': order.orderCustId,
         'order_cust_name': order.orderCustName,
@@ -2220,7 +2928,9 @@ class OrdersProvider extends ChangeNotifier {
 
       _setLoading(false);
       if (success) {
-        await loadOrderDetails(order.id);
+        await loadOrderDetails(order.orderId);
+        // Refresh order list to update status in the list view
+        loadOrders();
       }
       return success;
     } catch (e) {
@@ -2234,18 +2944,19 @@ class OrdersProvider extends ChangeNotifier {
     required OrderSubWithDetails detail,
     required Map<int, double> updatedQtyMap,
     required Map<int, String> noteMap,
+    Map<int, List<String>> imageMap = const {},
     bool markAsReplaced = false,
   }) {
     final sub = detail.orderSub;
     double qty = sub.orderSubQty;
     double availableQty = sub.orderSubAvailableQty;
     int orderFlag = sub.orderSubOrdrFlag;
-    String note = noteMap[sub.id]?.trim().isNotEmpty == true ? noteMap[sub.id]!.trim() : (sub.orderSubNote ?? '');
+    String note = noteMap[sub.orderSubId]?.trim().isNotEmpty == true ? noteMap[sub.orderSubId]!.trim() : (sub.orderSubNote ?? '');
 
     if (markAsReplaced) {
       orderFlag = OrderSubFlag.replaced;
-    } else if (updatedQtyMap.containsKey(sub.id)) {
-      final newQty = updatedQtyMap[sub.id] ?? 0.0;
+    } else if (updatedQtyMap.containsKey(sub.orderSubId)) {
+      final newQty = updatedQtyMap[sub.orderSubId] ?? 0.0;
       final message = newQty == 0
           ? 'Checker cancelled Item(qty : ${qty.toStringAsFixed(2)})'
           : 'Checker changed Item quantity (${qty.toStringAsFixed(2)} -> ${newQty.toStringAsFixed(2)})';
@@ -2255,8 +2966,8 @@ class OrdersProvider extends ChangeNotifier {
       orderFlag = OrderSubFlag.inStock;
     }
 
-    return {
-      'order_sub_id': sub.id,
+    final payload = {
+      'order_sub_id': sub.orderSubId,
       'order_sub_prd_id': sub.orderSubPrdId,
       'order_sub_unit_id': sub.orderSubUnitId,
       'order_sub_car_id': sub.orderSubCarId,
@@ -2271,27 +2982,35 @@ class OrdersProvider extends ChangeNotifier {
       'order_sub_note': note,
       'order_sub_narration': sub.orderSubNarration ?? '',
     };
+    
+    // Add checker_images if images are provided for this order sub
+    if (imageMap.containsKey(sub.orderSubId) && imageMap[sub.orderSubId]!.isNotEmpty) {
+      payload['checker_images'] = imageMap[sub.orderSubId]!;
+    }
+    
+    return payload;
   }
 
   Map<String, dynamic> _buildCheckerTempItemPayload({
     required OrderSubWithDetails detail,
     required Map<int, double> updatedQtyMap,
     required Map<int, String> noteMap,
+    Map<int, List<String>> imageMap = const {},
   }) {
     final sub = detail.orderSub;
     double qty = sub.orderSubQty;
     double availableQty = sub.orderSubAvailableQty;
     int orderFlag = sub.orderSubOrdrFlag;
-    String note = noteMap[sub.id]?.trim().isNotEmpty == true ? noteMap[sub.id]!.trim() : (sub.orderSubNote ?? '');
+    String note = noteMap[sub.orderSubId]?.trim().isNotEmpty == true ? noteMap[sub.orderSubId]!.trim() : (sub.orderSubNote ?? '');
 
-    if (updatedQtyMap.containsKey(sub.id)) {
-      qty = updatedQtyMap[sub.id] ?? 0.0;
+    if (updatedQtyMap.containsKey(sub.orderSubId)) {
+      qty = updatedQtyMap[sub.orderSubId] ?? 0.0;
       availableQty = 0.0;
       orderFlag = OrderSubFlag.inStock;
     }
 
-    return {
-      'order_sub_id': sub.id,
+    final payload = {
+      'order_sub_id': sub.orderSubId,
       'order_sub_prd_id': sub.orderSubPrdId,
       'order_sub_unit_id': sub.orderSubUnitId,
       'order_sub_car_id': sub.orderSubCarId,
@@ -2306,6 +3025,13 @@ class OrdersProvider extends ChangeNotifier {
       'order_sub_note': note,
       'order_sub_narration': sub.orderSubNarration ?? '',
     };
+    
+    // Add checker_images if images are provided for this order sub
+    if (imageMap.containsKey(sub.orderSubId) && imageMap[sub.orderSubId]!.isNotEmpty) {
+      payload['checker_images'] = imageMap[sub.orderSubId]!;
+    }
+    
+    return payload;
   }
 
   String _appendCheckerNote(String existingNote, String message) {
@@ -2317,5 +3043,473 @@ class OrdersProvider extends ChangeNotifier {
     }
     return '$existingNote${ApiConfig.noteSplitDel}$message';
   }
+
+  /// Claim an order as storekeeper (when tapped in list)
+  /// Matches KMP's OrderViewModel.updateStoreKeeper (lines 2137-2170)
+  Future<bool> claimOrderAsStorekeeper({
+    required int orderId,
+    required int storekeeperId,
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      // 1. Get admins (category 1) - matches KMP line 2141
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      if (adminsResult.isLeft) {
+        _setError('Failed to get admins: ${adminsResult.left.message}');
+        _setLoading(false);
+        return false;
+      }
+
+      // 2. Get storekeepers (category 2) - matches KMP line 2142
+      final storekeepersResult = await _usersRepository.getUsersByCategory(2);
+      if (storekeepersResult.isLeft) {
+        _setError('Failed to get storekeepers: ${storekeepersResult.left.message}');
+        _setLoading(false);
+        return false;
+      }
+
+      // 3. Build user IDs list - matches KMP lines 2143-2151
+      final List<Map<String, dynamic>> userIds = [];
+      
+      // Add all admins
+      for (final admin in adminsResult.right) {
+        userIds.add({
+          'user_id': admin.userId ?? -1,
+          'silent_push': 1,
+        });
+      }
+      
+      // Add all storekeepers except the current one (the one claiming)
+      for (final storekeeper in storekeepersResult.right) {
+        if (storekeeper.userId != storekeeperId) {
+          userIds.add({
+            'user_id': storekeeper.userId ?? -1,
+            'silent_push': 1,
+          });
+        }
+      }
+
+      // 4. Build data IDs - matches KMP line 2153-2154
+      // NotificationId.updateStoreKeeper = 21
+      final dataIds = [
+        PushData(table: NotificationId.updateStoreKeeper, id: orderId),
+      ];
+
+      // 5. Build notification JSON - matches KMP line 2155
+      final notification = {
+        'ids': userIds,
+        'data_message': 'Store keeper opened',
+        'data': {
+          'data_ids': dataIds.map((pushData) => pushData.toJson()).toList(),
+          'show_notification': 0, // Silent push
+          'message': 'Store keeper opened',
+        },
+      };
+
+      // 6. Call repository with notification - matches KMP lines 2156-2169
+      final result = await _ordersRepository.updateOrderStoreKeeper(
+        orderId: orderId,
+        storekeeperId: storekeeperId,
+        notification: notification,
+      );
+
+      return result.fold(
+        (failure) {
+          _setError(failure.message);
+          _setLoading(false);
+          return false;
+        },
+        (_) {
+          // Refresh orders to reflect new storekeeper assignment
+          loadOrders();
+          _setLoading(false);
+          return true;
+        },
+      );
+    } catch (e) {
+      _setError('Error claiming order: $e');
+      _setLoading(false);
+      return false;
+    }
+  }
+
+
+  /// Claim an order as checker (when tapped in list)
+  /// Matches KMP's OrderViewModel.changeToChecking (lines 2010-2050)
+  Future<bool> claimOrderAsChecker({
+    required int orderId,
+    required int checkerId,
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      // Get the order first
+      final orderResult = await _ordersRepository.getOrderById(orderId);
+      if (orderResult.isLeft) {
+        _setError('Failed to get order: ${orderResult.left.message}');
+        _setLoading(false);
+        return false;
+      }
+
+      final order = orderResult.right;
+      if (order == null) {
+        _setError('Order not found');
+        _setLoading(false);
+        return false;
+      }
+
+      // Use sendToBillerOrChecker with isBiller: false and approvalFlag
+      // This matches KMP's changeToChecking which calls updateOrderApproveFlag
+      final success = await sendToBillerOrChecker(
+        isBiller: false,
+        userId: checkerId,
+        order: order,
+        approvalFlag: OrderApprovalFlag.checkerIsChecking,
+      );
+
+      if (success) {
+        // Refresh orders to reflect new checker assignment
+        loadOrders();
+      }
+
+      _setLoading(false);
+      return success;
+    } catch (e) {
+      _setError('Error claiming order as checker: $e');
+      _setLoading(false);
+      return false;
+    }
+  }
+
+
+
+
+
+
+    Future<bool> sendToBiller({
+    required int userId,
+    required Order order,
+  }) async {
+    _setLoading(true);
+    _clearError();
+    try {
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      final List<Map<String, dynamic>> userIds = [];
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            userIds.add({
+              'user_id': admin.userId ?? -1,
+              'silent_push': 1,
+            });
+          }
+        },
+      );
+        final billersResult = await _usersRepository.getUsersByCategory(5);
+        billersResult.fold(
+          (_) {},
+          (billers) {
+            for (final biller in billers) {
+              // Exclude the claiming biller (matches pattern for checkers)
+              if (userId != biller.userId) {
+                userIds.add({
+                  'user_id': biller.userId ?? -1,
+                  'silent_push': 1, // Silent notification for billers
+                });
+              }
+            }
+          },
+        );
+      // Build notification data
+      final dataIds = [
+        {'table': 8, 'id': order.orderId}
+      ];
+      final notificationJsonObject = {
+        'ids': userIds,
+        'data_message': 'Order received',
+        'data': {
+          'data_ids': dataIds,
+          'show_notification': '0',
+          'message': 'Order received',
+        },
+      };
+      // Build API params
+      final params = {
+        'order_id': order.orderId,
+        'is_biller': 1,
+        'user_Id': userId,
+        'notification': notificationJsonObject,
+      };
+      //might be confusing but backend is desinged as the same api for both biller and checker
+      //so we are using the same api for both biller and checker
+      final result = await _ordersRepository.updateBillerOrChecker(params);
+      bool success = false;
+      result.fold(
+        (failure) => _setError(failure.message),
+        (_) {
+          success = true;
+            _ordersRepository.updateBillerLocal(
+              orderId: order.orderId,
+              billerId: userId,
+            );
+        },
+      );
+      _setLoading(false);
+      return success;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Mark order as billed
+  /// Calls API first, then updates local database
+  Future<bool> markOrderAsBilled({
+    required int orderId,
+    required int billerId,
+  }) async {
+    _setLoading(true);
+    _clearError();
+    final List<Map<String, dynamic>> userIds = [];
+    final Set<int> notifiedUserIds = <int>{};
+    try {
+
+      //get all billers for notifying the change
+      final billersResult = await _usersRepository.getUsersByCategory(5);
+      billersResult.fold(
+        (_) {},
+        (billers) {
+          for (final biller in billers) {
+            final int? billerUserId = biller.userId;
+            if (billerUserId != null &&
+                billerUserId != billerId &&
+                notifiedUserIds.add(billerUserId)) {
+              userIds.add({
+                'user_id': billerUserId,
+                'silent_push': 0,
+              });
+            }
+          }
+        },
+      );
+      //get all admins for notifying the change
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            final int? adminUserId = admin.userId;
+            if (adminUserId != null &&
+                adminUserId != billerId &&
+                notifiedUserIds.add(adminUserId)) {
+              userIds.add({
+                'user_id': adminUserId,
+                'silent_push': 0,
+              });
+            }
+          }
+        },
+      );
+      final dataIds = [
+        {'table': 8, 'id': orderId}
+      ];
+      final notificationJsonObject = {
+        'ids': userIds,
+        'data_message': 'Order marked as billed',
+        'data': {
+          'data_ids': dataIds,
+          'show_notification': '0',
+          'message': 'Order marked as billed',
+        },
+      };
+      // Call API to mark order as billed
+      final result = await _ordersRepository.markOrderAsBilled(
+        orderId: orderId,
+        billerId: billerId,
+        notification: notificationJsonObject,
+      );
+
+      bool success = false;
+      result.fold(
+        (failure) => _setError(failure.message),
+        (_) => success = true,
+      );
+
+      if (success) {
+        await loadOrderDetails(orderId);
+      }
+
+      _setLoading(false);
+      return success;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Check Stock - Updates order with all items from in-memory state, calls API, and updates local DB
+  /// Uses the new replaceOrAddOrderItems endpoint which handles replacements and new items
+  Future<bool> checkStock(int orderId) async {
+    _setLoading(true);
+    _clearError();
+
+    try {
+      // 1. Ensure order details are loaded
+      if (_orderDetails == null) {
+        _setError('Order details not loaded');
+        _setLoading(false);
+        return false;
+      }
+
+      // Validate order ID matches
+      if (_orderDetails!.order.orderId != orderId) {
+        _setError('Order ID mismatch');
+        _setLoading(false);
+        return false;
+      }
+
+      // 2. Build items array from in-memory _orderDetailItems (not from DB)
+      // Only send items that are replacements or new items (not unchanged items)
+      final List<Map<String, dynamic>> itemsArray = [];
+
+      for (final itemDetail in _orderDetailItems) {
+        final sub = itemDetail.orderSub;
+        
+        // Determine if this is a replacement or new item
+        // Check the isReplaced flag on the OrderSub object itself
+        bool isReplacement = sub.isReplaced;
+         
+        
+        bool isNewItem = !isReplacement && !_originalOrderSubIds.contains(sub.orderSubId);
+        
+        // Only send items that are replacements or new items
+        // Unchanged items are not sent (they remain in the database)
+        if (!isReplacement && !isNewItem) {
+          continue; // Skip unchanged items
+        }
+        
+        // Build item payload
+        final itemPayload = {
+          'order_sub_prd_id': sub.orderSubPrdId,
+          'order_sub_unit_id': sub.orderSubUnitId,
+          'order_sub_car_id': sub.orderSubCarId,
+          'order_sub_rate': sub.orderSubRate,
+          'order_sub_date_time': sub.orderSubDateTime,
+          'order_sub_update_rate': sub.orderSubUpdateRate,
+          'order_sub_qty': sub.orderSubQty,
+          'order_sub_available_qty': sub.orderSubAvailableQty,
+          'order_sub_unit_base_qty': sub.orderSubUnitBaseQty,
+          'order_sub_ordr_flag': 1, // Normal flag
+          'order_sub_is_checked_flag': sub.orderSubIsCheckedFlag,
+          'order_sub_note': sub.orderSubNote ?? '',
+          'order_sub_narration': sub.orderSubNarration ?? '',
+        };
+
+        // Set is_replacement flag and order_sub_id for replacements
+        if (isReplacement) {
+          itemPayload['is_replacement'] = true;
+          itemPayload['order_sub_id'] = sub.orderSubId; // Same ID (backend updates in place)
+           
+        } else if (isNewItem) {
+          // New item - explicitly set is_replacement to false
+          itemPayload['is_replacement'] = false;
+           
+        }
+
+        // Add checker_images if present
+        if (sub.checkerImages != null && sub.checkerImages!.isNotEmpty) {
+          itemPayload['checker_images'] = sub.checkerImages!;
+        }
+
+        itemsArray.add(itemPayload);
+      }
+
+      // 3. Build notification payload
+      final userId = await StorageHelper.getUserId();
+      final adminsResult = await _usersRepository.getUsersByCategory(1);
+      final List<Map<String, dynamic>> userIds = [];
+
+      adminsResult.fold(
+        (_) {},
+        (admins) {
+          for (final admin in admins) {
+            userIds.add({
+              'user_id': admin.userId ?? -1,
+              'silent_push': 1,
+            });
+          }
+        },
+      );
+
+      // Get storekeepers
+      final storekeepersResult = await _usersRepository.getUsersByCategory(2);
+      storekeepersResult.fold(
+        (_) {},
+        (storekeepers) {
+          for (final storekeeper in storekeepers) {
+            if (storekeeper.id != userId) {
+              userIds.add({
+                'user_id': storekeeper.userId ?? -1,
+                'silent_push': 1,
+              });
+            }
+          }
+        },
+      );
+
+      final notificationPayload = {
+        'ids': userIds,
+        'data_message': 'Order Updated',
+        'data': {
+          'data_ids': [
+            {'table': 8, 'id': orderId} // Order table
+          ],
+          'show_notification': '1',
+          'message': 'Order Updated',
+        },
+      };
+
+      // 4. Build payload for replaceOrAddOrderItems API
+      // Note: The endpoint only needs order_id and items array
+      // It handles workflow reset internally (approve_flag = 1, reset biller/checker)
+      final payload = {
+        'order_id': orderId,
+        'items': itemsArray,
+        'notification': notificationPayload,
+      };
+
+      // 5. Call replaceOrAddOrderItems API
+      // No need to delete order subs - backend updates replacements in place (same ID)
+      final result = await _ordersRepository.replaceOrAddOrderItems(payload);
+
+      // edited by ai on 29-jan-2026 to fix the issue of order details screen showing "Order not found" after Check Stock (use orderId from API response and await reload)
+      bool success = false;
+      int? orderIdToReload;
+      result.fold(
+        (failure) => _setError(failure.message),
+        (updatedOrder) {
+          success = true;
+          orderIdToReload = updatedOrder.orderId;
+        },
+      );
+      if (success && orderIdToReload != null) {
+        await loadOrderDetails(orderIdToReload!);
+      }
+
+      _setLoading(false);
+      return success;
+    } catch (e) {
+      _setError(e.toString());
+      _setLoading(false);
+      return false;
+    }
+  }
+
 }
 

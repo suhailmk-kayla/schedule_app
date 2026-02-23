@@ -100,6 +100,8 @@ class ProductsProvider extends ChangeNotifier {
   String get retailPriceSt => _retailPriceSt;
   String _fittingChargeSt = '0.00';
   String get fittingChargeSt => _fittingChargeSt;
+  String _minimumPriceSt = '';
+  String get minimumPriceSt => _minimumPriceSt;
   String _noteSt = '';
   String get noteSt => _noteSt;
   int _formCategoryId = -1;
@@ -290,6 +292,11 @@ class ProductsProvider extends ChangeNotifier {
     );
   }
 
+  void clearSelectedProduct() {
+    _currentProductWithDetails = null;
+    notifyListeners();
+  }
+
   /// Load product by ID with details (includes joined names)
   /// Matches KMP's getProductsById and getProductByProductId
   Future<ProductWithDetails?> loadProductByIdWithDetails(int productId) async {
@@ -315,6 +322,7 @@ class ProductsProvider extends ChangeNotifier {
         } else {
           product = p;
           _currentProductWithDetails = p;
+          notifyListeners();
           // Load derived units if base unit exists (matches KMP line 92-94)
           if (p.product.base_unit_id != -1) {
             loadDerivedUnits(p.product.base_unit_id);
@@ -322,6 +330,7 @@ class ProductsProvider extends ChangeNotifier {
           // Load product cars and units (matches KMP lines 96-97)
           loadProductCars(productId);
           loadProductUnits(productId);
+
         }
       },
     );
@@ -495,6 +504,14 @@ class ProductsProvider extends ChangeNotifier {
     }
   }
 
+  /// Set minimum price
+  void setMinimumPrice(String minimumPrice) {
+    if (RegExp(r'^\d*\.?\d*$').hasMatch(minimumPrice)) {
+      _minimumPriceSt = minimumPrice;
+      notifyListeners();
+    }
+  }
+
   /// Set note
   void setNote(String note) {
     _noteSt = note;
@@ -559,6 +576,7 @@ class ProductsProvider extends ChangeNotifier {
     _mrpSt = '0.00';
     _retailPriceSt = '0.00';
     _fittingChargeSt = '0.00';
+    _minimumPriceSt = '';
     _noteSt = '';
     _formCategoryId = -1;
     _formCategorySt = 'Select Category';
@@ -593,6 +611,9 @@ class ProductsProvider extends ChangeNotifier {
     _mrpSt = product.mrp.toString();
     _retailPriceSt = product.retail_price.toString();
     _fittingChargeSt = product.fitting_charge.toString();
+    _minimumPriceSt = product.minimumPrice != null 
+        ? product.minimumPrice!.toStringAsFixed(2) 
+        : '';
     _noteSt = product.note;
     
     // Populate category
@@ -725,14 +746,12 @@ class ProductsProvider extends ChangeNotifier {
         return 'Barcode already Exist';
       }
     }
-
     // Create product object
     final photoBase64 = _imageBytes != null
         ? 'data:image/jpeg;base64,${base64Encode(_imageBytes!)}'
         : '';
-
+        
     final product = Product(
-      id: -1,
       name: _nameSt,
       code: _codeSt,
       barcode: _barcodeSt,
@@ -749,6 +768,9 @@ class ProductsProvider extends ChangeNotifier {
       mrp: double.tryParse(_mrpSt) ?? 0.0,
       retail_price: double.tryParse(_retailPriceSt) ?? 0.0,
       fitting_charge: double.tryParse(_fittingChargeSt) ?? 0.0,
+      minimumPrice: _minimumPriceSt.isNotEmpty 
+          ? double.tryParse(_minimumPriceSt) 
+          : null,
       note: _noteSt,
       photo: photoBase64,
     );
@@ -817,7 +839,7 @@ class ProductsProvider extends ChangeNotifier {
         : ''; // Empty string = preserve existing photo
 
     final product = Product(
-      id: productId,
+      productId: productId,
       name: _nameSt,
       code: _codeSt,
       barcode: _barcodeSt,
@@ -834,6 +856,9 @@ class ProductsProvider extends ChangeNotifier {
       mrp: double.tryParse(_mrpSt) ?? 0.0,
       retail_price: double.tryParse(_retailPriceSt) ?? 0.0,
       fitting_charge: double.tryParse(_fittingChargeSt) ?? 0.0,
+      minimumPrice: _minimumPriceSt.isNotEmpty 
+          ? double.tryParse(_minimumPriceSt) 
+          : null,
       note: _noteSt,
       photo: photoBase64,
     );

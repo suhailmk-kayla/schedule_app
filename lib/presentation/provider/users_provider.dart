@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/foundation.dart';
 import '../../repositories/users/users_repository.dart';
 import '../../repositories/user_category/user_category_repository.dart';
@@ -118,15 +120,17 @@ class UsersProvider extends ChangeNotifier {
       confirmPassword: confirmPassword,
     );
 
-    return result.fold(
-      (failure) {
+    return await result.fold(
+      (failure) async {
         _errorMessage = failure.message;
         _isLoading = false;
         notifyListeners();
         return false;
       },
-      (_) {
+      (_) async {
         _isLoading = false;
+        // Reload user data after password change to ensure UI is updated
+        await loadUserById(userId);
         notifyListeners();
         return true;
       },
@@ -142,17 +146,21 @@ class UsersProvider extends ChangeNotifier {
 
     final result = await _usersRepository.logoutFromDevices(userId: userId);
 
-    return result.fold(
-      (failure) {
+    return await result.fold(
+      (failure) async {
         _errorMessage = failure.message;
         _isLoading = false;
         notifyListeners();
         return false;
       },
-      (_) {
+      (_) async {
         _isLoading = false;
+        // Clear deviceToken in local DB after logout
+        await _usersRepository.clearUserDeviceToken(userId);
         // After logout, check if user is still active
-        checkUserActive(userId);
+        await checkUserActive(userId);
+        // Reload user data to ensure UI is updated
+        await loadUserById(userId);
         notifyListeners();
         return true;
       },
@@ -184,6 +192,7 @@ class UsersProvider extends ChangeNotifier {
       (_) {
         _isLoading = false;
         notifyListeners();
+        // loadUsers();
         return true;
       },
     );
@@ -195,11 +204,13 @@ class UsersProvider extends ChangeNotifier {
     final result = await _usersRepository.checkUserActive(userId: userId);
     result.fold(
       (_) {
+         
         _isUserActive = false;
         notifyListeners();
       },
       (isActive) {
         _isUserActive = isActive;
+         
         notifyListeners();
       },
     );
@@ -325,6 +336,61 @@ class UsersProvider extends ChangeNotifier {
   Future<bool> checkCodeExistsWithId(String code, int userId) async {
     final result = await _usersRepository.getUserByCodeWithId(
       code: code,
+      userId: userId,
+    );
+    return result.fold(
+      (failure) => false,
+      (users) => users.isNotEmpty,
+    );
+  }
+
+  /// Check if phone number already exists
+  /// Used for create operations
+  Future<bool> checkPhoneExists(String phone) async {
+    final result = await _usersRepository.getUserByPhone(phone);
+    return result.fold(
+      (failure) => false,
+      (users) => users.isNotEmpty,
+    );
+  }
+
+/// Check if phone number already exists for any user
+  Future<bool> checkPhoneNumberTaken(String phone) async {
+    final result = await _usersRepository.checkPhoneNumberTaken(phone);
+    return result.fold(
+      (failure) => false,
+      (isTaken) => isTaken,
+    );
+  }
+
+  /// Check if phone number already exists for a salesman (categoryId = 3)
+  /// Used for create operations in salesman screen
+  Future<bool> checkSalesmanPhoneExists(String phone) async {
+    final result = await _usersRepository.getSalesmanByPhone(phone);
+    return result.fold(
+      (failure) => false,
+      (users) => users.isNotEmpty,
+    );
+  }
+
+  /// Check if phone number already exists (excluding specific user ID)
+  /// Used for update operations to allow keeping the same phone
+  Future<bool> checkPhoneExistsWithId(String phone, int userId) async {
+    final result = await _usersRepository.getUserByPhoneWithId(
+      phone: phone,
+      userId: userId,
+    );
+    return result.fold(
+      (failure) => false,
+      (users) => users.isNotEmpty,
+    );
+  }
+
+  /// Check if phone number already exists for a salesman (excluding specific user ID)
+  /// Used for update operations in salesman screen
+  Future<bool> checkSalesmanPhoneExistsWithId(String phone, int userId) async {
+    final result = await _usersRepository.getSalesmanByPhoneWithId(
+      phone: phone,
       userId: userId,
     );
     return result.fold(

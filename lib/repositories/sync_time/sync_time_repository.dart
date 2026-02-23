@@ -65,5 +65,49 @@ class SyncTimeRepository {
       return Left(DatabaseFailure.fromError(e));
     }
   }
+
+  /// Get the oldest sync time across all tables
+  /// Useful for checking if any table needs syncing
+  Future<Either<Failure, SyncTime?>> getOldestSyncTime() async {
+    try {
+      final db = await _databaseHelper.database;
+      final maps = await db.query(
+        'SyncTime',
+        orderBy: 'update_date ASC',
+        limit: 1,
+      );
+
+      if (maps.isEmpty) {
+        return const Right(null);
+      }
+
+      final syncTime = SyncTime.fromMap(maps.first);
+      return Right(syncTime);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get the latest sync time across all tables
+  /// Returns the most recent sync date
+  Future<Either<Failure, SyncTime?>> getLatestSyncTime() async {
+    try {
+      final db = await _databaseHelper.database;
+      final maps = await db.query(
+        'SyncTime',
+        orderBy: 'update_date DESC',
+        limit: 1,
+      );
+
+      if (maps.isEmpty) {
+        return const Right(null);
+      }
+
+      final syncTime = SyncTime.fromMap(maps.first);
+      return Right(syncTime);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
 }
 

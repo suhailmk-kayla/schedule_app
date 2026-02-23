@@ -184,13 +184,13 @@ class UserCategoryRepository {
         ApiEndpoints.userCategoryDownloads,
         queryParameters: queryParams,
       );
-      developer.log('Response: ${response.data}');
+       
       return Right(Map<String, dynamic>.from(response.data));
     } on DioException catch (e) {
-      developer.log('Error syncing user categories: ${e.response?.data}');
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
-      developer.log('Error syncing user categories: ${e}');
+       
       return Left(UnknownFailure.fromError(e));
     }
   }

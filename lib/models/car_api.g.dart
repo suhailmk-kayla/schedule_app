@@ -81,33 +81,33 @@ Map<String, dynamic> _$CarVersionListApiToJson(CarVersionListApi instance) =>
     };
 
 Brand _$BrandFromJson(Map<String, dynamic> json) => Brand(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  carBrandId: (json['id'] as num?)?.toInt() ?? -1,
   brandName: json['brand_name'] as String? ?? '',
   flag: (json['flag'] as num?)?.toInt(),
 );
 
 Map<String, dynamic> _$BrandToJson(Brand instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.carBrandId,
   'brand_name': instance.brandName,
   'flag': instance.flag,
 };
 
 Name _$NameFromJson(Map<String, dynamic> json) => Name(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  carNameId: (json['id'] as num?)?.toInt() ?? -1,
   carBrandId: (json['car_brand_id'] as num?)?.toInt() ?? -1,
   carName: json['car_name'] as String? ?? '',
   flag: (json['flag'] as num?)?.toInt(),
 );
 
 Map<String, dynamic> _$NameToJson(Name instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.carNameId,
   'car_brand_id': instance.carBrandId,
   'car_name': instance.carName,
   'flag': instance.flag,
 };
 
 Model _$ModelFromJson(Map<String, dynamic> json) => Model(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  carModelId: (json['id'] as num?)?.toInt() ?? -1,
   carBrandId: (json['car_brand_id'] as num?)?.toInt() ?? -1,
   carNameId: (json['car_name_id'] as num?)?.toInt() ?? -1,
   modelName: json['model_name'] as String? ?? '',
@@ -118,7 +118,7 @@ Model _$ModelFromJson(Map<String, dynamic> json) => Model(
 );
 
 Map<String, dynamic> _$ModelToJson(Model instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.carModelId,
   'car_brand_id': instance.carBrandId,
   'car_name_id': instance.carNameId,
   'model_name': instance.modelName,
@@ -127,7 +127,7 @@ Map<String, dynamic> _$ModelToJson(Model instance) => <String, dynamic>{
 };
 
 Version _$VersionFromJson(Map<String, dynamic> json) => Version(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  carVersionId: (json['id'] as num?)?.toInt() ?? -1,
   carBrandId: (json['car_brand_id'] as num?)?.toInt() ?? -1,
   carNameId: (json['car_name_id'] as num?)?.toInt() ?? -1,
   carModelId: (json['car_model_id'] as num?)?.toInt() ?? -1,
@@ -136,7 +136,7 @@ Version _$VersionFromJson(Map<String, dynamic> json) => Version(
 );
 
 Map<String, dynamic> _$VersionToJson(Version instance) => <String, dynamic>{
-  'id': instance.id,
+  'id': instance.carVersionId,
   'car_brand_id': instance.carBrandId,
   'car_name_id': instance.carNameId,
   'car_model_id': instance.carModelId,

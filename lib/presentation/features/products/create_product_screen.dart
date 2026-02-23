@@ -1,6 +1,9 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:schedule_frontend_flutter/helpers/image_url_handler.dart';
 import 'dart:typed_data';
 import '../../provider/products_provider.dart';
 import '../../../utils/toast_helper.dart';
@@ -24,6 +27,19 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _imagePicker = ImagePicker();
 
+  // Text editing controllers
+  final TextEditingController _codeController = TextEditingController();
+  final TextEditingController _barcodeController = TextEditingController();
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _subNameController = TextEditingController();
+  final TextEditingController _brandController = TextEditingController();
+  final TextEditingController _subBrandController = TextEditingController();
+  final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _mrpController = TextEditingController();
+  final TextEditingController _retailPriceController = TextEditingController();
+  final TextEditingController _fittingChargeController = TextEditingController();
+  final TextEditingController _minimumPriceController = TextEditingController();
+  final TextEditingController _noteController = TextEditingController();
   bool _isLoadingProduct = false;
 
   @override
@@ -31,17 +47,39 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider = Provider.of<ProductsProvider>(context, listen: false);
+      context.read<ProductsProvider>().loadBaseUnits();
       if (widget.productId != null) {
         // Edit mode: Load existing product data
+         
         await _loadProductData(widget.productId!);
       } else {
         // Create mode: Reset form
+         
         provider.resetForm();
+        // Sync controllers with provider default values
+        _syncControllersFromProvider(provider);
       }
     });
   }
 
+  /// Sync controller values from provider state
+  void _syncControllersFromProvider(ProductsProvider provider) {
+    _codeController.text = provider.codeSt;
+    _barcodeController.text = provider.barcodeSt;
+    _nameController.text = provider.nameSt;
+    _subNameController.text = provider.subNameSt;
+    _brandController.text = provider.brandSt;
+    _subBrandController.text = provider.subBrandSt;
+    _priceController.text = provider.priceSt;
+    _mrpController.text = provider.mrpSt;
+    _retailPriceController.text = provider.retailPriceSt;
+    _fittingChargeController.text = provider.fittingChargeSt;
+    _minimumPriceController.text = provider.minimumPriceSt;
+    _noteController.text = provider.noteSt;
+  }
+
   Future<void> _loadProductData(int productId) async {
+     
     setState(() {
       _isLoadingProduct = true;
     });
@@ -59,10 +97,30 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
 
     // Populate form fields from product data
     provider.populateFormFromProduct(productWithDetails);
+    
+    // Sync controllers with provider values
+    _syncControllersFromProvider(provider);
 
     setState(() {
       _isLoadingProduct = false;
     });
+  }
+
+  @override
+  void dispose() {
+    _codeController.dispose();
+    _barcodeController.dispose();
+    _nameController.dispose();
+    _subNameController.dispose();
+    _brandController.dispose();
+    _subBrandController.dispose();
+    _priceController.dispose();
+    _mrpController.dispose();
+    _retailPriceController.dispose();
+    _fittingChargeController.dispose();
+    _minimumPriceController.dispose();
+    _noteController.dispose();
+    super.dispose();
   }
 
   Future<void> _pickImage() async {
@@ -83,8 +141,19 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
 
   Future<bool> _onWillPop() async {
     final provider = Provider.of<ProductsProvider>(context, listen: false);
-    if (provider.codeSt.isNotEmpty ||
-        provider.nameSt.isNotEmpty ||
+    // Check if form has changes (check controllers directly for immediate feedback)
+    if (_codeController.text.isNotEmpty ||
+        _nameController.text.isNotEmpty ||
+        _barcodeController.text.isNotEmpty ||
+        _subNameController.text.isNotEmpty ||
+        _brandController.text.isNotEmpty ||
+        _subBrandController.text.isNotEmpty ||
+        (_priceController.text.isNotEmpty && _priceController.text != '0.00') ||
+        (_mrpController.text.isNotEmpty && _mrpController.text != '0.00') ||
+        (_retailPriceController.text.isNotEmpty && _retailPriceController.text != '0.00') ||
+        (_fittingChargeController.text.isNotEmpty && _fittingChargeController.text != '0.00') ||
+        (_minimumPriceController.text.isNotEmpty && _minimumPriceController.text != '0.00') ||
+        _noteController.text.isNotEmpty ||
         provider.imageBytes != null ||
         (widget.productId != null && provider.photoUrl != null)) {
       final shouldDiscard = await showDialog<bool>(
@@ -98,7 +167,11 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
               child: const Text('No'),
             ),
             TextButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: (){
+                Navigator.pop(context, true);
+                final provider = Provider.of<ProductsProvider>(context, listen: false);
+                provider.resetForm();
+              },
               child: const Text('Yes'),
             ),
           ],
@@ -149,10 +222,15 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (!didPop) {
+           
           final shouldPop = await _onWillPop();
           if (shouldPop && mounted) {
+          
             Navigator.pop(context);
           }
+        }else{
+          final provider = Provider.of<ProductsProvider>(context, listen: false);
+            provider.clearSelectedProduct();
         }
       },
       child: Scaffold(
@@ -208,7 +286,8 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                                     ? ClipRRect(
                                         borderRadius: BorderRadius.circular(4),
                                         child: Image.network(
-                                          provider.photoUrl!,
+                                          ImageUrlFixer.fix(provider.photoUrl!),
+                                        
                                           fit: BoxFit.cover,
                                           errorBuilder: (context, error, stackTrace) {
                                             return const Center(
@@ -239,7 +318,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                       // Code Field
                       TextFormField(
                         textCapitalization: TextCapitalization.characters,
-                        initialValue: provider.codeSt,
+                        controller: _codeController,
                         decoration: const InputDecoration(
                           labelText: 'Code*',
                           border: OutlineInputBorder(),
@@ -255,7 +334,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                       const SizedBox(height: 16),
                       // Barcode Field
                       TextFormField(
-                        initialValue: provider.barcodeSt,
+                        controller: _barcodeController,
                         decoration: const InputDecoration(
                           labelText: 'Barcode',
                           border: OutlineInputBorder(),
@@ -265,7 +344,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                       const SizedBox(height: 16),
                       // Name Field
                       TextFormField(
-                        initialValue: provider.nameSt,
+                        controller: _nameController,
                         decoration: const InputDecoration(
                           labelText: 'Name*',
                           border: OutlineInputBorder(),
@@ -281,7 +360,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                       const SizedBox(height: 16),
                       // Sub Name Field
                       TextFormField(
-                        initialValue: provider.subNameSt,
+                        controller: _subNameController,
                         decoration: const InputDecoration(
                           labelText: 'Sub Name',
                           border: OutlineInputBorder(),
@@ -291,7 +370,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                       const SizedBox(height: 16),
                       // Brand Field
                       TextFormField(
-                        initialValue: provider.brandSt,
+                        controller: _brandController,
                         decoration: const InputDecoration(
                           labelText: 'Brand',
                           border: OutlineInputBorder(),
@@ -301,7 +380,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                       const SizedBox(height: 16),
                       // Sub Brand Field
                       TextFormField(
-                        initialValue: provider.subBrandSt,
+                        controller: _subBrandController,
                         decoration: const InputDecoration(
                           labelText: 'Sub Brand',
                           border: OutlineInputBorder(),
@@ -377,9 +456,8 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             border: Border.all(
-                              color: provider.formBaseUnitId == -1
-                                  ? Colors.red
-                                  : Colors.grey,
+                              color: 
+                                   Colors.grey,
                             ),
                             borderRadius: BorderRadius.circular(4),
                           ),
@@ -446,7 +524,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                       const SizedBox(height: 16),
                       // Price Field
                       TextFormField(
-                        initialValue: provider.priceSt,
+                        controller: _priceController,
                         decoration: const InputDecoration(
                           labelText: 'Price*',
                           border: OutlineInputBorder(),
@@ -464,7 +542,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                       const SizedBox(height: 16),
                       // MRP Field
                       TextFormField(
-                        initialValue: provider.mrpSt,
+                        controller: _mrpController,
                         decoration: const InputDecoration(
                           labelText: 'MRP',
                           border: OutlineInputBorder(),
@@ -475,7 +553,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                       const SizedBox(height: 16),
                       // Retail Price Field
                       TextFormField(
-                        initialValue: provider.retailPriceSt,
+                        controller: _retailPriceController,
                         decoration: const InputDecoration(
                           labelText: 'Retail Price',
                           border: OutlineInputBorder(),
@@ -486,7 +564,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                       const SizedBox(height: 16),
                       // Fitting Charge Field
                       TextFormField(
-                        initialValue: provider.fittingChargeSt,
+                        controller: _fittingChargeController,
                         decoration: const InputDecoration(
                           labelText: 'Fitting Charge',
                           border: OutlineInputBorder(),
@@ -495,9 +573,33 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
                         onChanged: (value) => provider.setFittingCharge(value),
                       ),
                       const SizedBox(height: 16),
+                      // Minimum Rate Field
+                      TextFormField(
+                        controller: _minimumPriceController,
+                        decoration: const InputDecoration(
+                          labelText: 'Minimum Rate',
+                          border: OutlineInputBorder(),
+                          helperText: 'Minimum price a salesman can sell this product',
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        onChanged: (value) => provider.setMinimumPrice(value),
+                        validator: (value) {
+                          if (value != null && value.isNotEmpty) {
+                            final minPrice = double.tryParse(value);
+                            if (minPrice == null) {
+                              return 'Enter a valid number';
+                            }
+                            if (minPrice < 0) {
+                              return 'Minimum price must be >= 0';
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
                       // Note Field
                       TextFormField(
-                        initialValue: provider.noteSt,
+                        controller: _noteController,
                         decoration: const InputDecoration(
                           labelText: 'Note',
                           border: OutlineInputBorder(),
@@ -581,7 +683,9 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
   }
 
   void _showBaseUnitBottomSheet(BuildContext context, ProductsProvider provider) {
+     
     if (provider.unitList.isEmpty) {
+       
       ToastHelper.showError('Base unit not found');
       return;
     }
@@ -600,6 +704,7 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
 
   void _showSupplierBottomSheet(BuildContext context, ProductsProvider provider) {
     if (provider.supplierList.isEmpty) {
+      
       ToastHelper.showError('Supplier not found');
       return;
     }
@@ -637,10 +742,10 @@ class _CategoryBottomSheet extends StatelessWidget {
         itemCount: categoryList.length,
         itemBuilder: (context, index) {
           final category = categoryList[index];
-          final isSelected = category.id == selectedCategoryId;
+          final isSelected = category.categoryId == selectedCategoryId;
           return RadioListTile<int>(
             title: Text(category.name),
-            value: category.id,
+            value: category.categoryId,
             groupValue: selectedCategoryId,
             onChanged: (value) {
               if (value != null) {
@@ -675,10 +780,10 @@ class _SubCategoryBottomSheet extends StatelessWidget {
         itemCount: subCategoryList.length,
         itemBuilder: (context, index) {
           final subCategory = subCategoryList[index];
-          final isSelected = subCategory.id == selectedSubCategoryId;
+          final isSelected = subCategory.subCategoryId == selectedSubCategoryId;
           return RadioListTile<int>(
             title: Text(subCategory.name),
-            value: subCategory.id,
+            value: subCategory.subCategoryId,
             groupValue: selectedSubCategoryId,
             onChanged: (value) {
               if (value != null) {
@@ -713,10 +818,10 @@ class _BaseUnitBottomSheet extends StatelessWidget {
         itemCount: unitList.length,
         itemBuilder: (context, index) {
           final unit = unitList[index];
-          final isSelected = unit.id == selectedBaseUnitId;
+          final isSelected = unit.unitId == selectedBaseUnitId;
           return RadioListTile<int>(
             title: Text(unit.name ?? ''),
-            value: unit.id,
+            value: unit.unitId,
             groupValue: selectedBaseUnitId,
             onChanged: (value) {
               if (value != null) {

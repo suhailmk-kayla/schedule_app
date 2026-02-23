@@ -140,6 +140,7 @@ Product _$ProductFromJson(Map<String, dynamic> json) => Product(
   fitting_charge: json['fitting_charge'] == null
       ? 0.0
       : _toDouble(json['fitting_charge']),
+  minimumPrice: _toNullableDouble(json['minimum_price']),
   note: json['note'] as String? ?? '',
   photo: json['photo'] as String? ?? '',
 );
@@ -162,12 +163,13 @@ Map<String, dynamic> _$ProductToJson(Product instance) => <String, dynamic>{
   'mrp': instance.mrp,
   'retail_price': instance.retail_price,
   'fitting_charge': instance.fitting_charge,
+  'minimum_price': instance.minimumPrice,
   'note': instance.note,
   'photo': instance.photo,
 };
 
 ProductUnit _$ProductUnitFromJson(Map<String, dynamic> json) => ProductUnit(
-  id: (json['id'] as num?)?.toInt() ?? -1,
+  productUnitId: (json['id'] as num?)?.toInt() ?? -1,
   prd_id: (json['prd_id'] as num?)?.toInt() ?? -1,
   base_unit_id: (json['base_unit_id'] as num?)?.toInt() ?? -1,
   derived_unit_id: (json['derived_unit_id'] as num?)?.toInt() ?? -1,
@@ -175,7 +177,7 @@ ProductUnit _$ProductUnitFromJson(Map<String, dynamic> json) => ProductUnit(
 
 Map<String, dynamic> _$ProductUnitToJson(ProductUnit instance) =>
     <String, dynamic>{
-      'id': instance.id,
+      'id': instance.productUnitId,
       'prd_id': instance.prd_id,
       'base_unit_id': instance.base_unit_id,
       'derived_unit_id': instance.derived_unit_id,

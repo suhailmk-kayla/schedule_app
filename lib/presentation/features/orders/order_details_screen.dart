@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../models/order_api.dart';
+import '../../../utils/toast_helper.dart';
 import '../../../models/order_item_detail.dart';
 import '../../../models/order_with_name.dart';
 import '../../../utils/config.dart';
@@ -10,6 +11,7 @@ import '../../../utils/order_flags.dart';
 import '../../../utils/notification_manager.dart';
 import '../../../utils/storage_helper.dart';
 import '../../provider/orders_provider.dart';
+import '../../common_widgets/small_product_image.dart';
 
 class OrderDetailsScreen extends StatefulWidget {
   final int orderId;
@@ -33,6 +35,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   Future<void> _loadInitialData() async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     await ordersProvider.loadOrderDetails(widget.orderId);
+    
+    // Update process flag to mark order as viewed
+    // This ensures the badge count decreases when order is opened
+    await ordersProvider.updateProcessFlag(
+      orderId: widget.orderId,
+      isProcessFinish: 1,
+    );
+    
     final userType = await StorageHelper.getUserType();
     if (!mounted) return;
     setState(() {
@@ -44,6 +54,47 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   Future<void> _refresh() {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     return ordersProvider.loadOrderDetails(widget.orderId);
+  }
+
+  /// Shows confirmation dialog and cancels order if user confirms
+  /// Matching KMP's OrderDetailsAdmin Cancel Order flow
+  Future<void> _handleCancelOrder(
+    BuildContext context,
+    Order order,
+    OrdersProvider ordersProvider,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel Order'),
+        content: const Text('Do you want to cancel this order?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final success = await ordersProvider.cancelOrder(order);
+
+    if (!mounted) return;
+
+    if (success) {
+      ToastHelper.showSuccess('Order cancelled');
+      Navigator.pop(context);
+    } else {
+      ToastHelper.showError(
+        ordersProvider.errorMessage ?? 'Failed to cancel order',
+      );
+    }
   }
 
   @override
@@ -65,8 +116,31 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
         final order = ordersProvider.orderDetails;
         final isLoading = ordersProvider.orderDetailsLoading && !_didInit;
 
+        final canCancel = _userType == 1 &&
+            order != null &&
+            order.order.orderApproveFlag != OrderApprovalFlag.sendToStorekeeper &&
+            order.order.orderApproveFlag != OrderApprovalFlag.completed &&
+            order.order.orderApproveFlag != OrderApprovalFlag.cancelled;
+
         return Scaffold(
-          appBar: AppBar(title: const Text('Order Details')),
+          appBar: AppBar(
+            title: const Text('Order Details'),
+            actions: [
+              if (canCancel)
+                TextButton.icon(
+                  onPressed: () => _handleCancelOrder(
+                    context,
+                    order.order,
+                    ordersProvider,
+                  ),
+                  icon: const Icon(Icons.cancel, color: Colors.red, size: 20),
+                  label: const Text(
+                    'Cancel Order',
+                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                  ),
+                ),
+            ],
+          ),
           body: RefreshIndicator(
             onRefresh: _refresh,
             child: _buildBody(
@@ -167,13 +241,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               items: items,
               replacedIds: ordersProvider.replacedOrderSubIds,
               replacedItems: ordersProvider.replacedOrderItems,
+              order: order,
             ),
           if (_shouldShowSummary())
             Padding(
               padding: const EdgeInsets.only(top: 16),
               child: _BottomSummary(
                 freightCharge: order.orderFreightCharge,
-                total: order.orderTotal,
+                total: _calculateInStockTotal(items),
               ),
             ),
           const SizedBox(height: 24),
@@ -184,6 +259,21 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
   bool _shouldShowSummary() =>
       _userType == 1 || _userType == 3 || _userType == 5;
+
+  /// Calculate total price for in-stock items only
+  /// Excludes out-of-stock items (flag > OrderSubFlag.inStock)
+  double _calculateInStockTotal(List<OrderItemDetail> items) {
+    double total = 0.0;
+    for (final item in items) {
+      final flag = item.orderSub.orderSubOrdrFlag;
+      // Only include items that are in stock (flag <= OrderSubFlag.inStock)
+      if (flag <= OrderSubFlag.inStock) {
+        // Formula: updateRate * quantity
+        total += item.orderSub.orderSubUpdateRate * item.orderSub.orderSubQty;
+      }
+    }
+    return total;
+  }
 }
 
 class _OrderHeader extends StatelessWidget {
@@ -322,12 +412,14 @@ class _OrderItemsList extends StatelessWidget {
   final List<OrderItemDetail> items;
   final Map<int, int> replacedIds;
   final Map<int, OrderItemDetail> replacedItems;
+  final Order order;
 
   const _OrderItemsList({
     required this.userType,
     required this.items,
     required this.replacedIds,
     required this.replacedItems,
+    required this.order,
   });
 
   @override
@@ -345,8 +437,8 @@ class _OrderItemsList extends StatelessWidget {
       }
 
       OrderItemDetail? replacement;
-      if (replacedIds.containsKey(item.orderSub.id)) {
-        final replacementId = replacedIds[item.orderSub.id];
+      if (replacedIds.containsKey(item.orderSub.orderSubId)) {
+        final replacementId = replacedIds[item.orderSub.orderSubId];
         if (replacementId != null) {
           replacement = replacedItems[replacementId];
         }
@@ -355,6 +447,19 @@ class _OrderItemsList extends StatelessWidget {
       final primaryItem = (userType == 7 && replacement != null)
           ? replacement
           : item;
+
+      // Show completed card if order is completed
+      if (order.orderApproveFlag == OrderApprovalFlag.completed) {
+        widgets.add(
+          _CompletedOrderItemCard(
+            index: index,
+            item: primaryItem,
+          ),
+        );
+        widgets.add(const SizedBox(height: 12));
+        index++;
+        continue;
+      }
 
       widgets.add(
         _OrderItemCard(
@@ -431,13 +536,32 @@ class _OrderItemCard extends StatelessWidget {
           children: [
             Row(
               children: [
+                SmallProductImage(
+                  imageUrl: item.productPhoto,
+                  size: 40,
+                  borderRadius: 5,
+                ),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
-                    '#$index  ${item.productName}',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '#$index  ${item.productName}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (item.productCode.isNotEmpty)
+                        Text(
+                          'Code: ${item.productCode}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 if (item.isPacked)
@@ -542,7 +666,7 @@ class _OrderItemCard extends StatelessWidget {
                           children: [
                             Text(
                               suggestion.note?.isNotEmpty == true
-                                  ? suggestion.note!
+                                  ? suggestion.productName!
                                   : 'Suggestion',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
@@ -673,9 +797,21 @@ class _ReplacementSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                SmallProductImage(
+                  imageUrl: item.productPhoto,
+                  size: 40,
+                  borderRadius: 5,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
             if (item.orderSub.orderSubNarration?.isNotEmpty == true)
               Padding(
@@ -853,6 +989,130 @@ class _ErrorState extends StatelessWidget {
                 onRetry();
               },
               child: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Completed Order Item Card
+/// Shows minimal details for completed orders (read-only, no actions)
+class _CompletedOrderItemCard extends StatelessWidget {
+  final int index;
+  final OrderItemDetail item;
+
+  const _CompletedOrderItemCard({
+    required this.index,
+    required this.item,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final flag = item.orderSub.orderSubOrdrFlag;
+    final qtyLabel = flag > OrderSubFlag.inStock
+        ? item.orderSub.orderSubAvailableQty.toString()
+        : item.orderSub.orderSubQty.toString();
+
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Colors.black12),
+      ),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                SmallProductImage(
+                  imageUrl: item.productPhoto,
+                  size: 40,
+                  borderRadius: 5,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '#$index  ${item.productName}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (item.orderSub.estimatedQty > 0 &&
+                (item.orderSub.estimatedQty - item.orderSub.orderSubQty).abs() > 0.001)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Text(
+                    'Checker changed the quantity from ${item.orderSub.estimatedQty.toStringAsFixed(2)} to ${item.orderSub.orderSubQty.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.amber.shade900,
+                    ),
+                  ),
+                ),
+              ),
+            // Checker uploaded images (show to admin like biller/salesman)
+            if (item.orderSub.checkerImages != null &&
+                item.orderSub.checkerImages!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Checker Uploaded Images:',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: item.orderSub.checkerImages!
+                    .map(
+                      (image) => SmallProductImage(
+                        imageUrl: image,
+                        size: 40,
+                        borderRadius: 5,
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+            const SizedBox(height: 6),
+            _InfoRow(label: 'Brand', value: item.productBrand),
+            _InfoRow(label: 'Sub Brand', value: item.productSubBrand),
+            Row(
+              children: [
+                Expanded(
+                  child: _InfoRow(
+                    label: 'Unit',
+                    value: item.unitDisplayName,
+                  ),
+                ),
+                Text(
+                  qtyLabel,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

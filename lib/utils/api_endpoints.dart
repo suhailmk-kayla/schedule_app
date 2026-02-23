@@ -64,6 +64,7 @@ class ApiEndpoints {
   static const String updateBillerOrChecker = 'api/orders/update_biller_adn_checker';
   static const String updateOrderApproveFlag = 'api/orders/update_order_flag';
   static const String updateStoreKeeper = 'api/orders/update_store_keeper';
+  static const String markOrderAsBilled = 'api/orders/mark_as_billed';
 
   // OutOfStock
   static const String addOutOfStock = 'api/out_of_stocks/add';
@@ -72,7 +73,8 @@ class ApiEndpoints {
   static const String updateOutOfStockMasterFlag = 'api/out_of_stock/update_compleated_flag';
 
   // PushNotification
-  static const String pushNotification = 'api/push_notification/add';
+  // static const String pushNotification = 'api/push_notification/add';
+    static const String pushNotification = 'api/push_notification/send_batched';
 
   // Downloads
   static const String usersDownload = 'api/users/download';
@@ -96,6 +98,7 @@ class ApiEndpoints {
   static const String orderSubSuggestionDownload = 'api/orders/download_order_sub_suggestions';
   static const String outOfStockDownload = 'api/out_of_stock/download_out_of_stocks';
   static const String outOfStockSubDownload = 'api/out_of_stock/download_out_of_stock_sub';
+  static const String replaceOrAddProductSuggestion = 'api/orders/replace_or_add_items';
 
   /// Helper method to build full URL
   static String buildUrl(String endpoint) => '${ApiConfig.baseUrl}$endpoint';

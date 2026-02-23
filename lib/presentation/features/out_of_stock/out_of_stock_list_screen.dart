@@ -1,10 +1,16 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:schedule_frontend_flutter/presentation/features/home/home_drawer.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/out_of_stock_provider.dart';
+import '../../provider/home_provider.dart';
 import '../../../models/master_data_api.dart';
 import '../../../utils/storage_helper.dart';
+import 'out_of_stock_details_admin_screen.dart';
+import 'out_of_stock_details_supplier_screen.dart';
 
 /// OutOfStock List Screen
 /// Displays list of out of stock items with search and date filter
@@ -122,159 +128,201 @@ class _OutOfStockListScreenState extends State<OutOfStockListScreen> {
     final provider = Provider.of<OutOfStockProvider>(context);
     final isMenuIcon = _userType == 4; // Admin
 
-    return Scaffold(
-      drawer: _userType == 4 ? HomeDrawer() : null,
-      appBar: AppBar(
-        
-        title: _showSearchBar
-            ? TextField(
-                controller: _searchController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'Search',
-                  border: InputBorder.none,
+    return Consumer<NotificationManager>(
+      builder: (context, notificationManager, _) {
+        if (notificationManager.notificationTrigger) {
+           
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final provider = Provider.of<OutOfStockProvider>(context, listen: false);
+            provider.getAllOosp(searchKey: provider.searchKey, date: provider.date);
+            notificationManager.resetTrigger();
+          });
+        }
+        return Scaffold(
+          drawer: _userType == 4 ? HomeDrawer() : null,
+          appBar: AppBar(
+            
+            title: _showSearchBar
+                ? TextField(
+                    controller: _searchController,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: 'Search',
+                      border: InputBorder.none,
+                    ),
+                    onChanged: (value) {
+                      provider.searchKey = value;
+                      provider.getAllOosp();
+                    },
+                  )
+                :  Text(
+                  _userType == 4 ? 'Orders' : 'Out of stocks',
                 ),
-                onChanged: (value) {
-                  provider.searchKey = value;
-                  provider.getAllOosp();
+            // leading: IconButton(
+            //   icon: Icon(isMenuIcon ? Icons.menu : Icons.arrow_back),
+            //   onPressed: () {
+            //     if (isMenuIcon) {
+                  
+            //     } else {
+            //       Navigator.of(context).pop();
+            //     }
+            //   },
+            // ),
+            actions: [
+              IconButton(
+                icon: Icon(_showSearchBar ? Icons.close : Icons.search),
+                onPressed: () {
+                  setState(() {
+                    _showSearchBar = !_showSearchBar;
+                    if (!_showSearchBar) {
+                      _searchController.clear();
+                      provider.searchKey = '';
+                      provider.getAllOosp();
+                    }
+                  });
                 },
-              )
-            :  Text(
-              _userType == 4 ? 'Orders' : 'Out of stocks',
-            ),
-        // leading: IconButton(
-        //   icon: Icon(isMenuIcon ? Icons.menu : Icons.arrow_back),
-        //   onPressed: () {
-        //     if (isMenuIcon) {
-              
-        //     } else {
-        //       Navigator.of(context).pop();
-        //     }
-        //   },
-        // ),
-        actions: [
-          IconButton(
-            icon: Icon(_showSearchBar ? Icons.close : Icons.search),
-            onPressed: () {
-              setState(() {
-                _showSearchBar = !_showSearchBar;
-                if (!_showSearchBar) {
-                  _searchController.clear();
-                  provider.searchKey = '';
-                  provider.getAllOosp();
-                }
-              });
-            },
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Date filter card
-          Card(
-            margin: const EdgeInsets.all(8.0),
-            child: InkWell(
-              onTap: () {
-                showModalBottomSheet(
-                  context: context,
-                  builder: (context) => _buildDateFilterBottomSheet(provider),
-                );
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      _dateSt,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ],
-                ),
               ),
-            ),
+            ],
           ),
-          // List
-          Expanded(
-            child: Consumer<OutOfStockProvider>(
-              builder: (context, provider, child) {
-                if (provider.isLoading && provider.oospList.isEmpty) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (provider.errorMessage != null && provider.oospList.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          provider.errorMessage!,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () => provider.getAllOosp(),
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                if (provider.oospList.isEmpty) {
-                  final noText = _userType == 1 ? 'No products found' : 'No orders';
-                  return Center(
-                    child: Text(
-                      noText,
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 14,
+          body: RefreshIndicator(
+            onRefresh: () async {
+              provider.getAllOosp();
+            },
+            child: Column(
+              children: [
+                // Date filter card
+                Card(
+                  margin: const EdgeInsets.all(8.0),
+                  child: InkWell(
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        builder: (context) => _buildDateFilterBottomSheet(provider),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            _dateSt,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  );
-                }
-
-                return ListView.builder(
-                  itemCount: provider.oospList.length,
-                  itemBuilder: (context, index) {
-                    final item = provider.oospList[index];
-                    return _OutOfStockListItem(
-                      item: item,
-                      userType: _userType,
-                      userId: _userId,
-                      onTap: () {
-                        // TODO: Navigate to details screen
-                        // Navigator.push(
-                        //   context,
-                        //   MaterialPageRoute(
-                        //     builder: (_) => OutOfStockDetailsScreen(oospMasterId: item.oospMasterId),
-                        //   ),
-                        // );
-                      },
-                    );
-                  },
-                );
-              },
+                  ),
+                ),
+                // List
+                Expanded(
+                  child: Consumer<OutOfStockProvider>(
+                    builder: (context, provider, child) {
+                      if (provider.isLoading && provider.oospList.isEmpty) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                    
+                      if (provider.errorMessage != null && provider.oospList.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                provider.errorMessage!,
+                                style: const TextStyle(color: Colors.red),
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: () => provider.getAllOosp(),
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                    
+                      if (provider.oospList.isEmpty) {
+                        final noText = _userType == 1 ? 'No products found' : 'No orders';
+                        return Center(
+                          child: Text(
+                            noText,
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 14,
+                            ),
+                          ),
+                        );
+                      }
+                    
+                      return ListView.builder(
+                        itemCount: provider.oospList.length,
+                        itemBuilder: (context, index) {
+                          final item = provider.oospList[index];
+                          return _OutOfStockListItem(
+                            item: item,
+                            userType: _userType,
+                            userId: _userId,
+                            onTap: () {
+                              // Navigate to details screen based on user type
+                              if (_userType == 1) {
+                                // Admin
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => OutOfStockDetailsAdminScreen(
+                                      oospMasterId: item.oospMasterId,
+                                    ),
+                                  ),
+                                ).then((_) {
+                                  // Refresh badge counts and list when returning from detail screen
+                                  final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                                  homeProvider.refreshCounts();
+                                  Provider.of<OutOfStockProvider>(context, listen: false).getAllOosp();
+                                });
+                              } else if (_userType == 4) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => OutOfStockDetailsSupplierScreen(oospId: item.oospMasterId),
+                                  ),
+                                ).then((_) {
+                                  Provider.of<HomeProvider>(context, listen: false).refreshCounts();
+                                  Provider.of<OutOfStockProvider>(context, listen: false).getAllOosp();
+                                });
+                                // Supplier - need to get the sub ID from the master
+                                // For supplier, we need to find the sub item for this supplier
+                                // This will be handled differently - supplier sees their own list
+                                // For now, navigate to supplier screen with master's first sub
+                                // TODO: Implement supplier-specific navigation
+                              }
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // TODO: Navigate to add out of stock (products screen)
-          // Navigator.push(
-          //   context,
-          //   MaterialPageRoute(
-          //     builder: (_) => const ProductsScreen(isOutOfStock: true),
-          //   ),
-          // );
-        },
-        backgroundColor: Colors.black,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
+          floatingActionButton: FloatingActionButton(
+            onPressed: () {
+              // TODO: Navigate to add out of stock (products screen)
+              // Navigator.push(
+              //   context,
+              //   MaterialPageRoute(
+              //     builder: (_) => const ProductsScreen(isOutOfStock: true),
+              //   ),
+              // );
+            },
+            backgroundColor: Colors.black,
+            child: const Icon(Icons.add, color: Colors.white),
+          ),
+        );
+      }
     );
   }
 

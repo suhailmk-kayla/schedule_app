@@ -109,6 +109,7 @@ class UnitsProvider extends ChangeNotifier {
       (existingUnit) {
         if (existingUnit != null) {
           _errorMessage = 'Item code already exist';
+           
           notifyListeners();
           return;
         }
@@ -125,6 +126,7 @@ class UnitsProvider extends ChangeNotifier {
       (existingUnit) {
         if (existingUnit != null) {
           _errorMessage = 'Item name already exist';
+           
           notifyListeners();
           return;
         }
@@ -139,7 +141,6 @@ class UnitsProvider extends ChangeNotifier {
     notifyListeners();
 
     final unit = Units(
-      id: -1,
       name: name,
       code: code,
       displayName: displayName,
@@ -160,13 +161,13 @@ class UnitsProvider extends ChangeNotifier {
       (createdUnit) {
         // Send push notification (matches KMP lines 74-76)
         final dataIds = [
-          PushData(table: NotificationId.units, id: createdUnit.id),
+          PushData(table: NotificationId.units, id: createdUnit.unitId), // Use server ID
         ];
         _pushNotificationSender.sendPushNotification(
           dataIds: dataIds,
           message: 'Unit updates',
         ).catchError((e) {
-          developer.log('UnitsProvider: Error sending push notification: $e');
+           
         });
 
         _isLoading = false;
@@ -177,44 +178,63 @@ class UnitsProvider extends ChangeNotifier {
   }
 
   /// Update an existing unit
-  /// Converted from KMP's updateUnit function
+  /// Only updates fields that are provided (not null) and actually changed
+  /// Uses server ID (unitId) for API calls, not local ID
+  /// Converted from KMP's updateUnit function (UnitsViewModel.kt lines 140-165)
   Future<bool> updateUnit({
     required Units unit,
-    required String name,
-    required String displayName,
+    String? name,
+    String? displayName,
   }) async {
-    // Validate name doesn't exist (excluding current unit)
-    final nameResult = await _unitsRepository.getUnitByName(name, unitId: unit.id);
-    nameResult.fold(
-      (_) {},
-      (existingUnit) {
-        if (existingUnit != null) {
-          _errorMessage = 'Item name already exist';
-          notifyListeners();
-          return;
-        }
-      },
-    );
-    if (_errorMessage != null) {
-      return false;
+    // Extract trimmed values for comparison
+    final String? trimmedName = name?.trim();
+    final String? trimmedDisplayName = displayName?.trim();
+
+    // Check if there are any actual changes
+    final hasNameChange =
+        trimmedName != null && trimmedName != unit.name.trim();
+    final hasDisplayNameChange =
+        trimmedDisplayName != null && trimmedDisplayName != unit.displayName.trim();
+
+    if (!hasNameChange && !hasDisplayNameChange) {
+      // No changes to update
+      return true;
+    }
+
+    // Only validate name if it's being changed
+    if (hasNameChange && trimmedName != null) {
+      // Use server ID (unitId) for validation, not local id
+      final nameResult = await _unitsRepository.getUnitByName(
+        trimmedName,
+        unitId: unit.unitId, // Use server ID
+      );
+      nameResult.fold(
+        (_) {},
+        (existingUnit) {
+          if (existingUnit != null) {
+            _errorMessage = 'Item name already exist';
+            notifyListeners();
+            return;
+          }
+        },
+      );
+      if (_errorMessage != null) {
+        return false;
+      }
     }
 
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
-    final updatedUnit = Units(
-      id: unit.id,
-      name: name,
-      code: unit.code,
-      displayName: displayName,
-      type: unit.type,
-      baseId: unit.baseId,
-      baseQty: unit.baseQty,
-      comment: unit.comment,
+    // Pass only changed fields to repository
+    // Repository will use server ID (unitId) for API call
+    final result = await _unitsRepository.updateUnit(
+      unit: unit, // Pass original unit (contains server ID)
+      name: hasNameChange ? trimmedName : null, // Only pass if changed
+      displayName: hasDisplayNameChange ? trimmedDisplayName : null, // Only pass if changed
     );
 
-    final result = await _unitsRepository.updateUnit(unit: updatedUnit);
     return result.fold(
       (failure) {
         _errorMessage = failure.message;
@@ -224,14 +244,20 @@ class UnitsProvider extends ChangeNotifier {
       },
       (updatedUnitResult) {
         // Send push notification (matches KMP lines 158-160)
+        // Use server ID (unitId) for push notification
         final dataIds = [
-          PushData(table: NotificationId.units, id: updatedUnitResult.id),
+          PushData(table: NotificationId.units, id: updatedUnitResult.unitId),
         ];
         _pushNotificationSender.sendPushNotification(
           dataIds: dataIds,
           message: 'Unit updates',
         ).catchError((e) {
-          developer.log('UnitsProvider: Error sending push notification: $e');
+           
+        });
+
+        // Refresh units list to reflect the changes
+        getUnits().catchError((e) {
+           
         });
 
         _isLoading = false;

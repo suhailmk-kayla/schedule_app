@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'dart:developer' as developer;
-
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../../models/order_api.dart';
 import '../../../models/order_item_detail.dart';
 import '../../../models/order_with_name.dart';
@@ -10,6 +9,8 @@ import '../../../utils/config.dart';
 import '../../../utils/order_flags.dart';
 import '../../../utils/notification_manager.dart';
 import '../../provider/orders_provider.dart';
+import '../products/products_screen.dart';
+import '../../common_widgets/small_product_image.dart';
 
 /// Order Details Screen for Storekeeper Role
 /// Converted from KMP's OrderDetailsStorekeeper.kt
@@ -31,7 +32,11 @@ class _OrderDetailsStorekeeperScreenState
     extends State<OrderDetailsStorekeeperScreen> {
   final Map<int, String> _noteMap = {};
   final Map<int, String> _availableQtyMap = {};
-  final List<int> _outOfStockList = [];
+  // Stock selection per orderSubId:
+  // - null  => not selected yet
+  // - false => Available
+  // - true  => Out Of Stock
+  final Map<int, bool?> _stockSelectionMap = {};
   bool _didInit = false;
 
   @override
@@ -82,7 +87,7 @@ class _OrderDetailsStorekeeperScreenState
           WidgetsBinding.instance.addPostFrameCallback((_) {
             final order = ordersProvider.orderDetails;
             if (order != null &&
-                notificationManager.orderId == order.order.id) {
+                notificationManager.orderId == order.order.orderId) {
               _showStorekeeperCheckingDialog(context, notificationManager);
             } else {
               notificationManager.resetStorekeeperAlreadyCheckingTrigger();
@@ -106,7 +111,10 @@ class _OrderDetailsStorekeeperScreenState
               isLoading: isLoading,
             ),
           ),
-          bottomNavigationBar: _buildBottomBar(context, ordersProvider, order),
+          bottomNavigationBar: () {
+            final bar = _buildBottomBar(context, ordersProvider, order);
+            return bar != null ? SafeArea(top: false, child: bar) : null;
+          }(),
         );
       },
     );
@@ -194,6 +202,18 @@ class _OrderDetailsStorekeeperScreenState
             ...items.asMap().entries.map((entry) {
               final index = entry.key;
               final item = entry.value;
+              
+              // Show completed card if order is completed
+              if (order.orderApproveFlag == OrderApprovalFlag.completed) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _CompletedOrderItemCard(
+                    index: index + 1,
+                    item: item,
+                  ),
+                );
+              }
+              
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _OrderItemCard(
@@ -202,7 +222,7 @@ class _OrderDetailsStorekeeperScreenState
                   order: order,
                   noteMap: _noteMap,
                   availableQtyMap: _availableQtyMap,
-                  outOfStockList: _outOfStockList,
+                  stockSelectionMap: _stockSelectionMap,
                   onNoteChanged: (orderSubId, note) {
                     setState(() {
                       _noteMap[orderSubId] = note;
@@ -213,33 +233,31 @@ class _OrderDetailsStorekeeperScreenState
                       _availableQtyMap[orderSubId] = qty;
                     });
                   },
-                  onOutOfStockChanged: (orderSubId, isOutOfStock) {
+                  onStockSelectionChanged: (orderSubId, isOutOfStock) {
                     setState(() {
-                      if (isOutOfStock) {
-                        if (!_outOfStockList.contains(orderSubId)) {
-                          _outOfStockList.add(orderSubId);
-                        }
-                      } else {
-                        _outOfStockList.remove(orderSubId);
-                      }
+                      _stockSelectionMap[orderSubId] = isOutOfStock;
                     });
                   },
                   onPackedChanged: (orderSubId, isPacked, quantity) {
                     final ordersProvider =
                         Provider.of<OrdersProvider>(context, listen: false);
                     if (isPacked) {
-                      ordersProvider.addPackedSub(
+                       ordersProvider.addPackedSub(
                         orderSubId: orderSubId,
                         quantity: quantity,
                       );
+
+
                     } else {
                       ordersProvider.deletePackedSub(orderSubId);
                     }
                   },
                   onAddSuggestion: (orderSub) {
-                    // Navigate to products screen to add suggestion
-                    // This will be handled by the parent/navigation
-                    developer.log('Add suggestion for orderSub: ${orderSub.id}');
+                    _selectProductForSuggestion(
+                      context,
+                      ordersProvider: ordersProvider,
+                      orderSub: orderSub,
+                    );
                   },
                 ),
               );
@@ -263,6 +281,26 @@ class _OrderDetailsStorekeeperScreenState
     }
     if (ordersProvider.orderDetailItems.isEmpty) return null;
 
+    // Bottom bar should only be visible after storekeeper selects Available/Out of Stock
+    // for every unchecked item.
+    final List<OrderItemDetail> itemsToCheck = ordersProvider.orderDetailItems
+        .where((item) => item.orderSub.orderSubIsCheckedFlag != 1)
+        .toList();
+
+    final bool allSelected = itemsToCheck.isEmpty
+        ? true
+        : itemsToCheck.every(
+            (item) => _stockSelectionMap[item.orderSub.orderSubId] != null,
+          );
+
+    if (!allSelected) return null;
+
+    // Convert selections into the provider's expected outOfStockList payload
+    final List<int> outOfStockList = itemsToCheck
+        .where((item) => _stockSelectionMap[item.orderSub.orderSubId] == true)
+        .map((item) => item.orderSub.orderSubId)
+        .toList();
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: const BoxDecoration(
@@ -273,7 +311,8 @@ class _OrderDetailsStorekeeperScreenState
         children: [
           Expanded(
             child: OutlinedButton(
-              onPressed: () => _handleSaveAsDraft(context, ordersProvider),
+              onPressed: () =>
+                  _handleSaveAsDraft(context, ordersProvider, outOfStockList),
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Colors.black),
               ),
@@ -286,7 +325,8 @@ class _OrderDetailsStorekeeperScreenState
           const SizedBox(width: 16),
           Expanded(
             child: ElevatedButton(
-              onPressed: () => _handleInformUpdates(context, ordersProvider),
+              onPressed: () =>
+                  _handleInformUpdates(context, ordersProvider, outOfStockList),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).primaryColor,
               ),
@@ -304,11 +344,12 @@ class _OrderDetailsStorekeeperScreenState
   Future<void> _handleSaveAsDraft(
     BuildContext context,
     OrdersProvider ordersProvider,
+    List<int> outOfStockList,
   ) async {
     final success = await ordersProvider.saveAsDraftWithNotes(
       noteMap: _noteMap,
       availableQtyMap: _availableQtyMap,
-      outOfStockList: _outOfStockList,
+      outOfStockList: outOfStockList,
     );
 
     if (!mounted) return;
@@ -328,6 +369,7 @@ class _OrderDetailsStorekeeperScreenState
   Future<void> _handleInformUpdates(
     BuildContext context,
     OrdersProvider ordersProvider,
+    List<int> outOfStockList,
   ) async {
     // Show progress dialog
     showDialog(
@@ -341,7 +383,7 @@ class _OrderDetailsStorekeeperScreenState
     await ordersProvider.informUpdates(
       noteMap: _noteMap,
       availableQtyMap: _availableQtyMap,
-      outOfStockList: _outOfStockList,
+      outOfStockList: outOfStockList,
       onFailure: (error) {
         if (!mounted) return;
         Navigator.of(context).pop(); // Close progress
@@ -380,6 +422,63 @@ class _OrderDetailsStorekeeperScreenState
             child: const Text('Exit'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _selectProductForSuggestion(
+    BuildContext context, {
+    required OrdersProvider ordersProvider,
+    required OrderSub orderSub,
+  }) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ProductsScreen(
+          selectForSuggestion: true,
+          onProductSelected: (product) async {
+            // Validate: not same product
+            if (product.productId == orderSub.orderSubPrdId) {
+              ToastHelper.showInfo('Cannot suggest the same product');
+              return;
+            }
+            // Validate: product not already in order
+            final alreadyInOrder = ordersProvider.orderDetailItems.any(
+              (item) => item.orderSub.orderSubPrdId == product.productId,
+            );
+            if (alreadyInOrder) {
+              ToastHelper.showInfo('Product already exists in this order');
+              return;
+            }
+            // Allow multiple suggestions for the same product
+            final price = product.price;
+            final success = await ordersProvider.addSuggestionToOrderSub(
+              orderSubId: orderSub.orderSubId,
+              productId: product.productId,
+              price: price,
+              note: '',
+            );
+
+            if (!context.mounted) return;
+
+            if (success) {
+              // Refresh order details to get updated suggestions list
+              await ordersProvider.loadOrderDetails(widget.orderId);
+              
+              if (!context.mounted) return;
+              
+              ToastHelper.showInfo('Suggestion added successfully');
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    ordersProvider.errorMessage ?? 'Failed to add suggestion',
+                  ),
+                ),
+              );
+            }
+          },
+        ),
       ),
     );
   }
@@ -505,10 +604,10 @@ class _OrderItemCard extends StatefulWidget {
   final Order order;
   final Map<int, String> noteMap;
   final Map<int, String> availableQtyMap;
-  final List<int> outOfStockList;
+  final Map<int, bool?> stockSelectionMap;
   final Function(int, String) onNoteChanged;
   final Function(int, String) onAvailableQtyChanged;
-  final Function(int, bool) onOutOfStockChanged;
+  final Function(int, bool) onStockSelectionChanged;
   final Function(int, bool, double) onPackedChanged;
   final Function(OrderSub) onAddSuggestion;
 
@@ -518,10 +617,10 @@ class _OrderItemCard extends StatefulWidget {
     required this.order,
     required this.noteMap,
     required this.availableQtyMap,
-    required this.outOfStockList,
+    required this.stockSelectionMap,
     required this.onNoteChanged,
     required this.onAvailableQtyChanged,
-    required this.onOutOfStockChanged,
+    required this.onStockSelectionChanged,
     required this.onPackedChanged,
     required this.onAddSuggestion,
   });
@@ -534,13 +633,12 @@ class _OrderItemCardState extends State<_OrderItemCard> {
   late TextEditingController _noteController;
   late TextEditingController _availableQtyController;
   bool _showSuggestions = false;
-  bool _isOutOfStock = false;
 
   @override
   void initState() {
     super.initState();
     final orderSub = widget.item.orderSub;
-    final orderSubId = orderSub.id;
+    final orderSubId = orderSub.orderSubId;
 
     // Initialize note
     String initialNote = '';
@@ -559,13 +657,8 @@ class _OrderItemCardState extends State<_OrderItemCard> {
     );
     widget.availableQtyMap[orderSubId] =
         orderSub.orderSubAvailableQty.toString();
-
-    // Initialize out of stock
-    _isOutOfStock = widget.outOfStockList.contains(orderSubId) ||
-        orderSub.orderSubOrdrFlag == OrderSubFlag.outOfStock;
-    if (_isOutOfStock && !widget.outOfStockList.contains(orderSubId)) {
-      widget.outOfStockList.add(orderSubId);
-    }
+    // IMPORTANT: Do NOT pre-select Available/Out Of Stock.
+    // Storekeeper must choose explicitly for each unchecked item.
   }
 
   @override
@@ -578,7 +671,7 @@ class _OrderItemCardState extends State<_OrderItemCard> {
   @override
   Widget build(BuildContext context) {
     final orderSub = widget.item.orderSub;
-    final orderSubId = orderSub.id;
+    final orderSubId = orderSub.orderSubId;
     final isCheckingOrCancelled = widget.order.orderApproveFlag ==
             OrderApprovalFlag.sendToStorekeeper ||
         widget.order.orderApproveFlag == OrderApprovalFlag.cancelled;
@@ -588,6 +681,9 @@ class _OrderItemCardState extends State<_OrderItemCard> {
     final status = hasStatus
         ? note.split(ApiConfig.noteSplitDel).last
         : (orderSub.orderSubQty == 0 ? 'Order cancelled' : 'Checked');
+
+    // Current selection for this item: null / false (Available) / true (Out Of Stock)
+    final bool? selection = widget.stockSelectionMap[orderSubId];
 
     return Card(
       shape: RoundedRectangleBorder(
@@ -600,13 +696,38 @@ class _OrderItemCardState extends State<_OrderItemCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Product name and SL number
-            Text(
-              '#${widget.index}  ${widget.item.productName}',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
+            // Product image and name with SL number
+            Row(
+              children: [
+                SmallProductImage(
+                  imageUrl: widget.item.productPhoto,
+                  size: 40,
+                  borderRadius: 5,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '#${widget.index}  ${widget.item.productName}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (widget.item.productCode.isNotEmpty)
+                        Text(
+                          'Code: ${widget.item.productCode}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             if (orderSub.orderSubNarration?.isNotEmpty == true) ...[
               const SizedBox(height: 4),
@@ -770,7 +891,7 @@ class _OrderItemCardState extends State<_OrderItemCard> {
                       style: TextStyle(fontSize: 12),
                     ),
                     style: TextButton.styleFrom(
-                      foregroundColor: Theme.of(context).primaryColor,
+                      foregroundColor: Colors.blue,
                     ),
                   ),
               ],
@@ -778,44 +899,27 @@ class _OrderItemCardState extends State<_OrderItemCard> {
             // Suggestions list
             if (_showSuggestions && widget.item.suggestions.isNotEmpty) ...[
               const SizedBox(height: 8),
-              ...widget.item.suggestions.map((suggestion) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: InputChip(
-                    label: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          suggestion.note?.isNotEmpty == true
-                              ? suggestion.note!
-                              : 'Suggestion',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                          ),
-                        ),
-                        Text(
-                          'Price: ${suggestion.price}',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ],
-                    ),
-                    onSelected: (_) {},
-                    deleteIcon: !isChecked
-                        ? const Icon(Icons.close, size: 18)
-                        : null,
-                    onDeleted: !isChecked
-                        ? () {
-                            final ordersProvider =
-                                Provider.of<OrdersProvider>(context,
-                                    listen: false);
-                            ordersProvider.removeSuggestion(suggestion.id);
-                          }
-                        : null,
-                  ),
-                );
-              }),
+              SizedBox(
+                height: widget.item.suggestions.length > 3 ? 150 : null,
+                child: widget.item.suggestions.length > 3
+                    ? ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: widget.item.suggestions.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 4),
+                        itemBuilder: (context, index) {
+                          final suggestion = widget.item.suggestions[index];
+                          return _buildSuggestionChip(suggestion, isChecked);
+                        },
+                      )
+                    : Column(
+                        children: widget.item.suggestions.map((suggestion) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: _buildSuggestionChip(suggestion, isChecked),
+                          );
+                        }).toList(),
+                      ),
+              ),
             ],
             // Note input and Out of Stock checkboxes (if not checked or has status)
             if (!isChecked || hasStatus) ...[
@@ -833,59 +937,45 @@ class _OrderItemCardState extends State<_OrderItemCard> {
                 },
               ),
               const SizedBox(height: 8),
-              // Out of Stock checkboxes
+              // Available / Out Of Stock selection (NO DEFAULT)
               Row(
                 children: [
                   Expanded(
-                    child: Row(
-                      children: [
-                        Checkbox(
-                          value: !_isOutOfStock,
-                          onChanged: (value) {
-                            setState(() {
-                              _isOutOfStock = !(value ?? false);
-                              widget.onOutOfStockChanged(
-                                orderSubId,
-                                _isOutOfStock,
-                              );
-                            });
-                          },
-                          activeColor: Colors.green,
-                        ),
-                        const Text(
-                          'Available',
-                          style: TextStyle(fontSize: 12, color: Colors.green),
-                        ),
-                      ],
+                    child: RadioListTile<bool>(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: const Text(
+                        'Available',
+                        style: TextStyle(fontSize: 12, color: Colors.green),
+                      ),
+                      value: false,
+                      groupValue: selection,
+                      onChanged: (value) {
+                        if (value == null) return;
+                        widget.onStockSelectionChanged(orderSubId, value);
+                      },
                     ),
                   ),
                   Expanded(
-                    child: Row(
-                      children: [
-                        Checkbox(
-                          value: _isOutOfStock,
-                          onChanged: (value) {
-                            setState(() {
-                              _isOutOfStock = value ?? false;
-                              widget.onOutOfStockChanged(
-                                orderSubId,
-                                _isOutOfStock,
-                              );
-                            });
-                          },
-                          activeColor: Colors.red,
-                        ),
-                        const Text(
-                          'Out Of Stock',
-                          style: TextStyle(fontSize: 12, color: Colors.red),
-                        ),
-                      ],
+                    child: RadioListTile<bool>(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: const Text(
+                        'Out Of Stock',
+                        style: TextStyle(fontSize: 12, color: Colors.red),
+                      ),
+                      value: true,
+                      groupValue: selection,
+                      onChanged: (value) {
+                        if (value == null) return;
+                        widget.onStockSelectionChanged(orderSubId, value);
+                      },
                     ),
                   ),
                 ],
               ),
               // Available Qty input (if out of stock)
-              if (_isOutOfStock) ...[
+              if (selection == true && orderSub.orderSubQty > 1) ...[
                 const SizedBox(height: 8),
                 SizedBox(
                   width: 150,
@@ -952,21 +1042,90 @@ class _OrderItemCardState extends State<_OrderItemCard> {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: widget.item.isPacked
-                            ? Colors.green
+                            ? Colors.white
                             : Theme.of(context).primaryColor,
                       ),
                     ),
                     avatar: widget.item.isPacked
-                        ? const Icon(Icons.check, size: 16, color: Colors.green)
-                        : const Icon(Icons.shopping_cart,
+                        ?  Icon(Icons.check, size: 16, color: Colors.white)
+                        :  Icon(Icons.shopping_cart,
                             size: 16,
-                            color: Colors.blue),
+                            color: Colors.blue.shade700),
+                                       selectedColor: Colors.green.shade600, // Bright green background when selected
+                    checkmarkColor: Colors.white,  
+                                        side: BorderSide(
+                      color: widget.item.isPacked
+                          ? Colors.green.shade700
+                          : Colors.blue.shade300,
+                      width: 1.5,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    elevation: widget.item.isPacked ? 2 : 0, //  
+                         
                   ),
                 ],
               ),
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSuggestionChip(OrderSubSuggestion suggestion, bool isChecked) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  suggestion.productName?.isNotEmpty == true
+                      ? suggestion.productName!
+                      : 'Product ${suggestion.prodId}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  'Price: ${suggestion.price}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                if (suggestion.note?.isNotEmpty == true)
+                  Text(
+                    suggestion.note!,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (!isChecked)
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () {
+                final ordersProvider =
+                    Provider.of<OrdersProvider>(context, listen: false);
+                ordersProvider.removeSuggestion(suggestion.id);
+              },
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+        ],
       ),
     );
   }
@@ -1026,6 +1185,69 @@ class _OrderItemCardState extends State<_OrderItemCard> {
       }
     }
     return true;
+  }
+}
+
+/// Completed Order Item Card
+/// Shows minimal details for completed orders (read-only, no actions)
+class _CompletedOrderItemCard extends StatelessWidget {
+  final int index;
+  final OrderItemDetail item;
+
+  const _CompletedOrderItemCard({
+    required this.index,
+    required this.item,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final flag = item.orderSub.orderSubOrdrFlag;
+    final qtyLabel = flag > OrderSubFlag.inStock
+        ? item.orderSub.orderSubAvailableQty.toString()
+        : item.orderSub.orderSubQty.toString();
+
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Colors.black12),
+      ),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '#$index  ${item.productName}',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 6),
+            _InfoRow(label: 'Brand', value: item.productBrand),
+            _InfoRow(label: 'Sub Brand', value: item.productSubBrand),
+            Row(
+              children: [
+                Expanded(
+                  child: _InfoRow(
+                    label: 'Unit',
+                    value: item.unitDisplayName,
+                  ),
+                ),
+                Text(
+                  qtyLabel,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

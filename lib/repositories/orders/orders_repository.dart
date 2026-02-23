@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:dio/dio.dart';
 import 'package:either_dart/either.dart';
+import 'package:schedule_frontend_flutter/utils/order_flags.dart';
 import 'package:sqflite/sqflite.dart';
 import '../local/database_helper.dart';
 import '../../models/order_api.dart';
@@ -69,8 +71,8 @@ class OrdersRepository {
           SELECT Orders.*
           FROM Orders
           LEFT JOIN Customers ON Customers.customerId = Orders.customerId
-          LEFT JOIN Routes ON Routes.routeId = Customers.routId
-          WHERE $whereClause AND Routes.routeId = ?
+          LEFT JOIN Routes rt ON rt.routeId = Customers.routId
+          WHERE $whereClause AND rt.routeId = ?
           ORDER BY Orders.updatedDateTime DESC
           ''',
           [...whereArgs, routeId],
@@ -146,7 +148,7 @@ class OrdersRepository {
           END AS storeKeeperName,
           CASE
             WHEN Customers.routId = -1 THEN ''
-            ELSE COALESCE(Routes.name, '')
+            ELSE COALESCE(rt.name, '')
           END AS routeName,
           CASE
             WHEN Orders.billerId = -1 THEN ''
@@ -165,7 +167,7 @@ class OrdersRepository {
         LEFT JOIN Users biller ON biller.userId = Orders.billerId
         LEFT JOIN Users checker ON checker.userId = Orders.checkerId
         LEFT JOIN Customers ON Customers.customerId = Orders.customerId
-        LEFT JOIN Routes ON Routes.routeId = Customers.routId
+        LEFT JOIN Routes rt ON rt.routeId = Customers.routId
         WHERE Orders.orderId = ?
         LIMIT 1
         ''',
@@ -188,6 +190,207 @@ class OrdersRepository {
         route: (map['routeName'] as String?) ?? '',
       );
       return Right(orderWithName);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get all orders with related names (salesman/storekeeper/biller/checker/route)
+  /// Returns OrderWithName objects with populated names from JOIN queries
+  Future<Either<Failure, List<OrderWithName>>> getAllOrdersWithNames({
+    String searchKey = '',
+    int routeId = -1,
+    String date = '',
+    int? salesmanId,
+  }) async {
+    try {
+      final db = await _database;
+      final List<Map<String, dynamic>> maps;
+
+      // Build query with JOINs to get names
+      String whereClause = '(Orders.flag = 1 OR Orders.flag = 3)';
+      List<dynamic> whereArgs = [];
+
+      if (salesmanId != null) {
+        whereClause += ' AND Orders.salesmanId = ?';
+        whereArgs.add(salesmanId);
+      }
+
+
+      if (routeId != -1) {
+        whereClause += ' AND rt.routeId = ?';
+        whereArgs.add(routeId);
+      }
+
+      if (date.isNotEmpty) {
+        whereClause += ' AND Orders.updatedDateTime LIKE ?';
+        whereArgs.add('%$date%');
+      }
+
+      if (searchKey.isNotEmpty) {
+        whereClause += ' AND (Orders.invoiceNo LIKE ? OR Orders.customerName LIKE ?)';
+        final searchPattern = '%$searchKey%';
+        whereArgs.addAll([searchPattern, searchPattern]);
+      }
+
+      maps = await db.rawQuery(
+        '''
+        SELECT
+          COALESCE(sl.name, SalesMan.name) AS salesManName,
+          CASE
+            WHEN Orders.storeKeeperId = -1 THEN ''
+            ELSE COALESCE(storeKeeper.name, '')
+          END AS storeKeeperName,
+          CASE
+            WHEN Customers.routId = -1 THEN ''
+            ELSE COALESCE(rt.name, '')
+          END AS routeName,
+          CASE
+            WHEN Orders.billerId = -1 THEN ''
+            ELSE COALESCE(biller.name, '')
+          END AS billerName,
+          CASE
+            WHEN Orders.checkerId = -1 THEN ''
+            ELSE COALESCE(checker.name, '')
+          END AS checkerName,
+          Customers.name AS customerDisplayName,
+          Orders.*
+        FROM Orders
+        LEFT JOIN SalesMan ON SalesMan.userId = Orders.salesmanId
+        LEFT JOIN Users sl ON sl.userId = Orders.salesmanId
+        LEFT JOIN Users storeKeeper ON storeKeeper.userId = Orders.storeKeeperId
+        LEFT JOIN Users biller ON biller.userId = Orders.billerId
+        LEFT JOIN Users checker ON checker.userId = Orders.checkerId
+        LEFT JOIN Customers ON Customers.customerId = Orders.customerId
+        LEFT JOIN Routes rt ON rt.routeId = Customers.routId
+        WHERE $whereClause
+        ORDER BY Orders.updatedDateTime DESC
+        ''',
+        whereArgs,
+      );
+
+      final ordersWithNames = maps.map((map) {
+        final order = Order.fromMap(map);
+        return OrderWithName(
+          order: order,
+          salesManName: (map['salesManName'] as String?) ?? '',
+          storeKeeperName: (map['storeKeeperName'] as String?) ?? '',
+          customerName: (map['customerDisplayName'] as String?) ?? order.orderCustName,
+          billerName: (map['billerName'] as String?) ?? '',
+          checkerName: (map['checkerName'] as String?) ?? '',
+          route: (map['routeName'] as String?) ?? '',
+        );
+      }).toList();
+
+      return Right(ordersWithNames);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get all draft orders (flag = 3) with related names
+  /// Returns OrderWithName objects filtered by flag = 3
+  Future<Either<Failure, List<OrderWithName>>> getAllDraftOrdersWithNames({
+    String searchKey = '',
+    int routeId = -1,
+    String date = '',
+    int? salesmanId,
+  }) async {
+    try {
+       
+      final db = await _database;
+      final List<Map<String, dynamic>> maps;
+
+      // Build query with JOINs to get names - ONLY draft orders (flag = 3)
+      String whereClause = 'Orders.flag = 3';
+      List<dynamic> whereArgs = [];
+
+      if (salesmanId != null) {
+        whereClause += ' AND Orders.salesmanId = ?';
+        whereArgs.add(salesmanId);
+      }
+
+      if (routeId != -1) {
+        whereClause += ' AND rt.routeId = ?';
+        whereArgs.add(routeId);
+      }
+
+      if (date.isNotEmpty) {
+        whereClause += ' AND Orders.updatedDateTime LIKE ?';
+        whereArgs.add('%$date%');
+      }
+
+      if (searchKey.isNotEmpty) {
+        whereClause += ' AND (Orders.invoiceNo LIKE ? OR Orders.customerName LIKE ?)';
+        final searchPattern = '%$searchKey%';
+        whereArgs.addAll([searchPattern, searchPattern]);
+      }
+
+      maps = await db.rawQuery(
+        '''
+        SELECT
+          COALESCE(sl.name, SalesMan.name) AS salesManName,
+          CASE
+            WHEN Orders.storeKeeperId = -1 THEN ''
+            ELSE COALESCE(storeKeeper.name, '')
+          END AS storeKeeperName,
+          CASE
+            WHEN Customers.routId = -1 THEN ''
+            ELSE COALESCE(rt.name, '')
+          END AS routeName,
+          CASE
+            WHEN Orders.billerId = -1 THEN ''
+            ELSE COALESCE(biller.name, '')
+          END AS billerName,
+          CASE
+            WHEN Orders.checkerId = -1 THEN ''
+            ELSE COALESCE(checker.name, '')
+          END AS checkerName,
+          Customers.name AS customerDisplayName,
+          Orders.*
+        FROM Orders
+        LEFT JOIN SalesMan ON SalesMan.userId = Orders.salesmanId
+        LEFT JOIN Users sl ON sl.userId = Orders.salesmanId
+        LEFT JOIN Users storeKeeper ON storeKeeper.userId = Orders.storeKeeperId
+        LEFT JOIN Users biller ON biller.userId = Orders.billerId
+        LEFT JOIN Users checker ON checker.userId = Orders.checkerId
+        LEFT JOIN Customers ON Customers.customerId = Orders.customerId
+        LEFT JOIN Routes rt ON rt.routeId = Customers.routId
+        WHERE $whereClause
+        ORDER BY Orders.updatedDateTime DESC
+        ''',
+        whereArgs,
+      );
+
+      final ordersWithNames = maps.map((map) {
+        final order = Order.fromMap(map);
+        return OrderWithName(
+          order: order,
+          salesManName: (map['salesManName'] as String?) ?? '',
+          storeKeeperName: (map['storeKeeperName'] as String?) ?? '',
+          customerName: (map['customerDisplayName'] as String?) ?? order.orderCustName,
+          billerName: (map['billerName'] as String?) ?? '',
+          checkerName: (map['checkerName'] as String?) ?? '',
+          route: (map['routeName'] as String?) ?? '',
+        );
+      }).toList();
+
+      return Right(ordersWithNames);
+    } catch (e) {
+       
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get count of draft orders (flag = 3)
+  Future<Either<Failure, int>> getDraftOrderCount() async {
+    try {
+      final db = await _database;
+      final result = await db.rawQuery(
+        'SELECT COUNT(*) as count FROM Orders WHERE flag = 3',
+      );
+      final count = Sqflite.firstIntValue(result) ?? 0;
+      return Right(count);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
     }
@@ -245,8 +448,10 @@ class OrdersRepository {
           Units.name AS unitName,
           Units.displayName AS unitDispName,
           Product.name AS productName,
+          Product.code AS productCode,
           Product.brand AS productBrand,
           Product.subBrand AS productSubBrand,
+          Product.photoUrl AS productPhoto,
           OrderSub.*
         FROM OrderSub
         LEFT JOIN Units ON Units.unitId = OrderSub.unitId
@@ -267,6 +472,7 @@ class OrdersRepository {
   /// Get temp order subs with details (orderFlag == 0)
   /// Converted from KMP's getTempGetOrdersSubAndDetails
   Future<Either<Failure, List<OrderSubWithDetails>>> getTempOrderSubAndDetails(int orderId) async {
+     
     try {
       final db = await _database;
       final maps = await db.rawQuery(
@@ -275,8 +481,10 @@ class OrdersRepository {
           Units.name AS unitName,
           Units.displayName AS unitDispName,
           Product.name AS productName,
+          Product.code AS productCode,
           Product.brand AS productBrand,
           Product.subBrand AS productSubBrand,
+          Product.photoUrl AS productPhoto,
           OrderSub.*
         FROM OrderSub
         LEFT JOIN Units ON Units.unitId = OrderSub.unitId
@@ -288,8 +496,10 @@ class OrdersRepository {
       );
 
       final orderSubs = maps.map((map) => OrderSubWithDetails.fromMap(map)).toList();
+       
       return Right(orderSubs);
     } catch (e) {
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -357,9 +567,11 @@ class OrdersRepository {
   }) async {
     try {
       final db = await _database;
+      // Check for both flag = 0 (temp orders) and flag = 1 (normal orders)
+      // Temp order subs have flag = 0, so we need to check both
       final maps = await db.query(
         'OrderSub',
-        where: 'flag = 1 AND orderId = ? AND productId = ? AND unitId = ? AND updateRate = ?',
+        where: '(flag = 0 OR flag = 1) AND orderId = ? AND productId = ? AND unitId = ? AND updateRate = ?',
         whereArgs: [orderId, productId, unitId, rate],
       );
 
@@ -394,6 +606,7 @@ class OrdersRepository {
 
   /// Get last inserted order
   Future<Either<Failure, Order?>> getLastOrderEntry() async {
+     
     try {
       final db = await _database;
       final maps = await db.query(
@@ -407,8 +620,10 @@ class OrdersRepository {
       }
 
       final order = Order.fromMap(maps.first);
+       
       return Right(order);
     } catch (e) {
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -455,104 +670,251 @@ class OrdersRepository {
 
   /// Add single order to local DB
   /// Converted from KMP's addOrder function (single order)
-  /// Uses raw query matching KMP's insert query exactly
-  /// id is set to NULL (auto-increment primary key)
-  /// isProcessFinish is set to 1 (matching KMP line 20)
-  Future<Either<Failure, void>> addOrder(Order order) async {
+  /// Uses INSERT OR REPLACE to match KMP pattern
+  /// Matches KMP's addOrder filtering logic for userType-based filtering
+  /// When userType/userId are provided, applies filtering (for sync operations)
+  /// When isTemp=true or userType/userId are null, skips filtering (for user-created orders)
+  Future<Either<Failure, void>> addOrder(
+    Order order, {
+    bool isTemp = false,
+    int? userType,
+    int? userId,
+    bool isNotification = false,
+  }) async {
     try {
+      if (isTemp) {
+         
+      }
+      
+      // Apply KMP's filtering logic if userType/userId are provided (sync operations)
+      // Skip filtering for temp orders or user-created orders (userType/userId are null)
+      if (userType != null && !isTemp) {
+        bool shouldInsert = false;
+
+        if (userType == 1) {
+          // ADMIN: Insert all orders
+          shouldInsert = true;
+        } else {
+          switch (userType) {
+            case 2: // STOREKEEPER
+              // Storekeeper: Insert all orders (matching KMP line 36-40)
+              shouldInsert = true;
+              break;
+
+            case 3: // SALESMAN
+              // Salesman: Only insert orders where userId matches salesmanId
+              // Matching KMP line 42-45
+              if (userId != null && order.orderSalesmanId == userId) {
+                shouldInsert = true;
+              }
+              break;
+
+            case 5: // BILLER
+              // Biller: Only insert orders where billerId != -1 AND approveFlag >= VERIFIED_BY_STOREKEEPER
+              // Matching KMP line 47-50
+              if (order.orderBillerId != -1 &&
+                  order.orderApproveFlag >=
+                      OrderApprovalFlag.verifiedByStorekeeper) {
+                shouldInsert = true;
+              }
+              break;
+
+            case 6: // CHECKER
+              // Checker: Only insert orders where approveFlag >= COMPLETED (3)
+              // This includes: COMPLETED(3), REJECTED(4), CANCELLED(5),
+              // SEND_TO_CHECKER(6), CHECKER_IS_CHECKING(7)
+              // Matching KMP line 52-58
+              if (order.orderApproveFlag >= OrderApprovalFlag.completed) {
+                shouldInsert = true;
+              }
+              break;
+
+            case 7: // DRIVER
+              // Driver: Only insert orders where approveFlag == COMPLETED
+              // Matching KMP line 60-63
+              if (order.orderApproveFlag == OrderApprovalFlag.completed) {
+                shouldInsert = true;
+              }
+              break;
+
+            default:
+              // For other user types or unknown, insert all (default behavior)
+              shouldInsert = true;
+              break;
+          }
+        }
+
+        // Skip insertion if filtering rejects it
+        if (!shouldInsert) {
+          developer.log(
+            'addOrder: Order ${order.orderId} filtered out for userType: $userType, userId: $userId, approveFlag: ${order.orderApproveFlag}',
+          );
+          return const Right(null);
+        }
+      }
+
       final db = await _database;
-      // Raw query matching KMP's insert query (Orders.sq line 23-25)
-      // Column order: id,orderId,invoiceNo,UUID,customerId,customerName,storeKeeperId,salesmanId,billerId,checkerId,dateAndTime,note,total,freightCharge,approveFlag,createdDateTime,updatedDateTime,flag,isProcessFinish
+      final isProcessFinish = isNotification ? 0 : (isTemp ? 0 : 1);
+
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
-        INSERT OR REPLACE INTO Orders(
-          id, orderId, invoiceNo, UUID, customerId, customerName, storeKeeperId, salesmanId,
-          billerId, checkerId, dateAndTime, note, total, freightCharge, approveFlag,
-          createdDateTime, updatedDateTime, flag, isProcessFinish
+        INSERT OR REPLACE INTO Orders (
+          id, orderId, invoiceNo, UUID, customerId, customerName, storeKeeperId, 
+          salesmanId, billerId, checkerId, dateAndTime, note, total, freightCharge, 
+          approveFlag, isBilled, createdDateTime, updatedDateTime, flag, isProcessFinish
         ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
-          order.id, // orderId (from API)
-          order.orderInvNo.toString(), // invoiceNo
-          order.uuid, // UUID
-          order.orderCustId, // customerId
-          order.orderCustName, // customerName
-          order.orderStockKeeperId, // storeKeeperId
-          order.orderSalesmanId, // salesmanId
-          order.orderBillerId, // billerId
-          order.orderCheckerId, // checkerId
-          order.orderDateTime, // dateAndTime
-          order.orderNote ?? '', // note
-          order.orderTotal, // total
-          order.orderFreightCharge, // freightCharge
-          order.orderApproveFlag, // approveFlag
-          order.createdAt, // createdDateTime
-          order.updatedAt, // updatedDateTime
-          order.orderFlag, // flag
-          1, // isProcessFinish (default 1 for single order, matching KMP line 20)
+          order.orderId,
+          order.orderInvNo.toString(),
+          order.uuid,
+          order.orderCustId,
+          order.orderCustName,
+          order.orderStockKeeperId,
+          order.orderSalesmanId,
+          order.orderBillerId,
+          order.orderCheckerId,
+          order.orderDateTime,
+          order.orderNote ?? '',
+          order.orderTotal,
+          order.orderFreightCharge,
+          order.orderApproveFlag,
+          order.orderIsBilled,
+          order.createdAt,
+          order.updatedAt,
+          order.orderFlag,
+          isProcessFinish,
         ],
       );
+      if (!isTemp) {
+        developer.log(
+          'ORDER ADDED:order added to local database: ${order.orderId}',
+        );
+      }
       return const Right(null);
     } catch (e) {
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
 
   /// Add multiple orders to local DB (transaction)
-  /// Converted from KMP's addOrder function (list)
-  /// Uses raw query matching KMP's insert query exactly
-  /// For batch sync: id is NULL (auto-increment), isProcessFinish is 0 (matching KMP pattern for sync)
-  /// CRITICAL OPTIMIZATION: Uses batch operations for 100x+ performance improvement
-  /// Matching KMP pattern: db.transaction { list.forEach { ... } } - SQLDelight optimizes internally
-  /// In Flutter/sqflite, we use batch.rawInsert() + batch.commit() to achieve same performance
-  Future<Either<Failure, void>> addOrders(List<Order> orders) async {
+  /// For batch sync: isProcessFinish is 0 (matching KMP pattern for sync)
+  /// Uses INSERT OR REPLACE to match KMP pattern
+  /// Matches KMP's addOrder(list, userId, userType) filtering logic
+  Future<Either<Failure, void>> addOrders(
+    List<Order> orders, {
+    int? userType,
+    int? userId,
+    bool isNotification = false,
+  }) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
         final batch = txn.batch();
-        // Raw query matching KMP's insert query (Orders.sq line 23-25)
-        // Column order: id,orderId,invoiceNo,UUID,customerId,customerName,storeKeeperId,salesmanId,billerId,checkerId,dateAndTime,note,total,freightCharge,approveFlag,createdDateTime,updatedDateTime,flag,isProcessFinish
-        // For batch sync from API: id is NULL (auto-increment), isProcessFinish is 0 (matching KMP line 30 where isNew=1L means isProcessFinish=1, but for sync it's 0)
         for (final order in orders) {
-          // CRITICAL: Use batch.rawInsert() instead of await txn.rawInsert() - 100x faster!
-          batch.rawInsert(
-            '''
-            INSERT OR REPLACE INTO Orders(
-              id, orderId, invoiceNo, UUID, customerId, customerName, storeKeeperId, salesmanId,
-              billerId, checkerId, dateAndTime, note, total, freightCharge, approveFlag,
-              createdDateTime, updatedDateTime, flag, isProcessFinish
-            ) VALUES (
-              NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-            )
-            ''',
-            [
-              order.id, // orderId (from API)
-              order.orderInvNo.toString(), // invoiceNo
-              order.uuid, // UUID
-              order.orderCustId, // customerId
-              order.orderCustName, // customerName
-              order.orderStockKeeperId, // storeKeeperId
-              order.orderSalesmanId, // salesmanId
-              order.orderBillerId, // billerId
-              order.orderCheckerId, // checkerId
-              order.orderDateTime, // dateAndTime
-              order.orderNote ?? '', // note
-              order.orderTotal, // total
-              order.orderFreightCharge, // freightCharge
-              order.orderApproveFlag, // approveFlag
-              order.createdAt, // createdDateTime
-              order.updatedAt, // updatedDateTime
-              order.orderFlag, // flag
-              1, // isProcessFinish (1 for batch sync, matching KMP line 30 where isNotification=false means isNew=1L which maps to isProcessFinish=1)
-            ],
-          );
+          // Apply KMP's filtering logic based on userType
+          // Matching KMP's OrderRepository.addOrder() lines 32-65
+          bool shouldInsert = false;
+          int isProcessFinish = isNotification ? 0 : 1;
+
+          if (userType == null || userType == 1) {
+            // ADMIN: Insert all orders
+            shouldInsert = true;
+          } else {
+            switch (userType) {
+              case 2: // STOREKEEPER
+                // Storekeeper: Insert all orders (matching KMP line 36-40)
+                // Note: KMP has special logic for isNew flag, but we use isProcessFinish
+                shouldInsert = true;
+                break;
+
+              case 3: // SALESMAN
+                // Salesman: Only insert orders where userId matches salesmanId
+                // Matching KMP line 42-45
+                if (userId != null && order.orderSalesmanId == userId) {
+                  shouldInsert = true;
+                }
+                break;
+
+              case 5: // BILLER
+                // Biller: Only insert orders where billerId != -1 AND approveFlag >= VERIFIED_BY_STOREKEEPER
+                // Matching KMP line 47-50
+                if (order.orderBillerId != -1 &&
+                    order.orderApproveFlag >=
+                        OrderApprovalFlag.verifiedByStorekeeper) {
+                  shouldInsert = true;
+                }
+                break;
+
+              case 6: // CHECKER
+                // Checker: Only insert orders where approveFlag >= COMPLETED (3)
+                // This includes: COMPLETED(3), REJECTED(4), CANCELLED(5),
+                // SEND_TO_CHECKER(6), CHECKER_IS_CHECKING(7)
+                // Matching KMP line 52-58
+                if (order.orderApproveFlag >= OrderApprovalFlag.completed) {
+                   
+                  shouldInsert = true;
+                }
+                break;
+
+              case 7: // DRIVER
+                // Driver: Only insert orders where approveFlag == COMPLETED
+                // Matching KMP line 60-63
+                if (order.orderApproveFlag == OrderApprovalFlag.completed) {
+                  shouldInsert = true;
+                }
+                break;
+
+              default:
+                // For other user types or unknown, insert all (default behavior)
+                shouldInsert = true;
+                break;
+            }
+          }
+
+          // Only insert if filtering allows it
+          if (shouldInsert) {
+            batch.rawInsert(
+              '''
+              INSERT OR REPLACE INTO Orders (
+                orderId, invoiceNo, UUID, customerId, customerName, storeKeeperId, 
+                salesmanId, billerId, checkerId, dateAndTime, note, total, freightCharge, 
+                approveFlag, isBilled, createdDateTime, updatedDateTime, flag, isProcessFinish
+              ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+              )
+              ''',
+              [
+                order.orderId,
+                order.orderInvNo.toString(),
+                order.uuid,
+                order.orderCustId,
+                order.orderCustName,
+                order.orderStockKeeperId,
+                order.orderSalesmanId,
+                order.orderBillerId,
+                order.orderCheckerId,
+                order.orderDateTime,
+                order.orderNote ?? '',
+                order.orderTotal,
+                order.orderFreightCharge,
+                order.orderApproveFlag,
+                order.orderIsBilled,
+                order.createdAt,
+                order.updatedAt,
+                order.orderFlag,
+                isProcessFinish,
+              ],
+            );
+          }
         }
-        // CRITICAL: Commit all inserts at once - matches SQLDelight's optimized behavior
         await batch.commit(noResult: true);
       });
-      developer.log('OrdersRepository: Added ${orders.length} orders');
+       
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -560,47 +922,31 @@ class OrdersRepository {
   }
 
   /// Add single order sub to local DB
+  /// Uses INSERT OR REPLACE to match KMP pattern
   Future<Either<Failure, void>> addOrderSub(OrderSub orderSub) async {
     try {
       final db = await _database;
+      
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
         INSERT OR REPLACE INTO OrderSub (
-          orderSubId,
-          orderId,
-          invoiceNo,
-          UUID,
-          customerId,
-          salesmanId,
-          storeKeeperId,
-          dateAndTime,
-          productId,
-          unitId,
-          carId,
-          rate,
-          updateRate,
-          quantity,
-          availQty,
-          unitBaseQty,
-          note,
-          narration,
-          orderFlag,
-          createdDateTime,
-          updatedDateTime,
-          isCheckedflag,
-          flag
+          orderSubId, orderId, invoiceNo, UUID, customerId, storeKeeperId, 
+          salesmanId, dateAndTime, productId, unitId, carId, rate, updateRate, 
+          quantity, availQty, unitBaseQty, note, narration, orderFlag, 
+          createdDateTime, updatedDateTime, isCheckedflag, flag, checkerImage
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
-          orderSub.id,
+          orderSub.orderSubId,
           orderSub.orderSubOrdrId,
-          orderSub.orderSubOrdrInvId.toString(),
-          '',
+          orderSub.orderSubOrdrInvId, // Already a String, no .toString() needed
+          '', // UUID
           orderSub.orderSubCustId,
-          orderSub.orderSubSalesmanId,
           orderSub.orderSubStockKeeperId,
+          orderSub.orderSubSalesmanId,
           orderSub.orderSubDateTime,
           orderSub.orderSubPrdId,
           orderSub.orderSubUnitId,
@@ -617,59 +963,55 @@ class OrdersRepository {
           orderSub.updatedAt,
           orderSub.orderSubIsCheckedFlag,
           orderSub.orderSubFlag,
+          orderSub.checkerImages != null && orderSub.checkerImages!.isNotEmpty
+              ? jsonEncode(orderSub.checkerImages)
+              : null,
         ],
+      );
+      developer.log(
+        'OrdersRepository.addOrderSub: '
+        'orderSubId=${orderSub.orderSubId}, '
+        'flag=${orderSub.orderSubOrdrFlag}, '
+        'availQty=${orderSub.orderSubAvailableQty}',
+        name: 'OrdersRepository',
       );
       return const Right(null);
     } catch (e) {
+      developer.log(
+        'OrdersRepository.addOrderSub: Error adding order sub: ${e.toString()}',
+        name: 'OrdersRepository',
+      );
       return Left(DatabaseFailure.fromError(e));
     }
   }
 
   /// Add multiple order subs to local DB (transaction)
+  /// Uses INSERT OR REPLACE to match KMP pattern
   Future<Either<Failure, void>> addOrderSubs(List<OrderSub> orderSubs) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT OR REPLACE INTO OrderSub (
-          orderSubId,
-          orderId,
-          invoiceNo,
-          UUID,
-          customerId,
-          salesmanId,
-          storeKeeperId,
-          dateAndTime,
-          productId,
-          unitId,
-          carId,
-          rate,
-          updateRate,
-          quantity,
-          availQty,
-          unitBaseQty,
-          note,
-          narration,
-          orderFlag,
-          createdDateTime,
-          updatedDateTime,
-          isCheckedflag,
-          flag
-        ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-        ''';
+        final batch = txn.batch();
         for (final orderSub in orderSubs) {
-          await txn.rawInsert(
-            sql,
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO OrderSub (
+              orderSubId, orderId, invoiceNo, UUID, customerId, storeKeeperId, 
+              salesmanId, dateAndTime, productId, unitId, carId, rate, updateRate, 
+              quantity, availQty, unitBaseQty, note, narration, orderFlag, 
+              createdDateTime, updatedDateTime, isCheckedflag, flag, checkerImage,estimatedQty,estimatedAvailableQty,estimatedTotal
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ''',
             [
-              orderSub.id,
+              orderSub.orderSubId,
               orderSub.orderSubOrdrId,
-              orderSub.orderSubOrdrInvId.toString(),
-              '',
+              orderSub.orderSubOrdrInvId, // Already a String, no .toString() needed
+              '', // UUID
               orderSub.orderSubCustId,
-              orderSub.orderSubSalesmanId,
               orderSub.orderSubStockKeeperId,
+              orderSub.orderSubSalesmanId,
               orderSub.orderSubDateTime,
               orderSub.orderSubPrdId,
               orderSub.orderSubUnitId,
@@ -686,9 +1028,16 @@ class OrdersRepository {
               orderSub.updatedAt,
               orderSub.orderSubIsCheckedFlag,
               orderSub.orderSubFlag,
+              orderSub.checkerImages != null && orderSub.checkerImages!.isNotEmpty
+                  ? jsonEncode(orderSub.checkerImages)
+                  : null,
+              orderSub.estimatedQty,
+              orderSub.estimatedAvailableQty,
+              orderSub.estimatedTotal,
             ],
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -751,6 +1100,7 @@ class OrdersRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
+        // KMP parity: update both Orders and OrderSub using Orders.orderId (not Orders.id).
         await txn.update(
           'Orders',
           {'flag': flag},
@@ -764,6 +1114,30 @@ class OrdersRepository {
           whereArgs: [orderId],
         );
       });
+       
+      return const Right(null);
+    } catch (e) {
+       
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Update checker in local DB
+  /// Matches KMP's updateChecker (OrderRepository.kt line 801-809)
+  Future<Either<Failure, void>> updateCheckerLocal({
+    required int orderId,
+    required int checkerId,
+  }) async {
+    try {
+       
+      final db = await _database;
+      await db.update(
+        'Orders',
+        {'checkerId': checkerId},
+        where: 'orderId = ?',
+        whereArgs: [orderId],
+      );
+       
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -779,12 +1153,35 @@ class OrdersRepository {
   }) async {
     try {
       final db = await _database;
+      // KMP parity: update by Orders.orderId
       await db.update(
         'Orders',
         {
           'freightCharge': freightCharge,
           'total': total,
         },
+        where: 'orderId = ?',
+        whereArgs: [orderId],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+
+
+  Future<Either<Failure, void>> updateCustomer({
+    required int orderId,
+    required String customerName,
+    required int customerId,
+  }) async {
+    try {
+      final db = await _database;
+      // KMP parity: update by Orders.orderId
+      await db.update(
+        'Orders',
+        {'customerId': customerId, 'customerName': customerName},
         where: 'orderId = ?',
         whereArgs: [orderId],
       );
@@ -802,6 +1199,7 @@ class OrdersRepository {
   }) async {
     try {
       final db = await _database;
+      // KMP parity: update by Orders.orderId
       await db.update(
         'Orders',
         {'updatedDateTime': updatedDateTime},
@@ -828,6 +1226,7 @@ class OrdersRepository {
         where: 'orderId = ?',
         whereArgs: [orderId],
       );
+       
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -854,17 +1253,21 @@ class OrdersRepository {
   Future<Either<Failure, void>> deleteOrderAndSub(int orderId) async {
     try {
       final db = await _database;
+      // Only delete the *temporary* order and its subs (flag=2, orderFlag=0).
+      // After sendOrder succeeds we INSERT the real order with the same orderId (flag=1).
+      // Deleting by orderId alone would remove that real order and make it disappear from
+      // the list until the next sync; scoping to temp data avoids that bug.
       await db.transaction((txn) async {
-        // Delete all order subs first
+        // Delete temp order subs first (orderFlag = 0)
         await txn.delete(
           'OrderSub',
-          where: 'orderId = ?',
+          where: 'orderId = ? AND orderFlag = 0',
           whereArgs: [orderId],
         );
-        // Then delete the order
+        // Then delete the temp order (flag = 2)
         await txn.delete(
           'Orders',
-          where: 'orderId = ?',
+          where: 'orderId = ? AND flag = 2',
           whereArgs: [orderId],
         );
       });
@@ -975,6 +1378,7 @@ class OrdersRepository {
         ApiEndpoints.orderSubDownload,
         queryParameters: queryParams,
       );
+       
 
       final orderSubListApi = OrderSubListApi.fromJson(response.data);
       return Right(orderSubListApi);
@@ -1017,9 +1421,9 @@ class OrdersRepository {
         final orderSubs = order.items!.map((sub) {
           // Update orderSub with the new orderId
           return OrderSub(
-            id: sub.id,
+            orderSubId: sub.orderSubId, // Server ID from API
             orderSubOrdrInvId: orderApi.data.orderInvNo,
-            orderSubOrdrId: orderApi.data.id,
+            orderSubOrdrId: orderApi.data.orderId,
             orderSubCustId: sub.orderSubCustId,
             orderSubSalesmanId: sub.orderSubSalesmanId,
             orderSubStockKeeperId: sub.orderSubStockKeeperId,
@@ -1052,6 +1456,8 @@ class OrdersRepository {
       return Left(UnknownFailure.fromError(e));
     }
   }
+
+  
 
   /// Update order via API and update local DB
   Future<Either<Failure, Order>> updateOrder(Order order) async {
@@ -1100,6 +1506,7 @@ class OrdersRepository {
       // 2. Parse response
       final orderApi = OrderApi.fromJson(response.data);
       if (orderApi.status != 1) {
+         
         return Left(ServerFailure.fromError(
           'Failed to update order: ${orderApi.message}',
         ));
@@ -1133,8 +1540,68 @@ class OrdersRepository {
 
       return Right(orderApi.data);
     } on DioException catch (e) {
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
+       
+      return Left(UnknownFailure.fromError(e));
+    }
+  }
+
+  /// Replace or add order items via API and update local DB
+  /// Uses the new replaceOrAddOrderItems endpoint
+  /// Backend now updates replacements in place (same ID), so no deletion needed
+  Future<Either<Failure, Order>> replaceOrAddOrderItems(
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      // 1. Call API
+      final response = await _dio.post(
+        ApiEndpoints.replaceOrAddProductSuggestion,
+        data: payload,
+      );
+
+      // 2. Parse response
+      final orderApi = OrderApi.fromJson(response.data);
+      if (orderApi.status != 1) {
+         
+        return Left(ServerFailure.fromError(
+          'Failed to replace/add order items: ${orderApi.message}',
+        ));
+      }
+
+      // 3. Store order in local DB
+      final addResult = await addOrder(orderApi.data);
+      if (addResult.isLeft) {
+        return addResult.map((_) => orderApi.data);
+      }
+
+      // 4. Store order subs in local DB
+      // Backend updates replacements in place (same ID), so INSERT OR REPLACE works correctly
+      // No need to delete anything - the IDs stay the same for replacements
+      if (orderApi.data.items != null && orderApi.data.items!.isNotEmpty) {
+        final orderSubs = orderApi.data.items!.map((sub) {
+          return OrderSub.fromJson(sub.toJson());
+        }).toList();
+
+        await addOrderSubs(orderSubs);
+
+        // 5. Handle suggestions if present
+        for (int i = 0; i < orderApi.data.items!.length; i++) {
+          final sub = orderApi.data.items![i];
+          if (sub.suggestions != null && sub.suggestions!.isNotEmpty) {
+            // Suggestions are handled by the repository
+            // The repository should handle this
+          }
+        }
+      }
+
+      return Right(orderApi.data);
+    } on DioException catch (e) {
+       
+      return Left(NetworkFailure.fromDioError(e));
+    } catch (e) {
+       
       return Left(UnknownFailure.fromError(e));
     }
   }
@@ -1180,7 +1647,7 @@ class OrdersRepository {
         ApiEndpoints.addOrder,
         data: params,
       );
-
+      
       // Parse response
       final orderApi = OrderApi.fromJson(response.data);
       if (orderApi.status != 1) {
@@ -1191,8 +1658,10 @@ class OrdersRepository {
 
       return Right(orderApi);
     } on DioException catch (e) {
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
+       
       return Left(UnknownFailure.fromError(e));
     }
   }
@@ -1206,6 +1675,7 @@ class OrdersRepository {
       final response = await _dio.post(
         ApiEndpoints.updateBillerOrChecker,
         data: params,
+
       );
 
       if (response.statusCode != 200) {
@@ -1213,7 +1683,7 @@ class OrdersRepository {
           'Failed to update biller/checker: ${response.statusMessage}',
         ));
       }
-
+      
       return const Right(null);
     } on DioException catch (e) {
       return Left(NetworkFailure.fromDioError(e));
@@ -1228,12 +1698,14 @@ class OrdersRepository {
     required int orderId,
     required int approveFlag,
     Map<String, dynamic>? notification,
+    List<Map<String, dynamic>>? outOfStockData,
   }) async {
     try {
       final params = {
         'order_id': orderId,
         'order_approve_flag': approveFlag,
         if (notification != null) 'notification': notification,
+        if (outOfStockData != null && outOfStockData.isNotEmpty) 'out_of_stock_data': outOfStockData,
       };
 
       final response = await _dio.post(
@@ -1242,10 +1714,12 @@ class OrdersRepository {
       );
 
       if (response.statusCode != 200) {
+         
         return Left(ServerFailure.fromError(
           'Failed to update order approval flag: ${response.statusMessage}',
         ));
       }
+       
 
       // Update local DB
       final db = await _database;
@@ -1255,6 +1729,7 @@ class OrdersRepository {
         where: 'orderId = ?',
         whereArgs: [orderId],
       );
+       
 
       return const Right(null);
     } on DioException catch (e) {
@@ -1275,9 +1750,149 @@ class OrdersRepository {
       await db.update(
         'OrderSub',
         {'orderFlag': flag},
-        where: 'id = ?',
+        where: 'orderSubId = ?',
         whereArgs: [orderSubId],
       );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Update storekeeper for an order (storekeeper claims the order)
+  /// Mirrors KMP's updateStoreKeeper: sets order_stock_keeper_id for order and its subs.
+  Future<Either<Failure, void>> updateOrderStoreKeeper({
+    required int orderId,
+    required int storekeeperId,
+    Map<String, dynamic>? notification,
+  }) async {
+    try {
+      // Call API
+      await _dio.post(
+        ApiEndpoints.updateStoreKeeper,
+        data: {
+          'order_id': orderId,
+          'order_stock_keeper_id': storekeeperId,
+          'notification': notification,
+        },
+      );
+
+      // Update local DB: Orders + OrderSub tables
+      final db = await _database;
+
+      await db.update(
+        'Orders',
+        {'storeKeeperId': storekeeperId},
+        where: 'orderId = ?',
+        whereArgs: [orderId],
+      );
+
+      await db.update(
+        'OrderSub',
+        {'storeKeeperId': storekeeperId},
+        where: 'orderId = ?',
+        whereArgs: [orderId],
+      );
+
+      return const Right(null);
+    } on DioException catch (e) {
+      return Left(NetworkFailure.fromDioError(e));
+    } catch (e) {
+      return Left(UnknownFailure.fromError(e));
+    }
+  }
+
+  /// Update biller in local DB
+  /// Matches KMP's updateBiller (OrderRepository.kt line 792-800)
+  Future<Either<Failure, void>> updateBillerLocal({
+    required int orderId,
+    required int billerId,
+  }) async {
+    try {
+      final db = await _database;
+      await db.update(
+        'Orders',
+        {
+        'billerId': billerId,
+        // 'approveFlag': OrderApprovalFlag.checkerIsChecking
+        },
+        where: 'orderId = ?',
+        whereArgs: [orderId],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Mark order as billed
+  /// Calls API to mark order as billed, then updates local database
+  Future<Either<Failure, void>> markOrderAsBilled({
+    required int orderId,
+    required int billerId,
+    Map<String, dynamic>? notification,
+  }) async {
+    try {
+      final params = {
+        'order_id': orderId,
+        'biller_id': billerId,
+        if (notification != null) 'notification': notification,
+      };
+
+      final response = await _dio.post(
+        ApiEndpoints.markOrderAsBilled,
+        data: params,
+      );
+
+      if (response.statusCode != 200) {
+        return Left(ServerFailure.fromError(
+          'Failed to mark order as billed: ${response.statusMessage}',
+        ));
+      }
+
+      // Update local DB after successful API call
+      final db = await _database;
+      await db.update(
+        'Orders',
+        {'isBilled': 1},
+        where: 'orderId = ?',
+        whereArgs: [orderId],
+      );
+
+      return const Right(null);
+    } on DioException catch (e) {
+      return Left(NetworkFailure.fromDioError(e));
+    } catch (e) {
+      return Left(UnknownFailure.fromError(e));
+    }
+  }
+
+  /// Update storekeeper in local DB (used by sync provider)
+  /// Matches KMP's updateStorekeeper (OrderRepository.kt line 792-800)
+  /// This is called when sync provider downloads order from API after updateStoreKeeper notification
+  Future<Either<Failure, void>> updateOrderStoreKeeperLocal({
+    required int orderId,
+    required int storekeeperId,
+  }) async {
+    try {
+      final db = await _database;
+      
+      // Update Orders table (matching KMP pattern)
+      await db.update(
+        'Orders',
+        {'storeKeeperId': storekeeperId},
+        where: 'orderId = ?',
+        whereArgs: [orderId],
+      );
+      
+      // Also update OrderSub table (matching KMP pattern)
+      await db.update(
+        'OrderSub',
+        {'storekeeperId': storekeeperId},
+        where: 'orderId = ?',
+        whereArgs: [orderId],
+      );
+      
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));

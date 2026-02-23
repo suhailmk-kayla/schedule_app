@@ -105,13 +105,17 @@ class CarModelRepository {
   Future<Either<Failure, void>> addCarModel(Model carModel) async {
     try {
       final db = await _database;
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
-        INSERT OR REPLACE INTO CarModel (id, carModelId, carBrandId, carNameId, name, flag)
-        VALUES (NULL, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO CarModel (
+          carModelId, carBrandId, carNameId, name, flag
+        ) VALUES (
+          ?, ?, ?, ?, ?
+        )
         ''',
         [
-          carModel.id,
+          carModel.carModelId,
           carModel.carBrandId,
           carModel.carNameId,
           carModel.modelName,
@@ -125,20 +129,23 @@ class CarModelRepository {
   }
 
   /// Add multiple car models to local DB (transaction)
-  /// Priority 1: Optimized batch insert (uses batch.commit instead of await in loop)
   Future<Either<Failure, void>> addCarModels(List<Model> carModels) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT OR REPLACE INTO CarModel (id, carModelId, carBrandId, carNameId, name, flag)
-        VALUES (NULL, ?, ?, ?, ?, ?)
-        ''';
+        final batch = txn.batch();
         for (final carModel in carModels) {
-          await txn.rawInsert(
-            sql,
+          // Use INSERT OR REPLACE (matches KMP pattern)
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO CarModel (
+              carModelId, carBrandId, carNameId, name, flag
+            ) VALUES (
+              ?, ?, ?, ?, ?
+            )
+            ''',
             [
-              carModel.id,
+              carModel.carModelId,
               carModel.carBrandId,
               carModel.carNameId,
               carModel.modelName,
@@ -146,6 +153,7 @@ class CarModelRepository {
             ],
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {

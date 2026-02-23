@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 
 import '../../provider/salesman_provider.dart';
 import '../../provider/users_provider.dart';
@@ -99,15 +100,28 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
       return;
     }
 
+    // Validation 3: Check if phone number is already taken by another salesman
+    final usersProvider = context.read<UsersProvider>();
+    final phoneNumber = _phoneController.text.trim();
+    
+    final phoneExists = widget.userId == null
+        ? await usersProvider.checkSalesmanPhoneExists(phoneNumber)
+        : await usersProvider.checkSalesmanPhoneExistsWithId(phoneNumber, widget.userId!);
+    
+    if (phoneExists) {
+      if (!mounted) return;
+      ToastHelper.showWarning('Phone number already taken by another salesman');
+      return;
+    }
+
     FocusScope.of(context).unfocus();
     setState(() => _isSaving = true);
 
-    final usersProvider = context.read<UsersProvider>();
     final success = widget.userId == null
         ? await usersProvider.createUser(
             code: _codeController.text.trim(),
             name: _nameController.text.trim(),
-            phone: _phoneController.text.trim(),
+            phone: phoneNumber,
             categoryId: 3, // Salesman category
             address: _addressController.text.trim(),
             password: _passwordController.text,
@@ -116,7 +130,7 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
             userId: widget.userId!,
             code: _codeController.text.trim(),
             name: _nameController.text.trim(),
-            phone: _phoneController.text.trim(),
+            phone: phoneNumber,
             categoryId: 3, // Salesman category
             address: _addressController.text.trim(),
           );
@@ -128,19 +142,18 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
     if (success) {
       await context.read<SalesmanProvider>().loadSalesmen();
       Navigator.of(context).pop(true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(widget.userId == null
-              ? 'Salesman created successfully'
-              : 'Salesman updated successfully'),
-        ),
-      );
+      ToastHelper.showSuccess(widget.userId == null ? 'Salesman created successfully' : 'Salesman updated successfully');
+      // ScaffoldMessenger.of(context).showSnackBar(
+      //   SnackBar(
+      //     content: Text(widget.userId == null
+      //         ? 'Salesman created successfully'
+      //         : 'Salesman updated successfully'),
+      //   ),
+      // );
     } else {
       final message =
           usersProvider.errorMessage ?? 'Failed to ${widget.userId == null ? 'create' : 'update'} salesman. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+          ToastHelper.showError(message);
     }
   }
 
@@ -195,50 +208,104 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildTextField(
+                  // Code field
+                  TextFormField(
+                    maxLength: 20,
                     controller: _codeController,
-                    label: 'Code',
                     textInputAction: TextInputAction.next,
+                    textCapitalization: TextCapitalization.none,
+                    decoration: InputDecoration(
+                      counterText: '',
+                      labelText: 'Code',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'Code is required';
+                        return 'Code cannot be empty';
                       }
                       return null;
                     },
                   ),
                   const SizedBox(height: 12),
-                  _buildTextField(
+                  // Name field
+                  TextFormField(
+                    maxLength: 50,
                     controller: _nameController,
-                    label: 'Name',
                     textInputAction: TextInputAction.next,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: InputDecoration(
+                      counterText: '',
+                      labelText: 'Name',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'Name is required';
+                        return 'Name cannot be empty';
                       }
                       return null;
                     },
                   ),
                   const SizedBox(height: 12),
-                  _buildTextField(
+                  // Phone field
+                  TextFormField(
+                    maxLength: 10,
                     controller: _phoneController,
-                    label: 'Phone Number',
                     keyboardType: TextInputType.phone,
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+]'))],
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9]'))],
                     textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      counterText: '',
+                      labelText: 'Phone Number',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    validator: (value) {
+                      // Validation 1: Phone number cannot be empty or null
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Phone number cannot be empty';
+                      }
+                      
+                      // Validation 2: Phone number must be exactly 10 digits
+                      if (value.trim().length != 10) {
+                        return 'Phone number must be exactly 10 digits';
+                      }
+                      
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 12),
-                  _buildTextField(
+                  // Address field
+                  TextFormField(
+                    maxLength: 100,
                     controller: _addressController,
-                    label: 'Address',
-                    maxLines: 3,
+                    maxLines: 2,
                     textInputAction: TextInputAction.newline,
+                    decoration: InputDecoration(
+                      counterText: '',
+                      labelText: 'Address',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    // Address can be empty, no validation needed
                   ),
                   if (widget.userId == null) ...[
                     const SizedBox(height: 12),
+                    // Password field (create mode only)
                     TextFormField(
+                      maxLength: 50,
                       controller: _passwordController,
                       obscureText: _obscurePassword,
                       decoration: InputDecoration(
+                        counterText: '',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                         labelText: 'Password',
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -251,10 +318,7 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
                       ),
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
-                          return 'Password is required';
-                        }
-                        if (value.length < 4) {
-                          return 'Password must be at least 4 characters';
+                          return 'Password cannot be empty';
                         }
                         return null;
                       },
@@ -264,6 +328,8 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
                   ElevatedButton(
                     onPressed: _isSaving ? null : _handleSave,
                     style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: theme.colorScheme.onPrimary,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       textStyle: theme.textTheme.titleMedium?.copyWith(
                         color: theme.colorScheme.onPrimary,
@@ -286,26 +352,5 @@ class _CreateSalesmanScreenState extends State<CreateSalesmanScreen> {
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    int maxLines = 1,
-    List<TextInputFormatter>? inputFormatters,
-    TextInputType? keyboardType,
-    String? Function(String?)? validator,
-    TextInputAction? textInputAction,
-  }) {
-    return TextFormField(
-      controller: controller,
-      maxLines: maxLines,
-      inputFormatters: inputFormatters,
-      keyboardType: keyboardType,
-      validator: validator,
-      textInputAction: textInputAction,
-      decoration: InputDecoration(
-        labelText: label,
-      ),
-    );
-  }
 }
 

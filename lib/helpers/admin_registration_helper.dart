@@ -23,6 +23,7 @@ Future<Map<String, dynamic>> registerAdmin({
   required String name,
   required String phoneNo,
   required String password,
+  required String tpin,
   String address = '',
   String? deviceToken,
 }) async {
@@ -34,6 +35,7 @@ Future<Map<String, dynamic>> registerAdmin({
   ));
 
   final Map<String, dynamic> body = {
+    'tpin': tpin,
     'cat_id': 1, // Admin category ID
     'code': code,
     'name': name,
@@ -141,23 +143,21 @@ Future<void> createAdminAccount() async {
   print('Creating new admin account...');
   
   final result = await registerAdmin(
-    code: 'ADMIN4', // Change this to a unique code
-    name: 'TESTADMIN4', // Change this
+    tpin: '1234',
+    code: 'ADMIN5', // Change this to a unique code
+    name: 'Admin', // Change this
     phoneNo: '7306548087', // Change this
     password: '123456', // Change this to a secure password
     address: 'Admin Address', // Optional
   );
 
   if (result['success']) {
-    developer.log('✅ Admin created successfully!');
-    developer.log('User: ${result['user']}');
-    developer.log('You can now login with:');
-    developer.log('  Code: ADMIN001'); // Use the code you provided
-    developer.log('  Password: admin123'); // Use the password you provided
+     
+     
   } else {
     print('❌ Error: ${result['message']}');
     if (result['rawResponse'] != null) {
-      developer.log('Response: ${result['rawResponse']}');
+       
     }
   }
 }

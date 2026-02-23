@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:either_dart/either.dart';
 import '../local/database_helper.dart';
 import '../../models/packed_subs_model.dart';
@@ -78,8 +80,10 @@ class PackedSubsRepository {
     try {
       final db = await _databaseHelper.database;
       await db.delete('PackedSubs');
+       
       return const Right(null);
     } catch (e) {
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }

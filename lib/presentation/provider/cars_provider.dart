@@ -94,7 +94,7 @@ class CarsProvider extends ChangeNotifier {
             // Load models for this car
             final modelsResult = await _carModelRepository.getCarModels(
               brandId: carName.carBrandId,
-              nameId: carName.id,
+              nameId: carName.carNameId,
             );
             
             final List<CarModelAndVersion> carModelAndVersionList = [];
@@ -107,7 +107,7 @@ class CarsProvider extends ChangeNotifier {
                   final versionsResult = await _carVersionRepository.getAllCarVersions(
                     brandId: model.carBrandId,
                     nameId: model.carNameId,
-                    modelId: model.id,
+                    modelId: model.carModelId,
                   );
                   
                   final List<Version> versions = [];
@@ -325,7 +325,7 @@ class CarsProvider extends ChangeNotifier {
       if (carModels.isNotEmpty) {
         final carModelsArray = carModels.map((carModelItem) {
           final modelData = <String, dynamic>{
-            'car_model_id': carModelItem.carModel.id,
+            'car_model_id': carModelItem.carModel.carModelId,
             'model_name': carModelItem.carModel.modelName,
           };
 
@@ -364,6 +364,7 @@ class CarsProvider extends ChangeNotifier {
       await _carBrandRepository.addCarBrand(carApi.carBrand);
       await _carNameRepository.addCarName(carApi.carName);
       
+      
       if (carApi.models.isNotEmpty) {
         for (final model in carApi.models) {
           await _carModelRepository.addCarModel(model);
@@ -375,18 +376,18 @@ class CarsProvider extends ChangeNotifier {
 
       // Send push notification (matches KMP lines 128-160)
       final dataIds = <PushData>[
-        PushData(table: NotificationId.carBrand, id: carApi.carBrand.id),
-        PushData(table: NotificationId.carName, id: carApi.carName.id),
+        PushData(table: NotificationId.carBrand, id: carApi.carBrand.carBrandId),
+        PushData(table: NotificationId.carName, id: carApi.carName.carNameId),
       ];
       
       // Add models
       for (final model in carApi.models) {
-        dataIds.add(PushData(table: NotificationId.carModel, id: model.id));
+        dataIds.add(PushData(table: NotificationId.carModel, id: model.carModelId));
         
         // Add versions for each model
         if (model.versions != null && model.versions!.isNotEmpty) {
           for (final version in model.versions!) {
-            dataIds.add(PushData(table: NotificationId.carVersion, id: version.id));
+            dataIds.add(PushData(table: NotificationId.carVersion, id: version.carVersionId));
           }
         }
       }
@@ -396,7 +397,7 @@ class CarsProvider extends ChangeNotifier {
         dataIds: dataIds,
         message: 'Car updates',
       ).catchError((e) {
-        developer.log('CarsProvider: Error sending push notification: $e');
+         
       });
 
       _isLoading = false;

@@ -271,6 +271,7 @@ class ProductsRepository {
     required String code,
     required int productId,
   }) async {
+     
     try {
       final db = await _database;
       final maps = await db.query(
@@ -355,47 +356,24 @@ class ProductsRepository {
   /// Add single product to local DB
   /// Converted from KMP's addProduct function (single product)
   /// Uses raw query matching KMP's insertProduct query exactly
-  /// 
-  /// CRITICAL: Handles create vs update correctly:
-  /// - When creating (product doesn't exist): id = NULL (auto-increment)
-  /// - When updating (product exists): preserves existing local id
-  /// 
-  /// Matches KMP pattern:
-  /// - Single product (line 21): passes productId only (id is NULL)
-  /// - List products (line 32): passes id (preserves local id)
+  /// Uses INSERT OR REPLACE to match KMP pattern (matches KMP's Product.sq line 28)
   Future<Either<Failure, void>> addProduct(Product product) async {
     try {
       final db = await _database;
       
-      // Check if product already exists by productId
-      final existingMaps = await db.query(
-        'Product',
-        columns: ['id'],
-        where: 'productId = ?',
-        whereArgs: [product.productId ?? -1],
-        limit: 1,
-      );
-      
-      // If product exists, preserve its local id; otherwise use NULL for auto-increment
-      final localId = existingMaps.isNotEmpty 
-          ? existingMaps.first['id'] as int?
-          : null;
-      
-      // Raw query matching KMP's insertProduct query (Product.sq line 27-30)
-      // Column order: id,productId,code,barcode,name,subName,brand,subBrand,categoryId,subCategoryId,defaultSuppId,autoSend,baseUnitId,defaultUnitId,photoUrl,price,mrp,retailPrice,fittingCharge,note,outtOfStockFlag,flag
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
         INSERT OR REPLACE INTO Product(
-          id, productId, code, barcode, name, subName, brand, subBrand, 
+          productId, code, barcode, name, subName, brand, subBrand, 
           categoryId, subCategoryId, defaultSuppId, autoSend, baseUnitId, defaultUnitId,
-          photoUrl, price, mrp, retailPrice, fittingCharge, note, outtOfStockFlag, flag
+          photoUrl, price, mrp, retailPrice, fittingCharge, minimumPrice, note, outtOfStockFlag, flag
         ) VALUES (
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
-          localId, // id: NULL for new, existing id for update
-          product.productId ?? -1, // productId (from API)
+          product.productId, // productId (from API)
           product.code,
           product.barcode,
           product.name,
@@ -413,6 +391,7 @@ class ProductsRepository {
           product.mrp,
           product.retail_price,
           product.fitting_charge,
+          product.minimumPrice,
           product.note,
           1, // outtOfStockFlag (default 1, matching KMP)
           1, // flag (default 1, matching KMP)
@@ -420,6 +399,7 @@ class ProductsRepository {
       );
       return const Right(null);
     } catch (e) {
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -444,15 +424,15 @@ class ProductsRepository {
           batch.rawInsert(
             '''
             INSERT OR REPLACE INTO Product(
-              id, productId, code, barcode, name, subName, brand, subBrand, 
+              productId, code, barcode, name, subName, brand, subBrand, 
               categoryId, subCategoryId, defaultSuppId, autoSend, baseUnitId, defaultUnitId,
-              photoUrl, price, mrp, retailPrice, fittingCharge, note, outtOfStockFlag, flag
+              photoUrl, price, mrp, retailPrice, fittingCharge, minimumPrice, note, outtOfStockFlag, flag
             ) VALUES (
-              NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             ''',
             [
-              product.productId ?? -1, // productId (from API)
+              product.productId, // productId (from API)
               product.code,
               product.barcode,
               product.name,
@@ -470,6 +450,7 @@ class ProductsRepository {
               product.mrp,
               product.retail_price,
               product.fitting_charge,
+              product.minimumPrice,
               product.note,
               1, // outtOfStockFlag (default 1, matching KMP line 33)
               1, // flag (default 1, matching KMP line 33)
@@ -481,6 +462,7 @@ class ProductsRepository {
       });
       return const Right(null);
     } catch (e) {
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -490,8 +472,10 @@ class ProductsRepository {
     try {
       final db = await _database;
       await db.delete('Product');
+       
       return const Right(null);
     } catch (e) {
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -575,15 +559,15 @@ class ProductsRepository {
         requestData['sub_brand'] = product.sub_brand;
       }
       // Integer fields - always send (matching KMP behavior)
-      // KMP always sends these fields even if -1
-      // For optional fields, send null if -1 (API expects null, not empty string)
-      requestData['category_id'] = product.category_id != -1 ? product.category_id : null;
-      requestData['sub_category_id'] = product.sub_category_id != -1 ? product.sub_category_id : null;
+      // KMP always sends these fields even if -1 (see ProductViewModel.kt line 274-275)
+      // KMP sends -1 directly, not null, so we match that behavior
+      requestData['category_id'] = product.category_id != -1 ? product.category_id : -1;
+      requestData['sub_category_id'] = product.sub_category_id != -1 ? product.sub_category_id : -1;
       requestData['default_supp_id'] = product.default_supp_id != -1 ? product.default_supp_id : -1;
       requestData['auto_sendto_supplier_flag'] = product.auto_sendto_supplier_flag >= 0 
           ? product.auto_sendto_supplier_flag 
           : 0;
-      requestData['base_unit_id'] = product.base_unit_id != -1 ? product.base_unit_id : null;
+      requestData['base_unit_id'] = product.base_unit_id != -1 ? product.base_unit_id : -1;
       // Price is required by our validation, so always send it
       requestData['price'] = product.price.toString();
       // Optional price fields - send if > 0
@@ -595,6 +579,10 @@ class ProductsRepository {
       }
       if (product.fitting_charge > 0) {
         requestData['fitting_charge'] = product.fitting_charge.toString();
+      }
+      // Add minimum_price if provided (nullable, optional)
+      if (product.minimumPrice != null) {
+        requestData['minimum_price'] = product.minimumPrice!.toString();
       }
       if (product.note.isNotEmpty) {
         requestData['note'] = product.note;
@@ -616,17 +604,17 @@ class ProductsRepository {
       try {
         productApi = ProductApi.fromJson(responseData);
       } catch (e) {
-        developer.log('ProductsRepository: createProduct() - Error parsing response: $e');
+         
         return Left(ServerFailure.fromError('Failed to parse product response: $e'));
       }
       
       // 4. Store in local DB
       final addResult = await addProduct(productApi.product);
       if (addResult.isLeft) {
-        developer.log('ProductsRepository: createProduct() - Add result: ${addResult.left}');
+         
         return addResult.map((_) => productApi.product);
       }
-      developer.log('ProductsRepository: createProduct() - Product: ${productApi.product.toJson()}');
+       
       
       // 4b. Store ProductUnit in local DB (matches KMP line 209-210)
       if (productApi.productUnit.id != -1) {
@@ -643,12 +631,12 @@ class ProductsRepository {
       // Matches KMP's sentPushNotification pattern (ProductViewModel.kt lines 206-212)
       if (_pushNotificationSender != null) {
         final dataIds = <PushData>[
-          PushData(table: NotificationId.product, id: productApi.product.productId ?? -1),
+          PushData(table: NotificationId.product, id: productApi.product.productId),
         ];
         
         // Include productUnit if it exists (matches KMP line 208-211)
-        if (productApi.productUnit.id != -1) {
-          dataIds.add(PushData(table: NotificationId.productUnits, id: productApi.productUnit.id));
+        if (productApi.productUnit.productUnitId != -1) {
+          dataIds.add(PushData(table: NotificationId.productUnits, id: productApi.productUnit.productUnitId)); // Server ID
         }
         
         // Fire-and-forget: don't await, just trigger in background
@@ -656,7 +644,7 @@ class ProductsRepository {
           dataIds: dataIds,
           message: 'Product updates',
         ).catchError((e) {
-          developer.log('ProductsRepository: Error sending push notification: $e');
+           
         });
       }
       
@@ -664,7 +652,7 @@ class ProductsRepository {
     } on DioException catch (e) {
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
-      developer.log('ProductsRepository: createProduct() - Error: $e');
+       
       return Left(UnknownFailure.fromError(e));
     }
   }
@@ -697,13 +685,15 @@ class ProductsRepository {
           'mrp': product.mrp,
           'retailPrice': product.retail_price,
           'fittingCharge': product.fitting_charge,
+          'minimumPrice': product.minimumPrice,
           'note': product.note,
         },
         where: 'productId = ?',
-        whereArgs: [product.productId ?? -1],
+        whereArgs: [product.productId],
       );
       return const Right(null);
     } catch (e) {
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -720,8 +710,22 @@ class ProductsRepository {
       // 2. Parse response
       final updateProductApi = UpdateProductApi.fromJson(response.data);
       if (updateProductApi.status != 1) {
+        // Handle validation errors: API returns validation errors in 'data' array
+        String errorMessage = updateProductApi.message;
+        if (response.data is Map<String, dynamic>) {
+          final responseData = response.data as Map<String, dynamic>;
+          if (responseData.containsKey('data') && responseData['data'] is List) {
+            final validationErrors = (responseData['data'] as List)
+                .map((e) => e.toString())
+                .where((e) => e.isNotEmpty)
+                .toList();
+            if (validationErrors.isNotEmpty) {
+              errorMessage = validationErrors.join('\n');
+            }
+          }
+        }
         return Left(ServerFailure.fromError(
-          'Failed to update product: ${updateProductApi.message}',
+          errorMessage,
         ));
       }
 
@@ -735,7 +739,7 @@ class ProductsRepository {
       // Matches KMP's sentPushNotification pattern (ProductViewModel.kt lines 255-257)
       if (_pushNotificationSender != null) {
         final dataIds = <PushData>[
-          PushData(table: NotificationId.product, id: updateProductApi.product.productId ?? -1),
+          PushData(table: NotificationId.product, id: updateProductApi.product.productId),
         ];
         
         // Fire-and-forget: don't await, just trigger in background
@@ -743,14 +747,16 @@ class ProductsRepository {
           dataIds: dataIds,
           message: 'Product updates',
         ).catchError((e) {
-          developer.log('ProductsRepository: Error sending push notification: $e');
+           
         });
       }
 
       return Right(updateProductApi.product);
     } on DioException catch (e) {
+       
       return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
+       
       return Left(UnknownFailure.fromError(e));
     }
   }
@@ -770,27 +776,25 @@ class ProductsRepository {
       final db = await _database;
       await db.transaction((txn) async {
         final batch = txn.batch();
-        const sql = '''
-        INSERT OR REPLACE INTO ProductUnits (
-          id, productUnitId, productId, baseUnitId, derivedUnitId, flag
-        ) VALUES (
-          NULL, ?, ?, ?, ?, ?
-        )
-        ''';
+        // Use INSERT OR REPLACE (matches KMP pattern)
         for (final productUnit in productUnits) {
-          // CRITICAL: Use batch.rawInsert() instead of await txn.rawInsert() - 100x faster!
           batch.rawInsert(
-            sql,
+            '''
+            INSERT OR REPLACE INTO ProductUnits (
+              productUnitId, productId, baseUnitId, derivedUnitId, flag
+            ) VALUES (
+              ?, ?, ?, ?, ?
+            )
+            ''',
             [
-              productUnit.id, // productUnitId from API
-              productUnit.prd_id, // productId
-              productUnit.base_unit_id, // baseUnitId
-              productUnit.derived_unit_id, // derivedUnitId
-              1, // flag
+              productUnit.productUnitId, // Server ID
+              productUnit.prd_id,
+              productUnit.base_unit_id,
+              productUnit.derived_unit_id,
+              1,
             ],
           );
         }
-        // CRITICAL: Commit all inserts at once - matches SQLDelight's optimized behavior
         await batch.commit(noResult: true);
       });
       return const Right(null);
@@ -1104,7 +1108,7 @@ class ProductsRepository {
           dataIds: dataIds,
           message: 'Product car updates',
         ).catchError((e) {
-          developer.log('ProductsRepository: Error sending push notification: $e');
+           
         });
       }
 
@@ -1124,18 +1128,23 @@ class ProductsRepository {
       await db.transaction((txn) async {
         final batch = txn.batch();
         for (final car in productCars) {
-          batch.insert(
-            'ProductCar',
-            {
-              'productCarId': car.id,
-              'productId': car.product_id,
-              'carBrandId': car.car_brand_id,
-              'carNameId': car.car_name_id,
-              'carModelId': car.car_model_id,
-              'carVersionId': car.car_version_id,
-              'flag': car.flag ?? 1,
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace,
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO ProductCar (
+              productCarId, productId, carBrandId, carNameId, carModelId, carVersionId, flag
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?
+            )
+            ''',
+            [
+              car.id,
+              car.product_id,
+              car.car_brand_id,
+              car.car_name_id,
+              car.car_model_id,
+              car.car_version_id,
+              car.flag ?? 1,
+            ],
           );
         }
         await batch.commit(noResult: true);
@@ -1192,13 +1201,13 @@ class ProductsRepository {
       // Fire-and-forget: don't await, just trigger in background
       if (_pushNotificationSender != null) {
         final dataIds = [
-          PushData(table: NotificationId.productUnits, id: productUnitApi.data.id),
+          PushData(table: NotificationId.productUnits, id: productUnitApi.data.productUnitId), // Server ID
         ];
         _pushNotificationSender.sendPushNotification(
           dataIds: dataIds,
           message: 'Product unit updates',
         ).catchError((e) {
-          developer.log('ProductsRepository: Error sending push notification: $e');
+           
         });
       }
 
@@ -1238,19 +1247,23 @@ class ProductsRepository {
 Future<Either<Failure, void>> addProductUnitLocal(ProductUnit productUnit) async {
   try {
     final db = await _database;
-
-    await db.rawInsert('''
-      INSERT OR REPLACE INTO ProductUnits 
-      (id,productUnitId, productId, baseUnitId, derivedUnitId, flag)
-      VALUES (NULL,?, ?, ?, ?, ?)
-    ''', [
-      productUnit.id,
-      productUnit.prd_id,
-      productUnit.base_unit_id,
-      productUnit.derived_unit_id,
-      1,
-    ]);
-
+    // Use INSERT OR REPLACE (matches KMP pattern)
+    await db.rawInsert(
+      '''
+      INSERT OR REPLACE INTO ProductUnits (
+        productUnitId, productId, baseUnitId, derivedUnitId, flag
+      ) VALUES (
+        ?, ?, ?, ?, ?
+      )
+      ''',
+      [
+        productUnit.productUnitId, // Server ID
+        productUnit.prd_id,
+        productUnit.base_unit_id,
+        productUnit.derived_unit_id,
+        1,
+      ],
+    );
     return const Right(null);
   } catch (e) {
     return Left(DatabaseFailure.fromError(e));

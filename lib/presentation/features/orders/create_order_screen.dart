@@ -1,19 +1,31 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
+import 'package:schedule_frontend_flutter/utils/order_flags.dart';
 import '../../provider/orders_provider.dart';
+import '../../provider/products_provider.dart';
 import '../../../models/order_sub_with_details.dart';
+import '../../../models/order_api.dart';
 import '../customers/customers_screen.dart';
 import '../products/products_screen.dart';
+import 'add_product_to_order_dialog.dart';
+import '../../common_widgets/small_product_image.dart';
 
 /// Create Order Screen
 /// Allows creating new orders with customer selection, products, and notes
 /// Converted from KMP's CreateOrderScreen.kt
 class CreateOrderScreen extends StatefulWidget {
   final String? orderId; // If provided, loads draft order
+  final int? customerId; // If provided, automatically selects this customer
+  final String? customerName; // Customer name (required if customerId is provided)
 
   const CreateOrderScreen({
     super.key,
     this.orderId,
+    this.customerId,
+    this.customerName,
   });
 
   @override
@@ -35,17 +47,32 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   Future<void> _loadOrder() async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     if (widget.orderId != null && widget.orderId!.isNotEmpty) {
-      // Load draft order
+       
+      // Load draft order (only when explicitly editing a draft via orderId)
       await ordersProvider.getDraftOrder(int.parse(widget.orderId!));
       if (ordersProvider.orderMaster != null) {
         _noteController.text = ordersProvider.orderMaster!.orderNote ?? '';
         _freightChargeController.text = ordersProvider.orderMaster!.orderFreightCharge.toStringAsFixed(2);
       }
     } else {
-      // Get or create temp order
-      await ordersProvider.getTempOrder();
+      // Creating a NEW order - always start completely fresh
+      // Skip loading any existing orders (temp or draft)
+      // Just create a new temp order directly
+      await ordersProvider.createTempOrder();
+      
       if (ordersProvider.orderMaster != null) {
         _noteController.text = ordersProvider.orderMaster!.orderNote ?? '';
+      }
+    }
+    
+    // If customerId is provided, automatically set the customer AFTER order is loaded
+    // This ensures _orderMaster is not null when updateCustomer is called
+    // This matches KMP's behavior when clicking order icon from customers screen
+    if (widget.customerId != null && widget.customerName != null) {
+      // Only update customer if order doesn't already have a customer set
+      // This prevents overwriting an existing customer selection
+      if (ordersProvider.orderMaster?.orderCustId == -1) {
+        await ordersProvider.updateCustomer(widget.customerId!, widget.customerName!);
       }
     }
   }
@@ -65,6 +92,47 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     }
     final freight = double.tryParse(_freightChargeController.text) ?? 0.0;
     return total + freight;
+  }
+
+  /// Shows confirmation dialog and cancels order if user confirms
+  /// Matching KMP's EditOrder Cancel Order flow
+  Future<void> _handleCancelOrder(
+    BuildContext context,
+    Order order,
+    OrdersProvider ordersProvider,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel Order'),
+        content: const Text('Do you want to cancel this order?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final success = await ordersProvider.cancelOrder(order);
+
+    if (!mounted) return;
+
+    if (success) {
+      ToastHelper.showSuccess('Order cancelled');
+      Navigator.pop(context);
+    } else {
+      ToastHelper.showError(
+        ordersProvider.errorMessage ?? 'Failed to cancel order',
+      );
+    }
   }
 
   Future<void> _saveAsDraft() async {
@@ -93,12 +161,14 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   Future<void> _sendOrder() async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     if (ordersProvider.orderMaster == null) {
-      _showError('Unknown error occurred');
+      ToastHelper.show('Unknown error occured');
+      // _showError('Unknown error occurred');
       return;
     }
 
     if (ordersProvider.orderMaster!.orderCustId == -1) {
-      _showError('Please Select a customer!');
+      ToastHelper.showWarning('Please Select a customer!');
+      // _showError('Please Select a customer!');
       return;
     }
 
@@ -115,14 +185,15 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     if (success) {
       // Delete temp order and subs (matches KMP line 362)
       await ordersProvider.deleteOrderAndSub();
+      ToastHelper.showSuccess('Order sent successfully');
       if (mounted) {
         Navigator.of(context).pop();
       }
     } else {
-      _showError(ordersProvider.errorMessage ?? 'Failed to send order');
+      ToastHelper.showError(ordersProvider.errorMessage ?? 'Failed to send order');
     }
   }
-
+  
   void _showError(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -134,7 +205,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   void _selectCustomer() {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     if (ordersProvider.orderMaster == null) {
-      _showError('Order not loaded');
+      ToastHelper.showError('Order not loaded');
+      // _showError('Order not loaded');
       return;
     }
 
@@ -147,18 +219,20 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           orderId: ordersProvider.orderMaster!.id.toString(),
         ),
       ),
-    ).then((_) {
-      // Refresh order subs after customer selection
-      if (mounted) {
-        ordersProvider.getAllOrderSubAndDetails();
-      }
-    });
+    );
+    // .then((_) {
+    //   // Refresh order subs after customer selection
+    //   if (mounted) {
+    //     ordersProvider.getAllOrderSubAndDetails();
+    //   }
+    // });
   }
 
   void _addProduct() {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     if (ordersProvider.orderMaster == null) {
-      _showError('Order not loaded');
+      ToastHelper.showError('Order not loaded');
+      // _showError('Order not loaded');
       return;
     }
 
@@ -181,50 +255,192 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     });
   }
 
+  void _editProduct(OrderSubWithDetails item) async {
+    final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+    final productsProvider = Provider.of<ProductsProvider>(context, listen: false);
+    
+    if (ordersProvider.orderMaster == null) {
+      ToastHelper.showError('Order not loaded');
+      return;
+    }
+
+    // Load the product by ID
+    final product = await productsProvider.loadProductById(item.orderSub.orderSubPrdId);
+    if (product == null) {
+      ToastHelper.showError('Product not found');
+      return;
+    }
+
+    // Show bottom sheet for editing
+    if (mounted) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) => AddProductToOrderDialog(
+          product: product,
+          orderId: ordersProvider.orderMaster!.id.toString(),
+          orderSub: item.orderSub, // Pass existing orderSub for edit mode
+          onSave: (rate, quantity, narration, unitId, {bool replace = false}) async {
+            // Update the order sub
+            final updatedOrderSub = OrderSub(
+              id: item.orderSub.id, // Keep local DB ID
+              orderSubId: item.orderSub.orderSubId, // Keep server ID
+              orderSubOrdrInvId: item.orderSub.orderSubOrdrInvId,
+              orderSubOrdrId: item.orderSub.orderSubOrdrId,
+              orderSubCustId: item.orderSub.orderSubCustId,
+              orderSubSalesmanId: item.orderSub.orderSubSalesmanId,
+              orderSubStockKeeperId: item.orderSub.orderSubStockKeeperId,
+              orderSubDateTime: item.orderSub.orderSubDateTime,
+              orderSubPrdId: item.orderSub.orderSubPrdId, // Keep product ID
+              orderSubUnitId: unitId, // Updated unit
+              orderSubCarId: item.orderSub.orderSubCarId,
+              orderSubRate: item.orderSub.orderSubRate, // Keep original rate
+              orderSubUpdateRate: rate, // Updated rate
+              orderSubQty: quantity, // Updated quantity
+              orderSubAvailableQty: item.orderSub.orderSubAvailableQty,
+              orderSubUnitBaseQty: item.orderSub.orderSubUnitBaseQty,
+              orderSubNote: item.orderSub.orderSubNote,
+              orderSubNarration: narration, // Updated narration
+              orderSubOrdrFlag: item.orderSub.orderSubOrdrFlag,
+              orderSubIsCheckedFlag: item.orderSub.orderSubIsCheckedFlag,
+              orderSubFlag: item.orderSub.orderSubFlag,
+              createdAt: item.orderSub.createdAt,
+              updatedAt: DateTime.now().toIso8601String(),
+              checkerImages: item.orderSub.checkerImages,
+              suggestions: item.orderSub.suggestions, // Preserve suggestions
+            );
+
+            // Update order sub in local DB only (no API call)
+            // Server update happens when "Check Stock" is clicked
+            final success = await ordersProvider.addOrderSub(updatedOrderSub);
+            if (success) {
+              Navigator.pop(context); // Close bottom sheet
+              await ordersProvider.getAllOrderSubAndDetails(); // Refresh list
+              if (mounted) {
+                ToastHelper.showSuccess('Item updated successfully');
+              }
+            } else {
+              if (mounted) {
+                ToastHelper.showError(ordersProvider.errorMessage ?? 'Failed to update item');
+              }
+            }
+          },
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        // Show discard confirmation dialog (matches KMP behavior)
-        // Converted from KMP's showDiscardAlert (CreateOrderScreen.kt line 188-204)
-        final shouldPop = await showDialog<bool>(
+        final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+        
+        // Check if there are any changes (items added, customer selected, etc.)
+        final hasChanges = ordersProvider.orderSubsWithDetails.isNotEmpty ||
+            (ordersProvider.orderMaster?.orderCustId != -1) ||
+            (_noteController.text.trim().isNotEmpty);
+        
+        // If no changes, allow back navigation without dialog
+        if (!hasChanges) {
+          return true;
+        }
+        
+        // Show dialog with Save/Discard options
+        final result = await showDialog<String>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Discard Changes?'),
-            content: const Text('Are you sure you want to discard this order?'),
+            title: const Text('Save Order?'),
+            content: const Text('You have unsaved changes. What would you like to do?'),
             actions: [
+              // Cancel - stay on screen
               TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('No'),
+                onPressed: () => Navigator.of(context).pop('cancel'),
+                child: const Text('Cancel'),
               ),
+              // Discard - delete order and go back
               TextButton(
                 onPressed: () async {
-                  // Delete order and subs, then allow pop
                   final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
                   final success = await ordersProvider.deleteOrderAndSub();
-                  if (mounted) {
-                    Navigator.of(context).pop(success);
+                  if (context.mounted && success) {
+                    Navigator.of(context).pop('discard');
                   }
                 },
-                child: const Text('Yes'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.red,
+                ),
+                child: const Text('Discard'),
+              ),
+              // Save as Draft - save and go back
+              ElevatedButton(
+                onPressed: () async {
+                  final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+                  
+                  // Update note first
+                  await ordersProvider.updateOrderNote(_noteController.text);
+                  
+                  final total = _calculateTotal(ordersProvider);
+                  final freight = double.tryParse(_freightChargeController.text) ?? 0.0;
+                  
+                  final success = await ordersProvider.saveAsDraft(freight, total);
+                  if (context.mounted && success) {
+                    Navigator.of(context).pop('save');
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Save as Draft'),
               ),
             ],
           ),
         );
 
-        return shouldPop ?? false;
+        // Return true to allow navigation if user chose save or discard
+        return result == 'save' || result == 'discard';
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Create Order'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-          ),
-        ),
-        body: Consumer<OrdersProvider>(
+      child: Consumer<OrdersProvider>(
+        builder: (context, ordersProvider, _) {
+          final orderMaster = ordersProvider.orderMaster;
+          final canCancel = widget.orderId != null &&
+              widget.orderId!.isNotEmpty &&
+              orderMaster != null &&
+              orderMaster.orderApproveFlag != OrderApprovalFlag.sendToStorekeeper &&
+              orderMaster.orderApproveFlag != OrderApprovalFlag.completed &&
+              orderMaster.orderApproveFlag != OrderApprovalFlag.cancelled;
+
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('Create Order'),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+              actions: [
+                if (canCancel)
+                  TextButton.icon(
+                    onPressed: () => _handleCancelOrder(context, orderMaster, ordersProvider),
+                    icon: const Icon(Icons.cancel, color: Colors.red, size: 20),
+                    label: const Text(
+                      'Cancel Order',
+                      style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+              ],
+            ),
+            body: _buildCreateOrderBody(context, ordersProvider),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCreateOrderBody(BuildContext context, OrdersProvider ordersProvider) {
+    return Consumer<OrdersProvider>(
           builder: (context, ordersProvider, child) {
             if (ordersProvider.isLoading && ordersProvider.orderMaster == null) {
               return const Center(child: CircularProgressIndicator());
@@ -262,14 +478,17 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                               border: Border.all(color: Colors.grey),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: Text(
+                            child: 
+                            widget.customerName != null ? Text(
+                              ordersProvider.customerName,
+                              style: const TextStyle(fontSize: 16),
+                            ):Text(
                               ordersProvider.customerName,
                               style: const TextStyle(fontSize: 16),
                             ),
                           ),
                         ),
                         const SizedBox(height: 16),
-      
                         // Note Field
                         const Text(
                           'Note',
@@ -325,18 +544,21 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                             final index = entry.key;
                             final item = entry.value;
                             return _OrderItemCard(
-                              key: ValueKey(item.orderSub.id),
+                              key: ValueKey('${item.orderSub.orderSubId}_$index'),
                               slNo: index + 1,
                               item: item,
-                              onDelete: () async {
-                                final success = await ordersProvider.deleteOrderSub(item.orderSub.id);
-                                if (success) {
-                                  await ordersProvider.getAllOrderSubAndDetails();
-                                }
+                              onDelete: () {
+                                final orderSubId = item.orderSub.orderSubId;
+                                ordersProvider.removeOrderSubOptimistically(orderSubId);
+                                ordersProvider.deleteOrderSub(orderSubId).then((success) {
+                                  if (success) {
+                                    ordersProvider.getAllOrderSubAndDetails();
+                                  }
+                                });
                               },
                               onTap: () {
-                                // TODO: Edit item - navigate to product selection with orderSubId
-                                _addProduct();
+                                // Show edit bottom sheet instead of navigating to products page
+                                _editProduct(item);
                               },
                             );
                           }),
@@ -351,7 +573,9 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       
                 // Bottom Bar with Total and Actions (only shown if items exist)
                 if (ordersProvider.orderSubsWithDetails.isNotEmpty)
-                  Container(
+                  SafeArea(
+                    top: false,
+                    child: Container(
                     // height: 140,
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -429,12 +653,11 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                       ],
                     ),
                   ),
+                ),
               ],
             );
           },
-        ),
-      ),
-    );
+        );
   }
 }
 
@@ -489,14 +712,39 @@ class _OrderItemCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Item number and product name (bold)
-                Text(
-                  '#$slNo  ${item.productName ?? 'Unknown Product'}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
+                // Product image and item number with product name
+                Row(
+                  children: [
+                    SmallProductImage(
+                      imageUrl: item.productPhoto,
+                      size: 40,
+                      borderRadius: 5,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '#$slNo  ${item.productName ?? 'Unknown Product'}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                          ),
+                          if (item.productCode?.isNotEmpty == true)
+                            Text(
+                              'Code: ${item.productCode!}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
                 // Narration (if not empty)
                 if (item.orderSub.orderSubNarration != null &&

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/asset_images.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/routes_provider.dart';
 import '../../../models/master_data_api.dart';
+import '../../../utils/toast_helper.dart';
 
 /// Routes Screen
 /// Displays list of routes with search, add, and edit functionality
@@ -18,12 +20,6 @@ class _RoutesScreenState extends State<RoutesScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   bool _showSearchBar = false;
-  bool _showAddRouteDialog = false;
-  bool _showErrorAlert = false;
-  String _errorMessage = '';
-  bool _isEditClick = false;
-  String _editRouteName = '';
-  int _editRouteId = 0;
 
   @override
   void initState() {
@@ -31,7 +27,7 @@ class _RoutesScreenState extends State<RoutesScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<RoutesProvider>(context, listen: false);
       provider.loadRoutes();
-      provider.loadSalesmen(); // Load salesmen for checker selection
+      provider.loadSalesmen(); 
     });
   }
 
@@ -65,139 +61,91 @@ class _RoutesScreenState extends State<RoutesScreen> {
   }
 
   void _handleEditClick(RouteWithSalesman route) {
-    setState(() {
-      _isEditClick = true;
-      _editRouteName = route.name;
-      _editRouteId = route.routeId;
-      _showAddRouteDialog = true;
-    });
+    final provider = Provider.of<RoutesProvider>(context, listen: false);
+    showDialog(
+      context: context,
+      builder: (context) => _AddRouteDialog(
+        provider: provider,
+        isAddNew: false,
+        name: route.name,
+        routeId: route.routeId,
+        salesmanId: route.route.salesmanId, // Pass existing salesman ID
+        salesmanName: route.salesman, // Pass existing salesman name
+        onDismissRequest: () => Navigator.pop(context),
+        onConfirmation: (name, salesmanId) {
+          Navigator.pop(context); // Close dialog first
+          _performUpdateRoute(route.routeId, name);
+        },
+      ),
+    );
   }
 
   void _handleAddRoute() {
-    setState(() {
-      _isEditClick = false;
-      _editRouteName = '';
-      _editRouteId = 0;
-      _showAddRouteDialog = true;
-    });
-  }
-
-  void _handleDialogDismiss() {
-    setState(() {
-      _isEditClick = false;
-      _editRouteName = '';
-      _editRouteId = 0;
-      _showAddRouteDialog = false;
-    });
-  }
-
-  void _handleConfirmation(String name, int salesmanId) {
     final provider = Provider.of<RoutesProvider>(context, listen: false);
+    showDialog(
+      context: context,
+      builder: (context) => _AddRouteDialog(
+        provider: provider,
+        isAddNew: true,
+        name: '',
+        routeId: -1,
+        salesmanId: -1, // No existing salesman for new route
+        salesmanName: '', // No existing salesman name for new route
+        onDismissRequest: () => Navigator.pop(context),
+        onConfirmation: (name, salesmanId) {
+          Navigator.pop(context); // Close dialog first
+          _performCreateRoute(name, salesmanId);
+        },
+      ),
+    );
+  }
 
-    if (_isEditClick) {
-      // Update route
-      provider.updateRoute(
-        routeId: _editRouteId,
-        name: name,
-      ).then((result) {
-        result.fold(
-          (failure) {
-            setState(() {
-              _errorMessage = failure.message;
-              _showErrorAlert = true;
-            });
-          },
-          (_) {
-            setState(() {
-              _isEditClick = false;
-              _editRouteName = '';
-              _editRouteId = 0;
-              _errorMessage = 'Route updated successfully';
-              _showErrorAlert = true;
-              _showAddRouteDialog = false;
-            });
-            provider.loadRoutes(searchKey: _searchController.text);
-          },
-        );
-      });
-    } else {
-      // Create route
-      provider.createRoute(
-        name: name,
-        salesmanId: salesmanId,
-      ).then((result) {
-        result.fold(
-          (failure) {
-            setState(() {
-              _errorMessage = failure.message;
-              _showErrorAlert = true;
-            });
-          },
-          (_) {
-            setState(() {
-              _isEditClick = false;
-              _editRouteName = '';
-              _editRouteId = 0;
-              _errorMessage = 'Route Added successfully';
-              _showErrorAlert = true;
-              _showAddRouteDialog = false;
-            });
-            provider.loadRoutes(searchKey: _searchController.text);
-          },
-        );
-      });
-    }
+  Future<void> _performCreateRoute(String name, int salesmanId) async {
+    final provider = Provider.of<RoutesProvider>(context, listen: false);
+    final result = await provider.createRoute(
+      name: name,
+      salesmanId: salesmanId,
+    );
+
+    result.fold(
+      (failure) {
+        if (mounted) {
+          ToastHelper.showError(failure.message);
+        }
+      },
+      (_) {
+        if (mounted) {
+          ToastHelper.showSuccess('Route added successfully');
+          provider.loadRoutes(searchKey: _searchController.text);
+        }
+      },
+    );
+  }
+
+  Future<void> _performUpdateRoute(int routeId, String name) async {
+    final provider = Provider.of<RoutesProvider>(context, listen: false);
+    final result = await provider.updateRoute(
+      routeId: routeId,
+      name: name,
+    );
+
+    result.fold(
+      (failure) {
+        if (mounted) {
+          ToastHelper.showError(failure.message);
+        }
+      },
+      (_) {
+        if (mounted) {
+          ToastHelper.showSuccess('Route updated successfully');
+          provider.loadRoutes(searchKey: _searchController.text);
+        }
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Show dialogs when needed
-    if (_showAddRouteDialog) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        showDialog(
-          context: context,
-          builder: (context) => _AddRouteDialog(
-            provider: Provider.of<RoutesProvider>(context, listen: false),
-            isAddNew: !_isEditClick,
-            name: _editRouteName,
-            onDismissRequest: _handleDialogDismiss,
-            onConfirmation: _handleConfirmation,
-          ),
-        ).then((_) {
-          setState(() {
-            _showAddRouteDialog = false;
-          });
-        });
-      });
-    }
-
-    if (_showErrorAlert) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Alert'),
-            content: Text(_errorMessage),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    _showErrorAlert = false;
-                  });
-                  Navigator.pop(context);
-                },
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        ).then((_) {
-          setState(() {
-            _showErrorAlert = false;
-          });
-        });
-      });
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: _showSearchBar
@@ -235,8 +183,15 @@ class _RoutesScreenState extends State<RoutesScreen> {
           ),
         ],
       ),
-      body: Consumer<RoutesProvider>(
-        builder: (context, provider, _) {
+      body: Consumer2<RoutesProvider,NotificationManager>(
+        builder: (context, provider, notificationManager, _) {
+          if(notificationManager.notificationTrigger){
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              notificationManager.resetTrigger();
+              provider.loadRoutes();
+              provider.loadSalesmen();
+            });
+          }
           if (provider.isLoading && provider.routesList.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -362,6 +317,9 @@ class _AddRouteDialog extends StatefulWidget {
   final RoutesProvider provider;
   final bool isAddNew;
   final String name;
+  final int routeId;
+  final int salesmanId; // Existing salesman ID (for edit mode)
+  final String salesmanName; // Existing salesman name (for edit mode)
   final VoidCallback onDismissRequest;
   final void Function(String name, int salesmanId) onConfirmation;
 
@@ -369,6 +327,9 @@ class _AddRouteDialog extends StatefulWidget {
     required this.provider,
     required this.isAddNew,
     required this.name,
+    required this.routeId,
+    required this.salesmanId,
+    required this.salesmanName,
     required this.onDismissRequest,
     required this.onConfirmation,
   });
@@ -379,14 +340,17 @@ class _AddRouteDialog extends StatefulWidget {
 
 class _AddRouteDialogState extends State<_AddRouteDialog> {
   late TextEditingController _routeNameController;
-  int _checkerId = -1;
-  String _checkerSt = '';
+  late int _checkerId;
+  late String _checkerSt;
   bool _showCheckerDialog = false;
 
   @override
   void initState() {
     super.initState();
     _routeNameController = TextEditingController(text: widget.name);
+    // Initialize with existing salesman if editing, otherwise default to -1
+    _checkerId = widget.salesmanId;
+    _checkerSt = widget.salesmanName;
     // Always load salesmen when dialog opens (like KMP's LaunchedEffect)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.provider.loadSalesmen();
@@ -485,13 +449,16 @@ class _AddRouteDialogState extends State<_AddRouteDialog> {
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.grey),
                     borderRadius: BorderRadius.circular(4),
+                    color: widget.isAddNew ? null : Colors.grey[100], // Disabled appearance for edit mode
                   ),
                   child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _showCheckerDialog = true;
-                      });
-                    },
+                    onTap: widget.isAddNew
+                        ? () {
+                            setState(() {
+                              _showCheckerDialog = true;
+                            });
+                          }
+                        : null, // Disable tap in edit mode
                     child: Text(
                       _checkerSt.isEmpty ? 'Select Salesman' : _checkerSt,
                       style: TextStyle(
@@ -502,10 +469,16 @@ class _AddRouteDialogState extends State<_AddRouteDialog> {
                 ),
                 const SizedBox(height: 16),
                 // Route name field
-                TextField(
+                TextFormField(
                   controller: _routeNameController,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Route name cannot be empty';
+                    }
+                    return null;
+                  },
                   decoration: const InputDecoration(
-                    labelText: 'name',
+                    labelText: 'Route name',
                     border: OutlineInputBorder(),
                   ),
                   textCapitalization: TextCapitalization.none,
@@ -523,16 +496,14 @@ class _AddRouteDialogState extends State<_AddRouteDialog> {
             ),
             TextButton(
               onPressed: () {
+                // Validation 1: Route name cannot be empty
                 if (_routeNameController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Enter name')),
-                  );
+                  ToastHelper.showWarning('Route name cannot be empty');
                   return;
                 }
-                if (widget.isAddNew && _checkerId == -1) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Select checker')),
-                  );
+                // Validation 2: Salesman cannot be empty
+                if (_checkerId == -1) {
+                  ToastHelper.showWarning('Please select salesman');
                   return;
                 }
                 Navigator.pop(context);

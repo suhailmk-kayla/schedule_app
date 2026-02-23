@@ -10,7 +10,7 @@ import 'create_salesman_screen.dart';
 /// Converted from KMP's UserDetails.kt (salesmen use UserDetails screen)
 class SalesmanDetailsScreen extends StatefulWidget {
   final int userId; // Salesman's user ID
-
+  
   const SalesmanDetailsScreen({
     super.key,
     required this.userId,
@@ -30,7 +30,6 @@ class _SalesmanDetailsScreenState extends State<SalesmanDetailsScreen> {
   bool _passwordError = false;
 
   int _userType = 0;
-  bool _isUserActive = true;
 
   @override
   void initState() {
@@ -86,7 +85,8 @@ class _SalesmanDetailsScreenState extends State<SalesmanDetailsScreen> {
   }
 
   void _handleLogoutDevice() {
-    if (!_isUserActive) return;
+    final usersProvider = Provider.of<UsersProvider>(context, listen: false);
+    if (!usersProvider.isUserActive) return;
     setState(() {
       _confirmMessage = 'Do you want to logout this salesman from all devices?';
       _confirmDialogType = 2;
@@ -130,6 +130,9 @@ class _SalesmanDetailsScreenState extends State<SalesmanDetailsScreen> {
             categoryId: 3, // Salesman category ID
           );
           if (success && mounted) {
+            // Reload salesmen list before popping
+            final salesmanProvider = Provider.of<SalesmanProvider>(context, listen: false);
+            await salesmanProvider.loadSalesmen();
             Navigator.of(context).pop();
           }
         }
@@ -346,7 +349,6 @@ class _SalesmanDetailsScreenState extends State<SalesmanDetailsScreen> {
           }
 
           final user = userWithCategory.user;
-          _isUserActive = usersProvider.isUserActive;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -464,10 +466,10 @@ class _SalesmanDetailsScreenState extends State<SalesmanDetailsScreen> {
                                   ),
                                 ),
                                 Text(
-                                  _isUserActive ? 'Active' : 'Inactive',
+                                  usersProvider.isUserActive ? 'Active' : 'Inactive',
                                   style: TextStyle(
                                     fontSize: 14,
-                                    color: _isUserActive
+                                    color: usersProvider.isUserActive
                                         ? Colors.green.shade700
                                         : Colors.red,
                                     fontWeight: FontWeight.w500,
@@ -504,55 +506,59 @@ class _SalesmanDetailsScreenState extends State<SalesmanDetailsScreen> {
           );
         },
       ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: _handleChangePassword,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).primaryColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+      bottomNavigationBar: Consumer<UsersProvider>(
+        builder: (context, usersProvider, child) {
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _handleChangePassword,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).primaryColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: const Text(
+                        'Change Password',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                      ),
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  child: const Text(
-                    'Change Password',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
+                  if (usersProvider.isUserActive) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _handleLogoutDevice,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: const Text(
+                          'Logout Device',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  ],
+                ],
               ),
-              if (_isUserActive) ...[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _handleLogoutDevice,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: const Text(
-                      'Logout Device',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }

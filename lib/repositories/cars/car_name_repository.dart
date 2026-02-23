@@ -158,13 +158,17 @@ class CarNameRepository {
   Future<Either<Failure, void>> addCarName(Name carName) async {
     try {
       final db = await _database;
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
-        INSERT OR REPLACE INTO CarName (id, carNameId, carBrandId, name, flag)
-        VALUES (NULL, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO CarName (
+          carNameId, carBrandId, name, flag
+        ) VALUES (
+          ?, ?, ?, ?
+        )
         ''',
         [
-          carName.id,
+          carName.carNameId,
           carName.carBrandId,
           carName.carName,
           carName.flag ?? 1,
@@ -172,7 +176,7 @@ class CarNameRepository {
       );
       return const Right(null);
     } catch (e) {
-      developer.log('CarNameRepository: Error adding car name: $e');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -182,21 +186,26 @@ class CarNameRepository {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT OR REPLACE INTO CarName (id, carNameId, carBrandId, name, flag)
-        VALUES (NULL, ?, ?, ?, ?)
-        ''';
+        final batch = txn.batch();
         for (final carName in carNames) {
-          await txn.rawInsert(
-            sql,
+          // Use INSERT OR REPLACE (matches KMP pattern)
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO CarName (
+              carNameId, carBrandId, name, flag
+            ) VALUES (
+              ?, ?, ?, ?
+            )
+            ''',
             [
-              carName.id,
+              carName.carNameId,
               carName.carBrandId,
               carName.carName,
               carName.flag ?? 1,
             ],
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
