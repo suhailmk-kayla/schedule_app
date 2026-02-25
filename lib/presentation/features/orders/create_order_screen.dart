@@ -1,5 +1,3 @@
-import 'dart:developer' as developer;
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
@@ -47,12 +45,12 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   Future<void> _loadOrder() async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     if (widget.orderId != null && widget.orderId!.isNotEmpty) {
-       
-      // Load draft order (only when explicitly editing a draft via orderId)
-      await ordersProvider.getDraftOrder(int.parse(widget.orderId!));
+      // Load order for edit (any flag). Matches KMP's EditOrder → getAllOrder(orderId, isEdit = true)
+      await ordersProvider.loadOrderForEdit(int.parse(widget.orderId!));
       if (ordersProvider.orderMaster != null) {
         _noteController.text = ordersProvider.orderMaster!.orderNote ?? '';
-        _freightChargeController.text = ordersProvider.orderMaster!.orderFreightCharge.toStringAsFixed(2);
+        _freightChargeController.text =
+            ordersProvider.orderMaster!.orderFreightCharge.toStringAsFixed(2);
       }
     } else {
       // Creating a NEW order - always start completely fresh
@@ -179,12 +177,13 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     final freight = double.tryParse(_freightChargeController.text) ?? 0.0;
 
     // Send order with -1 for storekeeperId (no specific storekeeper assigned)
-    // All storekeepers get notified, any one can accept it later
-    // Matches KMP's CreateOrderScreen.kt line 354: sendOrder(..., -1, ...)
     final success = await ordersProvider.sendOrder(freight, total, -1);
     if (success) {
-      // Delete temp order and subs (matches KMP line 362)
-      await ordersProvider.deleteOrderAndSub();
+      // Only delete temp order when creating new order (KMP: CreateOrderScreen deletes after send).
+      // When editing (orderId != null), order was updated via update_order API — do not delete.
+      if (widget.orderId == null || widget.orderId!.isEmpty) {
+        await ordersProvider.deleteOrderAndSub();
+      }
       ToastHelper.showSuccess('Order sent successfully');
       if (mounted) {
         Navigator.of(context).pop();
@@ -413,7 +412,11 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
           return Scaffold(
             appBar: AppBar(
-              title: const Text('Create Order'),
+              title: Text(
+                widget.orderId != null && widget.orderId!.isNotEmpty
+                    ? 'Edit Order'
+                    : 'Create Order',
+              ),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () {
@@ -543,10 +546,12 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                           ...ordersProvider.orderSubsWithDetails.asMap().entries.map((entry) {
                             final index = entry.key;
                             final item = entry.value;
+                            final isEditMode = widget.orderId != null && widget.orderId!.isNotEmpty;
                             return _OrderItemCard(
                               key: ValueKey('${item.orderSub.orderSubId}_$index'),
                               slNo: index + 1,
                               item: item,
+                              enableSwipeDelete: !isEditMode,
                               onDelete: () {
                                 final orderSubId = item.orderSub.orderSubId;
                                 ordersProvider.removeOrderSubOptimistically(orderSubId);
@@ -661,12 +666,12 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   }
 }
 
-/// Order Item Card with Swipe-to-Delete
-/// Matches KMP's CreateOrderScreen item display layout
-/// Converted from KMP's OrderItemCard composable
+/// Order Item Card with optional Swipe-to-Delete
+/// When [enableSwipeDelete] is false (edit mode), salesman cannot delete line; can only set qty to 0.
 class _OrderItemCard extends StatelessWidget {
   final int slNo;
   final OrderSubWithDetails item;
+  final bool enableSwipeDelete;
   final VoidCallback onDelete;
   final VoidCallback onTap;
 
@@ -674,108 +679,91 @@ class _OrderItemCard extends StatelessWidget {
     super.key,
     required this.slNo,
     required this.item,
+    this.enableSwipeDelete = true,
     required this.onDelete,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Dismissible(
-      key: key!,
-      direction: DismissDirection.endToStart,
-      background: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: Colors.red,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 32),
-        child: const Icon(
-          Icons.delete,
-          color: Colors.white,
-          size: 24,
-        ),
+    final card = Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
       ),
-      onDismissed: (_) => onDelete(),
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 8),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        elevation: 4,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Product image and item number with product name
-                Row(
-                  children: [
-                    SmallProductImage(
-                      imageUrl: item.productPhoto,
-                      size: 40,
-                      borderRadius: 5,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
+      elevation: 4,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Product image and item number with product name
+              Row(
+                children: [
+                  SmallProductImage(
+                    imageUrl: item.productPhoto,
+                    size: 40,
+                    borderRadius: 5,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '#$slNo  ${item.productName ?? 'Unknown Product'}',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                        if (item.productCode?.isNotEmpty == true)
                           Text(
-                            '#$slNo  ${item.productName ?? 'Unknown Product'}',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
+                            'Code: ${item.productCode!}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
                             ),
                           ),
-                          if (item.productCode?.isNotEmpty == true)
-                            Text(
-                              'Code: ${item.productCode!}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              // Narration (if not empty)
+              if (item.orderSub.orderSubNarration != null &&
+                  item.orderSub.orderSubNarration!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Text(
+                      'Narration: ',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    Text(
+                      item.orderSub.orderSubNarration!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.black,
                       ),
                     ),
                   ],
                 ),
-                // Narration (if not empty)
-                if (item.orderSub.orderSubNarration != null &&
-                    item.orderSub.orderSubNarration!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Text(
-                        'Narration: ',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      Text(
-                        item.orderSub.orderSubNarration!,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 4),
-                // Row 1: brand, SubBrand, Qty label
-                Row(
-                  children: [
-                    const Text(
-                      'brand: ',
-                      style: TextStyle(
+              ],
+              const SizedBox(height: 4),
+              // Row 1: brand, SubBrand, Qty label
+              Row(
+                children: [
+                  const Text(
+                    'brand: ',
+                    style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey,
                       ),
@@ -864,8 +852,31 @@ class _OrderItemCard extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
+      );
+
+    if (enableSwipeDelete) {
+      return Dismissible(
+        key: key!,
+        direction: DismissDirection.endToStart,
+        background: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: Colors.red,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 32),
+          child: const Icon(
+            Icons.delete,
+            color: Colors.white,
+            size: 24,
+          ),
+        ),
+        onDismissed: (_) => onDelete(),
+        child: card,
+      );
+    }
+    return card;
   }
 }
 

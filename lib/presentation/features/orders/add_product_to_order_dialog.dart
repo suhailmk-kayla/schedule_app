@@ -171,11 +171,13 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
     final rate = double.tryParse(_rateController.text) ?? 0.0;
     final narration = _narrationController.text;
 
-    if (quantity <= 0) {
+    // Edit mode: allow 0 (cancelled for that product). Add mode: require > 0
+    if (quantity < 0) {
       ToastHelper.showWarning('Please enter a valid quantity');
-      // ScaffoldMessenger.of(context).showSnackBar(
-      //   const SnackBar(content: Text('Please enter a valid quantity')),
-      // );
+      return;
+    }
+    if (widget.orderSub == null && quantity == 0) {
+      ToastHelper.showWarning('Please enter a valid quantity');
       return;
     }
 
@@ -207,7 +209,11 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
     final rate = double.tryParse(_rateController.text) ?? 0.0;
     final narration = _narrationController.text;
 
-    if (quantity <= 0) {
+    if (quantity < 0) {
+      ToastHelper.showWarning('Please enter a valid quantity');
+      return;
+    }
+    if (widget.orderSub == null && quantity == 0) {
       ToastHelper.showWarning('Please enter a valid quantity');
       return;
     }
@@ -234,7 +240,11 @@ class _AddProductToOrderDialogState extends State<AddProductToOrderDialog> {
     final rate = double.tryParse(_rateController.text) ?? 0.0;
     final narration = _narrationController.text;
 
-    if (quantity <= 0) {
+    if (quantity < 0) {
+      ToastHelper.showWarning('Please enter a valid quantity');
+      return;
+    }
+    if (widget.orderSub == null && quantity == 0) {
       ToastHelper.showWarning('Please enter a valid quantity');
       return;
     }
