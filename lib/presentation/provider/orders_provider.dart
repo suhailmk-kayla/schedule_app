@@ -781,6 +781,55 @@ _setError(failure.message);
     _setLoading(false);
   }
 
+  /// Load order by ID for editing (any flag).
+  /// Matches KMP's getAllOrder(orderId, isEdit = true) using getOrderWithNameById.
+  Future<void> loadOrderForEdit(int orderId) async {
+    _setLoading(true);
+    _clearError();
+
+    final orderResult = await _ordersRepository.getOrderWithNamesById(orderId);
+    if (orderResult.isLeft) {
+      _setError(orderResult.left.message);
+      _setLoading(false);
+      return;
+    }
+
+    final orderWithName = orderResult.right;
+    if (orderWithName == null) {
+      _setError('Order not found');
+      _setLoading(false);
+      return;
+    }
+
+    _orderMaster = orderWithName.order;
+    _customerId = _orderMaster!.orderCustId;
+    _customerName = _orderMaster!.orderCustName.isNotEmpty
+        ? _orderMaster!.orderCustName
+        : 'Select customer';
+
+    final subsResult = await _ordersRepository.getAllOrderSubAndDetails(orderId);
+    await subsResult.fold(
+      (failure) async {
+        _setError(failure.message);
+      },
+      (subs) async {
+        if (subs.isNotEmpty) {
+          _orderSubsWithDetails = subs;
+        } else {
+          final tempSubsResult =
+              await _ordersRepository.getTempOrderSubAndDetails(orderId);
+          tempSubsResult.fold(
+            (failure) => _setError(failure.message),
+            (tempSubs) => _orderSubsWithDetails = tempSubs,
+          );
+        }
+      },
+    );
+
+    _setLoading(false);
+    notifyListeners();
+  }
+
   /// Create new temp order (flag = 2)
   /// Converted from KMP's createTempOrder
   Future<void> createTempOrder() async {
@@ -1361,6 +1410,19 @@ _setError(failure.message);
       }
       final subList = subsResult.right;
 
+      // EDIT path: existing order (not temp). Use update_order API like KMP EditOrder.
+      if (_orderMaster!.orderFlag != 2) {
+        final editSuccess = await _sendOrderForEdit(
+          subList,
+          total,
+          freightCharge,
+          storekeeperId,
+        );
+        _setLoading(false);
+        return editSuccess;
+      }
+
+      // CREATE path: temp order (flag == 2). Use addOrder API like KMP CreateOrderScreen.
       // Get admins and storekeepers for push notifications (matches KMP lines 729-736)
       final adminsResult = await _usersRepository.getUsersByCategory(1);
       final storekeepersResult = await _usersRepository.getUsersByCategory(2);
@@ -1392,27 +1454,17 @@ _setError(failure.message);
       );
 
       // Build push notification payload (matches KMP's sentPushNotification - OrderViewModel.kt line 738-739)
-      // KMP calls: sentPushNotification(arrayListOf(), userIds, "New Order Received")
-      // This builds the notification JSON object structure
       final notificationJsonObject = <String, dynamic>{
         'ids': userIds,
         'data_message': 'New Order Received',
         'data': {
-          'data_ids': <Map<String, dynamic>>[], // Empty array as per KMP line 738
+          'data_ids': <Map<String, dynamic>>[],
           'show_notification': '1',
           'message': 'New Order Received',
         },
       };
 
-      // Generate a NEW UUID for this order send operation
-      // This matches KMP's UUID generation pattern from createTempOrder (line 367-368)
-      // and ensures server creates a new order instead of matching by UUID
-      final now = DateTime.now();
-      final userId = await StorageHelper.getUserId();
-      final deviceToken = await StorageHelper.getDeviceToken();
-      final newUuid = '${now.millisecondsSinceEpoch}$deviceToken$userId';
-
-      // Build order params (matches KMP line 740-747)
+      // KMP createOrderParams uses orderMaster.UUID (no new UUID). Use existing for create.
       final params = _createOrderParams(
         _orderMaster!,
         subList,
@@ -1420,7 +1472,7 @@ _setError(failure.message);
         freightCharge,
         storekeeperId,
         notificationJsonObject,
-        newUuid, // Pass new UUID instead of reusing temp order's UUID
+        _orderMaster!.uuid,
       );
 
       // Call API (matches KMP line 749-750)
@@ -1516,6 +1568,92 @@ _setError(failure.message);
       _setLoading(false);
       return false;
     }
+  }
+
+  /// Send existing order for re-check (edit flow). Uses update_order API.
+  /// Matches KMP EditOrder sendOrder overload → updateOrderParams → Urls.updateOrder
+  Future<bool> _sendOrderForEdit(
+    List<OrderSubWithDetails> subList,
+    double total,
+    double freightCharge,
+    int storekeeperId,
+  ) async {
+    final order = _orderMaster!;
+    final adminsResult = await _usersRepository.getUsersByCategory(1);
+    final storekeepersResult = await _usersRepository.getUsersByCategory(2);
+    final List<Map<String, dynamic>> userIds = [];
+    adminsResult.fold(
+      (_) {},
+      (admins) {
+        for (final admin in admins) {
+          userIds.add({'user_id': admin.userId ?? -1, 'silent_push': 1});
+        }
+      },
+    );
+    storekeepersResult.fold(
+      (_) {},
+      (storekeepers) {
+        for (final storekeeper in storekeepers) {
+          userIds.add({'user_id': storekeeper.userId ?? -1, 'silent_push': 0});
+        }
+      },
+    );
+    final notificationJsonObject = <String, dynamic>{
+      'ids': userIds,
+      'data_message': 'Order updated to re-check',
+      'data': {
+        'data_ids': <Map<String, dynamic>>[
+          {'table': 8, 'id': order.orderId},
+        ],
+        'show_notification': '1',
+        'message': 'Order updated to re-check',
+      },
+    };
+    final payload = <String, dynamic>{
+      'order_id': order.orderId,
+      'uuid': order.uuid,
+      'order_cust_id': order.orderCustId,
+      'order_cust_name': order.orderCustName,
+      'order_salesman_id': order.orderSalesmanId,
+      'order_stock_keeper_id': storekeeperId,
+      'order_biller_id': order.orderBillerId,
+      'order_checker_id': order.orderCheckerId,
+      'order_date_time': order.orderDateTime,
+      'order_total': total,
+      'order_freight_charge': freightCharge,
+      'order_note': order.orderNote ?? '',
+      'order_approve_flag': OrderApprovalFlag.sendToStorekeeper,
+      'items': subList.map((item) {
+        return <String, dynamic>{
+          'order_sub_id': item.orderSub.orderSubId,
+          'order_sub_prd_id': item.orderSub.orderSubPrdId,
+          'order_sub_unit_id': item.orderSub.orderSubUnitId,
+          'order_sub_car_id': item.orderSub.orderSubCarId,
+          'order_sub_rate': item.orderSub.orderSubRate,
+          'order_sub_date_time': item.orderSub.orderSubDateTime,
+          'order_sub_update_rate': item.orderSub.orderSubUpdateRate,
+          'order_sub_qty': item.orderSub.orderSubQty,
+          'order_sub_available_qty': item.orderSub.orderSubAvailableQty,
+          'order_sub_unit_base_qty': item.orderSub.orderSubUnitBaseQty,
+          'order_sub_ordr_flag': 1,
+          'order_sub_is_checked_flag': item.orderSub.orderSubIsCheckedFlag,
+          'order_sub_note': item.orderSub.orderSubNote ?? '',
+          'order_sub_narration': item.orderSub.orderSubNarration ?? '',
+        };
+      }).toList(),
+      'notification': notificationJsonObject,
+    };
+    final result = await _ordersRepository.updateOrderWithCustomPayload(payload);
+    return result.fold(
+      (failure) {
+        _setError(failure.message);
+        return false;
+      },
+      (_) {
+        loadOrders();
+        return true;
+      },
+    );
   }
 
   /// Create order params for API

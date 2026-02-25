@@ -16,6 +16,7 @@ import '../../../utils/notification_manager.dart';
 import '../../provider/orders_provider.dart';
 import '../../provider/products_provider.dart';
 import '../products/products_screen.dart';
+import 'create_order_screen.dart';
 import 'add_product_to_order_dialog.dart';
 import '../../common_widgets/small_product_image.dart';
 
@@ -105,47 +106,6 @@ class _OrderDetailsSalesmanScreenState
   //     ),
   //   );
   // }
-
-  /// Shows confirmation dialog and cancels order if user confirms
-  /// Matching KMP's EditOrder/OrderDetailsSalesman Cancel Order flow
-  Future<void> _handleCancelOrder(
-    BuildContext context,
-    Order order,
-    OrdersProvider ordersProvider,
-  ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cancel Order'),
-        content: const Text('Do you want to cancel this order?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('No'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Yes', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    final success = await ordersProvider.cancelOrder(order);
-
-    if (!mounted) return;
-
-    if (success) {
-      ToastHelper.showSuccess('Order cancelled');
-      Navigator.pop(context);
-    } else {
-      ToastHelper.showError(
-        ordersProvider.errorMessage ?? 'Failed to cancel order',
-      );
-    }
-  }
 
   Future<void> _handleSendToBillerAndChecker() async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
@@ -449,7 +409,8 @@ class _OrderDetailsSalesmanScreenState
         final order = ordersProvider.orderDetails;
         final isLoading = ordersProvider.orderDetailsLoading && !_didInit;
 
-        final canCancel = order != null &&
+        // KMP: Order Details (Salesman) has only Edit in app bar; Cancel Order is on Edit screen
+        final canEdit = order != null &&
             order.order.orderApproveFlag != OrderApprovalFlag.sendToStorekeeper &&
             order.order.orderApproveFlag != OrderApprovalFlag.completed &&
             order.order.orderApproveFlag != OrderApprovalFlag.cancelled;
@@ -458,14 +419,21 @@ class _OrderDetailsSalesmanScreenState
           appBar: AppBar(
             title: const Text('Order Details'),
             actions: [
-              if (canCancel)
+              if (canEdit)
                 TextButton.icon(
-                  onPressed: () => _handleCancelOrder(context, order.order, ordersProvider),
-                  icon: const Icon(Icons.cancel, color: Colors.red, size: 20),
-                  label: const Text(
-                    'Cancel Order',
-                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
-                  ),
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => CreateOrderScreen(
+                          orderId: widget.orderId.toString(),
+                        ),
+                      ),
+                    );
+                    _refresh();
+                  },
+                  icon: const Icon(Icons.edit, size: 20),
+                  label: const Text('Edit'),
                 ),
             ],
           ),
