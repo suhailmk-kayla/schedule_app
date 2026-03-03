@@ -2178,10 +2178,37 @@ _setError(failure.message);
         );
       }
 
-      // Build notification data
-      final dataIds = [
-        {'table': 8, 'id': order.orderId}
+      // Build notification data: include order and OutOfStockProducts table IDs so suppliers, salesman, and admins get notified
+      final List<Map<String, dynamic>> dataIds = [
+        {'table': NotificationId.order, 'id': order.orderId},
       ];
+
+      final orderSubsResult = await _ordersRepository.getAllOrderSubAndDetails(order.orderId);
+      final orderSubs = orderSubsResult.fold((_) => <OrderSubWithDetails>[], (list) => list);
+      for (final detail in orderSubs) {
+        final orderSubId = detail.orderSub.orderSubId;
+        final oosResult = await _outOfStockRepository.getOutOfStockProductsByOrderSubId(orderSubId);
+        oosResult.fold(
+          (_) {},
+          (outOfStocks) {
+            if (outOfStocks.isNotEmpty) {
+              dataIds.add({
+                'table': NotificationId.outOfStock,
+                'id': outOfStocks.first.outosSubOutosId,
+              });
+              for (final oos in outOfStocks) {
+                dataIds.add({
+                  'table': NotificationId.outOfStockSub,
+                  'id': oos.outOfStockSubId,
+                });
+                if (oos.outosSubSuppId != -1) {
+                  userIds.add({'user_id': oos.outosSubSuppId, 'silent_push': 1});
+                }
+              }
+            }
+          },
+        );
+      }
 
       final notificationJsonObject = {
         'ids': userIds,
@@ -2199,6 +2226,7 @@ _setError(failure.message);
         'is_biller': isBiller ? 1 : 0,
         'user_Id': userId,
         'order_approve_flag': approvalFlag ?? order.orderApproveFlag,
+        'approve_supplier_enquiries': 1,
         'notification': notificationJsonObject,
       };
 
@@ -2259,6 +2287,7 @@ _setError(failure.message);
         'is_biller': 0,
         'user_Id': 0,
         'order_approve_flag': OrderApprovalFlag.sendToChecker,
+        'approve_supplier_enquiries': 1,
       };
       
       final populateResult = await _ordersRepository.updateBillerOrChecker(populateEstimatedParams);
@@ -2301,10 +2330,40 @@ _setError(failure.message);
         },
       );
 
-      // Step 3: Build notification data
-      final dataIds = [
-        {'table': 8, 'id': order.orderId}
+      // Add salesman so they get notified when order is sent to checkers (with OOS table IDs)
+      userIds.add({'user_id': order.orderSalesmanId, 'silent_push': 1});
+
+      // Step 3: Build notification data (include order and OutOfStockProducts table IDs for suppliers, salesman, admins)
+      final List<Map<String, dynamic>> dataIds = [
+        {'table': NotificationId.order, 'id': order.orderId},
       ];
+
+      final orderSubsResult = await _ordersRepository.getAllOrderSubAndDetails(order.orderId);
+      final orderSubs = orderSubsResult.fold((_) => <OrderSubWithDetails>[], (list) => list);
+      for (final detail in orderSubs) {
+        final orderSubId = detail.orderSub.orderSubId;
+        final oosResult = await _outOfStockRepository.getOutOfStockProductsByOrderSubId(orderSubId);
+        oosResult.fold(
+          (_) {},
+          (outOfStocks) {
+            if (outOfStocks.isNotEmpty) {
+              dataIds.add({
+                'table': NotificationId.outOfStock,
+                'id': outOfStocks.first.outosSubOutosId,
+              });
+              for (final oos in outOfStocks) {
+                dataIds.add({
+                  'table': NotificationId.outOfStockSub,
+                  'id': oos.outOfStockSubId,
+                });
+                if (oos.outosSubSuppId != -1) {
+                  userIds.add({'user_id': oos.outosSubSuppId, 'silent_push': 1});
+                }
+              }
+            }
+          },
+        );
+      }
 
       final notificationJsonObject = {
         'ids': userIds,

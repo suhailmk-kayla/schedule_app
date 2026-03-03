@@ -417,7 +417,7 @@ class _OutOfStockListSupplierScreenState
                       );
                     },
                   )
-                : Text(isStorekeeper ? 'Out of Stock' : 'Orders'),
+                : Text(isStorekeeper ? 'Out of Stock' : 'Enquiries'),
             leading: Builder(
               builder: (context) => IconButton(
                 icon: const Icon(Icons.menu),
@@ -559,8 +559,8 @@ class _OutOfStockListSupplierScreenState
                       return Center(
                         child: Text(
                           provider.oospSubList.isEmpty
-                              ? 'No orders'
-                              : 'No orders match "$_statusSt" filter',
+                              ? 'No enquiries'
+                              : 'No enquiries match "$_statusSt" filter',
                           style: const TextStyle(
                             color: Colors.grey,
                             fontSize: 14,
@@ -727,7 +727,7 @@ class _OutOfStockSupplierListItemState
               return 'Cancelled';
             }
           case 5:
-            return 'Order Cancelled';
+            return 'Enquiry Cancelled';
           default:
             return 'Cancelled';
         }

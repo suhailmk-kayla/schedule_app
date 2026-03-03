@@ -135,7 +135,7 @@ class _OutOfStockDetailsAdminScreenState
       },
       onSuccess: () {
         setState(() => _isLoading = false);
-        ToastHelper.showInfo('Order sent to supplier');
+        ToastHelper.showInfo('Enquiry sent to supplier');
         _loadData(); // Reload to refresh status
       },
     );
@@ -163,7 +163,7 @@ class _OutOfStockDetailsAdminScreenState
           _pendingSupplierByOospId.remove(subItem.oospId);
           _pendingSupplierNameByOospId.remove(subItem.oospId);
         });
-        ToastHelper.showInfo('Order sent to supplier');
+        ToastHelper.showInfo('Enquiry sent to supplier');
         // Persist the new supplier to local DB so _loadData shows correct state
         await provider.updateSupplier(oospId: subItem.oospId, supplierId: pendingId);
         if (!mounted) return;
@@ -415,7 +415,8 @@ class _OutOfStockDetailsAdminScreenState
   bool _isAllSubsFinished(OutOfStockProvider provider) {
     final list = provider.oospSubList;
     for (final sub in list) {
-      if (sub.oospFlag == 0 || sub.oospFlag == 1 || sub.oospFlag == 3) {
+      // Include 4 (Not Available / supplier rejected) so admin can reassign instead of only Inform Salesman
+      if (sub.oospFlag == 0 || sub.oospFlag == 1 || sub.oospFlag == 3 || sub.oospFlag == 4) {
         developer.log(
           '_isAllSubsFinished: false (sub id=${sub.oospId} has flag=${sub.oospFlag}) | list=${list.map((s) => "id=${s.oospId} qty=${s.qty} flag=${s.oospFlag}").join(" | ")}',
           name: 'OOSAdmin.isAllFinished',
@@ -778,10 +779,10 @@ class _OutOfStockDetailsAdminScreenState
                              _selectedSupplierId! != -1 &&
                              _selectedSubItem != null
                       ? () {
-                          // Fix 2026-02-03, by AI: When supplier returned "out of stock",
-                          // store selection in state only. Button becomes "Send to Supplier".
-                          if (_selectedSubItem!.oospFlag == 3 &&
-                              _selectedSubItem!.availQty == 0) {
+                          // Fix 2026-02-03, by AI: When supplier returned "out of stock" (3) or
+                          // rejected / not available (4), store selection in state. Button becomes "Send to Supplier".
+                          if ((_selectedSubItem!.oospFlag == 3 && _selectedSubItem!.availQty == 0) ||
+                              _selectedSubItem!.oospFlag == 4) {
                             User? selectedSupplier;
                             for (final s in suppliers) {
                               if (s.userId == _selectedSupplierId) {
@@ -889,21 +890,23 @@ class _SubItemCard extends StatelessWidget {
         return subItem.availQty > 0
             ? 'Only ${subItem.availQty.toInt()} is left'
             : 'Out of Stock';
+      case 4:
+        return 'Not Available';
       case 5:
-        return 'Order Cancelled';
+        return 'Enquiry Cancelled';
       default:
         return 'Not Available';
     }
   }
 
   /// Fix 2026-02-03, by AI: Green button handler. When pending supplier exists
-  /// (after "out of stock" reselect), call onSendToPendingSupplier.
+  /// (after "out of stock" or "rejected" reselect), call onSendToPendingSupplier.
   VoidCallback? _getGreenButtonOnPressed() {
     if (subItem.supplierId == -1 && pendingSupplierId == null) {
       return onSelectSupplier;
     }
-    if (subItem.oospFlag == 3) {
-      if (subItem.availQty > 0) return onAcceptAvailable;
+    if (subItem.oospFlag == 3 || subItem.oospFlag == 4) {
+      if (subItem.oospFlag == 3 && subItem.availQty > 0) return onAcceptAvailable;
       if (pendingSupplierId != null && onSendToPendingSupplier != null) {
         return onSendToPendingSupplier!;
       }
@@ -913,13 +916,13 @@ class _SubItemCard extends StatelessWidget {
   }
 
   /// Fix 2026-02-03, by AI: Green button label. "Send to Supplier" when pending
-  /// selection exists (after out of stock reselect), else existing logic.
+  /// selection exists (after out of stock or rejected reselect), else existing logic.
   String _getGreenButtonLabel() {
     if (subItem.supplierId == -1 && pendingSupplierId == null) {
       return 'Select Supplier';
     }
-    if (subItem.oospFlag == 3) {
-      if (subItem.availQty > 0) return 'Accept';
+    if (subItem.oospFlag == 3 || subItem.oospFlag == 4) {
+      if (subItem.oospFlag == 3 && subItem.availQty > 0) return 'Accept';
       if (pendingSupplierId != null) return 'Send to Supplier';
       return 'Change Supplier';
     }
@@ -930,6 +933,7 @@ class _SubItemCard extends StatelessWidget {
     switch (subItem.oospFlag) {
       case 0:
       case 3:
+      case 4:
       case 5:
         return Colors.red;
       case 1:
@@ -943,7 +947,7 @@ class _SubItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canShowActions = subItem.oospFlag == 0 || subItem.oospFlag == 3;
+    final canShowActions = subItem.oospFlag == 0 || subItem.oospFlag == 3 || subItem.oospFlag == 4;
     // Fix 2026-02-03, by AI: Show pending supplier name when admin has selected
     // a new supplier (not yet sent) after original returned "out of stock"
     final supplierName = (pendingSupplierName?.isNotEmpty == true)
@@ -969,9 +973,10 @@ class _SubItemCard extends StatelessWidget {
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.normal),
                   ),
                 ),
-                // Fix 2026-02-03, by AI: Show "Change" when supplier exists OR pending selection exists
+                // Only show "Change" when supplier is set but hasn't responded yet (flag 0 or 1).
+                // Once supplier has returned (not available, partial, available, or cancelled) do not show "Change" on this item.
                 if ((subItem.supplierId != -1 || pendingSupplierId != null) &&
-                    (subItem.oospFlag == 0 || subItem.oospFlag == 3))
+                    (subItem.oospFlag == 0 || subItem.oospFlag == 1))
                   TextButton(
                     onPressed: onSelectSupplier,
                     child: const Text('Change', style: TextStyle(color: Colors.green)),

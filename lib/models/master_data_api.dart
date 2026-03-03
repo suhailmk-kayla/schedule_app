@@ -1878,6 +1878,10 @@ class OutOfStockSub {
   @JsonKey(name: 'outos_sub_flag')
   final int? outosSubFlag;
 
+  /// Set to 1 when salesman sends order to biller/checker (supplier enquiry becomes approved)
+  @JsonKey(name: 'outos_sub_is_enquiry_approved', defaultValue: 0)
+  final int outosSubIsEnquiryApproved;
+
   @JsonKey(defaultValue: '')
   final String uuid;
 
@@ -1910,6 +1914,7 @@ class OutOfStockSub {
     this.outosSubNote,
     this.outosSubNarration,
     this.outosSubFlag,
+    this.outosSubIsEnquiryApproved = 0,
     this.uuid = '',
     this.createdAt = '',
     this.updatedAt = '',
@@ -1945,6 +1950,7 @@ class OutOfStockSub {
     final hasNote = json.containsKey('outos_sub_note');
     final hasNarration = json.containsKey('outos_sub_narration');
     final hasFlag = json.containsKey('outos_sub_flag');
+    final hasIsEnquiryApproved = json.containsKey('outos_sub_is_enquiry_approved');
     final hasUuid = json.containsKey('uuid');
     final hasCreatedAt = json.containsKey('created_at');
     final hasUpdatedAt = json.containsKey('updated_at');
@@ -1974,6 +1980,7 @@ class OutOfStockSub {
       outosSubNote: hasNote ? (json['outos_sub_note'] as String?) : null,
       outosSubNarration: hasNarration ? (json['outos_sub_narration'] as String?) : null,
       outosSubFlag: hasFlag ? (json['outos_sub_flag'] as num?)?.toInt() : null,
+      outosSubIsEnquiryApproved: hasIsEnquiryApproved ? ((json['outos_sub_is_enquiry_approved'] as num?)?.toInt() ?? 0) : -2,
       uuid: hasUuid ? (json['uuid'] as String? ?? '') : '',
       createdAt: hasCreatedAt ? (json['created_at'] as String? ?? '') : '',
       updatedAt: hasUpdatedAt ? (json['updated_at'] as String? ?? '') : '',
@@ -2010,6 +2017,7 @@ class OutOfStockSub {
       outosSubNote: outosSubNote ?? existing.outosSubNote,
       outosSubNarration: outosSubNarration ?? existing.outosSubNarration,
       outosSubFlag: outosSubFlag ?? existing.outosSubFlag,
+      outosSubIsEnquiryApproved: outosSubIsEnquiryApproved != -2 ? outosSubIsEnquiryApproved : existing.outosSubIsEnquiryApproved,
       uuid: uuid.isNotEmpty ? uuid : existing.uuid,
       createdAt: createdAt.isNotEmpty ? createdAt : existing.createdAt,
       updatedAt: updatedAt.isNotEmpty ? updatedAt : existing.updatedAt,
@@ -2041,6 +2049,7 @@ class OutOfStockSub {
       outosSubNote: map['note'] as String?,
       outosSubNarration: map['narration'] as String?,
       outosSubFlag: map['flag'] as int?,
+      outosSubIsEnquiryApproved: map['isEnquiryApproved'] as int? ?? 0,
       uuid: map['UUID'] as String? ?? '',
       createdAt: map['createdDateTime'] as String? ?? '',
       updatedAt: map['updatedDateTime'] as String? ?? '',
@@ -2074,6 +2083,7 @@ class OutOfStockSub {
       'updatedDateTime': updatedAt,
       'isCheckedflag': outosSubIsCheckedFlag,
       'flag': outosSubFlag ?? 0,
+      'isEnquiryApproved': outosSubIsEnquiryApproved,
       'UUID': uuid,
       'isViewed': 0,
     };
@@ -2274,6 +2284,8 @@ class OutOfStockSubWithDetails {
   String get updatedDateTime => outOfStockSub.updatedAt;
   int get isCheckedflag => outOfStockSub.outosSubIsCheckedFlag;
   int get flag => outOfStockSub.outosSubFlag ?? 0;
+  /// True when salesman has sent order to biller/checker (supplier enquiry approved)
+  int get isEnquiryApproved => outOfStockSub.outosSubIsEnquiryApproved;
   String get UUID => outOfStockSub.uuid;
 }
 

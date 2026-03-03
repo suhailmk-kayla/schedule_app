@@ -544,7 +544,7 @@ class OutOfStockProvider extends ChangeNotifier {
     }
   }
 
-  /// Send order to supplier (matching KMP's sendOrderToSupplier)
+  /// Send enquiry to supplier (matching KMP's sendOrderToSupplier)
   /// [supplierIdOverride] Optional. When supplier returned "out of stock", admin selects
   /// a new supplier (stored in UI state). Pass that ID here to send without persisting first.
   /// Fix: 2026-02-03, by AI - Enables "Change Supplier" → "Send to Supplier" two-step workflow.
@@ -580,11 +580,27 @@ class OutOfStockProvider extends ChangeNotifier {
       if (responseData['status'] != 1) {
         final errorMsg = responseData['message']?.toString() ??
             responseData['data']?.toString() ??
-            'Failed to send order to supplier';
+            'Failed to send enquiry to supplier';
         _setError(errorMsg);
         _setLoading(false);
         onFailure(errorMsg);
         return;
+      }
+
+      // When reassigning to a new supplier (after reject/not available), persist new supplier
+      // in local DB so getOopsSub shows correct state. Skip the "already send to this supplier"
+      // check by updating repository directly.
+      if (supplierIdOverride != null) {
+        final updateSuppResult = await _outOfStockRepository.updateSupplier(
+          oospId: subItem.oospId,
+          supplierId: supplierIdOverride,
+        );
+        if (updateSuppResult.isLeft) {
+          _setError(updateSuppResult.left.message);
+          _setLoading(false);
+          onFailure(updateSuppResult.left.message);
+          return;
+        }
       }
 
       await updateOospFlag(
@@ -597,7 +613,7 @@ class OutOfStockProvider extends ChangeNotifier {
             customUserIds: [
               {'user_id': effectiveSupplierId, 'silent_push': 0}
             ],
-            message: 'Out of stock order received',
+            message: 'Out of stock enquiry received',
           );
           _setLoading(false);
           onSuccess();
@@ -609,7 +625,7 @@ class OutOfStockProvider extends ChangeNotifier {
       _setLoading(false);
       onFailure(errorMsg);
     } catch (e) {
-      final errorMsg = 'Error sending order to supplier: $e';
+      final errorMsg = 'Error sending enquiry to supplier: $e';
       _setError(errorMsg);
       _setLoading(false);
       onFailure(errorMsg);
@@ -767,15 +783,20 @@ class OutOfStockProvider extends ChangeNotifier {
         return;
       }
 
+      // Keep rejected enquiry as flag=5, but create a fresh new enquiry line that is unassigned
+      // (supplierId = -1) so admin can select a new supplier immediately.
       await _createNewSub(
         subItem: subItem,
         qty: subItem.qty,
         availQty: 0.0,
-        supplierId: supplierId == -1 ? subItem.supplierId : supplierId,
+        supplierId: -1,
         onFailure: onFailure,
         onSuccess: () async {
-          await _outOfStockRepository.updateOospFlag(
+          // Update local DB for the rejected item (flag=5) to match server state.
+          await _outOfStockRepository.rejectAvailableQty(
             oospId: subItem.oospId,
+            availQty: 0.0,
+            note: note,
             oospFlag: 5,
           );
           await getOopsSub(subItem.oospMasterId);

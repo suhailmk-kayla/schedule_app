@@ -425,11 +425,11 @@ class _SubItemCard extends StatelessWidget {
       case 3:
         return subItem.availQty > 0
             ? 'Only ${subItem.availQty.toInt()} is left (Waiting for response)'
-            : 'Order Cancelled';
+            : 'Enquiry Cancelled';
       case 5:
-        return 'Order Cancelled';
+        return 'Enquiry Cancelled';
       default:
-        return 'Order Cancelled';
+        return 'Enquiry Cancelled';
     }
   }
 
