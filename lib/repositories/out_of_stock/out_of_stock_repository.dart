@@ -630,9 +630,9 @@ class OutOfStockRepository {
           oospId, oospMasterId, orderSubId, custId, salesmanId, storekeeperId, 
           dateAndTime, supplierId, productId, unitId, carId, rate, updateRate, 
           qty, availQty, baseQty, note, narration, oospFlag, createdDateTime, 
-          updatedDateTime, isCheckedflag, flag, UUID, isViewed
+          updatedDateTime, isCheckedflag, flag, UUID, isViewed, isEnquiryApproved
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
@@ -661,6 +661,7 @@ class OutOfStockRepository {
           outOfStockSub.outosSubFlag ?? 0,
           outOfStockSub.uuid,
           isViewed,
+          outOfStockSub.outosSubIsEnquiryApproved,
         ],
       );
       return const Right(null);
@@ -683,9 +684,9 @@ class OutOfStockRepository {
           oospId, oospMasterId, orderSubId, custId, salesmanId, storekeeperId, 
           dateAndTime, supplierId, productId, unitId, carId, rate, updateRate, 
           qty, availQty, baseQty, note, narration, oospFlag, createdDateTime, 
-          updatedDateTime, isCheckedflag, flag, UUID, isViewed
+          updatedDateTime, isCheckedflag, flag, UUID, isViewed, isEnquiryApproved
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
@@ -714,6 +715,7 @@ class OutOfStockRepository {
           outOfStockSub.outosSubFlag ?? 0,
           outOfStockSub.uuid,
           isViewed,
+          outOfStockSub.outosSubIsEnquiryApproved,
         ],
       );
       return const Right(null);
@@ -746,9 +748,9 @@ class OutOfStockRepository {
               oospId, oospMasterId, orderSubId, custId, salesmanId, storekeeperId, 
               dateAndTime, supplierId, productId, unitId, carId, rate, updateRate, 
               qty, availQty, baseQty, note, narration, oospFlag, createdDateTime, 
-              updatedDateTime, isCheckedflag, flag, UUID, isViewed
+              updatedDateTime, isCheckedflag, flag, UUID, isViewed, isEnquiryApproved
             ) VALUES (
-              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             ''',
             [
@@ -777,6 +779,7 @@ class OutOfStockRepository {
               outOfStockSub.outosSubFlag ?? 0,
               outOfStockSub.uuid,
               isViewed,
+              outOfStockSub.outosSubIsEnquiryApproved,
             ],
           );
         }

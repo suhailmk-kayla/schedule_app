@@ -555,7 +555,8 @@ class DatabaseHelper {
       isCheckedflag INTEGER DEFAULT 0 NOT NULL,
       flag INTEGER DEFAULT 0 NOT NULL,
       UUID TEXT DEFAULT '' NOT NULL,
-      isViewed INTEGER DEFAULT 0 NOT NULL
+      isViewed INTEGER DEFAULT 0 NOT NULL,
+      isEnquiryApproved INTEGER DEFAULT 0 NOT NULL
     );
   ''';
 
@@ -823,7 +824,8 @@ class DatabaseHelper {
         createdDateTime TEXT DEFAULT '' NOT NULL,
         updatedDateTime TEXT DEFAULT '' NOT NULL,
         isCheckedflag INTEGER DEFAULT 0 NOT NULL,
-        flag INTEGER DEFAULT 0 NOT NULL
+        flag INTEGER DEFAULT 0 NOT NULL,
+        isEnquiryApproved INTEGER DEFAULT 0 NOT NULL
       );
     ''');
   }
@@ -877,7 +879,8 @@ class DatabaseHelper {
         createdDateTime TEXT DEFAULT '' NOT NULL,
         updatedDateTime TEXT DEFAULT '' NOT NULL,
         isCheckedflag INTEGER DEFAULT 0 NOT NULL,
-        flag INTEGER DEFAULT 0 NOT NULL
+        flag INTEGER DEFAULT 0 NOT NULL,
+        isEnquiryApproved INTEGER DEFAULT 0 NOT NULL
       );
     ''');
   }
