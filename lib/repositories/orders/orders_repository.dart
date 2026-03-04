@@ -629,14 +629,14 @@ class OrdersRepository {
   }
 
   /// Get last local-only order entry (temp/draft) using negative orderId space.
-  /// Local-only orders MUST use orderId < 0 to avoid clashing with server IDs.
+  /// Returns the most negative orderId so the next id is (that - 1). Avoids reusing existing ids.
   Future<Either<Failure, Order?>> getLastLocalOrderEntry() async {
     try {
       final db = await _database;
       final maps = await db.query(
         'Orders',
         where: 'orderId < 0',
-        orderBy: 'orderId DESC', // e.g. -1 is "last", then -2, -3...
+        orderBy: 'orderId ASC', // Most negative first (-3, -2, -1) so next = min - 1
         limit: 1,
       );
 
@@ -673,7 +673,7 @@ class OrdersRepository {
   }
 
   /// Get last local-only order sub entry (belongs to temp/draft orders) using negative orderSubId space.
-  /// Local-only order subs MUST use orderSubId < 0 to avoid clashing with server IDs.
+  /// Returns the most negative orderSubId so the next id is (that - 1). Avoids reusing existing ids.
   Future<Either<Failure, OrderSub?>> getLastLocalOrderSubEntry() async {
     try {
       final db = await _database;
@@ -683,7 +683,7 @@ class OrdersRepository {
         FROM OrderSub os
         INNER JOIN Orders o ON o.orderId = os.orderId
         WHERE o.flag IN (2, 3) AND os.orderSubId < 0
-        ORDER BY os.orderSubId DESC
+        ORDER BY os.orderSubId ASC
         LIMIT 1
         ''',
       );
@@ -1356,7 +1356,7 @@ class OrdersRepository {
         // Then delete the temp order (flag = 2)
         await txn.delete(
           'Orders',
-          where: 'orderId = ? AND flag = 2',
+          where: 'orderId = ? AND flag = 3',
           whereArgs: [orderId],
         );
       });
