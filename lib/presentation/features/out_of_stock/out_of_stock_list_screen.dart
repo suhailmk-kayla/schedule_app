@@ -308,19 +308,19 @@ class _OutOfStockListScreenState extends State<OutOfStockListScreen> {
               ],
             ),
           ),
-          floatingActionButton: FloatingActionButton(
-            onPressed: () {
-              // TODO: Navigate to add out of stock (products screen)
-              // Navigator.push(
-              //   context,
-              //   MaterialPageRoute(
-              //     builder: (_) => const ProductsScreen(isOutOfStock: true),
-              //   ),
-              // );
-            },
-            backgroundColor: Colors.black,
-            child: const Icon(Icons.add, color: Colors.white),
-          ),
+          // floatingActionButton: FloatingActionButton(
+          //   onPressed: () {
+          //     // TODO: Navigate to add out of stock (products screen)
+          //     // Navigator.push(
+          //     //   context,
+          //     //   MaterialPageRoute(
+          //     //     builder: (_) => const ProductsScreen(isOutOfStock: true),
+          //     //   ),
+          //     // );
+          //   },
+          //   backgroundColor: Colors.black,
+          //   child: const Icon(Icons.add, color: Colors.white),
+          // ),
         );
       }
     );

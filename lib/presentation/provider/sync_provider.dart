@@ -1803,6 +1803,7 @@ class SyncProvider extends ChangeNotifier {
             }
             final addResult = await _outOfStockRepository.addOutOfStockMasters(
               outOfStocks,
+              isViewed: 0,
             );
             addResult.fold(
               (failure) => developer.log(
@@ -1819,6 +1820,7 @@ class SyncProvider extends ChangeNotifier {
             // CRITICAL FIX: Await database operation to prevent locks
             final addResult = await _outOfStockRepository.addOutOfStockMasters(
               outOfStocks,
+              isViewed: 0,
             );
             addResult.fold(
               (failure) => developer.log(
@@ -1980,7 +1982,10 @@ class SyncProvider extends ChangeNotifier {
             }).toList();
 
             // Store masters first (INSERT OR REPLACE will update if exists)
-            final addMastersResult = await _outOfStockRepository.addOutOfStockMasters(masters);
+            final addMastersResult = await _outOfStockRepository.addOutOfStockMasters(
+              masters,
+              isViewed: 0,
+            );
             addMastersResult.fold(
               (failure) => developer.log(
                 'SyncProvider: Failed to add out of stock masters: ${failure.message}',

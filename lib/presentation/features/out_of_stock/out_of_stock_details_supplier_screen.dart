@@ -31,7 +31,8 @@ class _OutOfStockDetailsSupplierScreenState
   String? _errorMessage;
   final TextEditingController _noteController = TextEditingController();
   final TextEditingController _availableQtyController = TextEditingController();
-  bool _isAvailable = true; // true = Available, false = Out of Stock
+  /// null = nothing selected, true = Available, false = Out of Stock
+  bool? _selectedAvailability;
 
   @override
   void initState() {
@@ -83,8 +84,8 @@ class _OutOfStockDetailsSupplierScreenState
     _noteController.text = sub.note;
     // Initialize available qty with existing value if present, otherwise 0
     _availableQtyController.text = sub.availQty > 0 ? sub.availQty.toString() : '0';
-    // Initialize isAvailable based on current flag (2 = Available, 3 = Out of Stock)
-    _isAvailable = sub.oospFlag == 2;
+    // No default selection: user must choose Available or Out of Stock
+    _selectedAvailability = null;
 
     setState(() {
       _subWithDetails = sub;
@@ -95,14 +96,19 @@ class _OutOfStockDetailsSupplierScreenState
   void _handleInform() {
     if (_subWithDetails == null) return;
 
+    if (_selectedAvailability == null) {
+      ToastHelper.showWarning('Please select Available or Out of Stock');
+      return;
+    }
+
     final provider = Provider.of<OutOfStockProvider>(context, listen: false);
     setState(() => _isLoading = true);
 
     // Calculate available qty and flag
     double availQty = 0.0;
-    int oospFlag = 2; // Default: Available
+    int oospFlag = 2; // Available
 
-    if (!_isAvailable) {
+    if (_selectedAvailability! == false) {
       // Out of Stock
       oospFlag = 3;
       final qtyText = _availableQtyController.text.trim();
@@ -214,9 +220,9 @@ class _OutOfStockDetailsSupplierScreenState
                         subItem: _subWithDetails!,
                         noteController: _noteController,
                         availableQtyController: _availableQtyController,
-                        isAvailable: _isAvailable,
-                        onAvailableChanged: (value) {
-                          setState(() => _isAvailable = value);
+                        selectedAvailability: _selectedAvailability,
+                        onAvailabilityChanged: (value) {
+                          setState(() => _selectedAvailability = value);
                         },
                         canEdit: canEdit,
                         canShowInformButton: canShowInformButton,
@@ -397,8 +403,8 @@ class _SubItemCard extends StatelessWidget {
   final OutOfStockSubWithDetails subItem;
   final TextEditingController noteController;
   final TextEditingController availableQtyController;
-  final bool isAvailable;
-  final ValueChanged<bool> onAvailableChanged;
+  final bool? selectedAvailability;
+  final ValueChanged<bool?> onAvailabilityChanged;
   final bool canEdit;
   final bool canShowInformButton;
   final VoidCallback onInform;
@@ -407,8 +413,8 @@ class _SubItemCard extends StatelessWidget {
     required this.subItem,
     required this.noteController,
     required this.availableQtyController,
-    required this.isAvailable,
-    required this.onAvailableChanged,
+    required this.selectedAvailability,
+    required this.onAvailabilityChanged,
     required this.canEdit,
     required this.canShowInformButton,
     required this.onInform,
@@ -527,7 +533,7 @@ class _SubItemCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // Available/Out of Stock checkboxes
+              // Available/Out of Stock checkboxes (no default selection)
               Row(
                 children: [
                   Expanded(
@@ -536,10 +542,14 @@ class _SubItemCard extends StatelessWidget {
                         Row(
                           children: [
                             Checkbox(
-                              value: isAvailable, // true when Available is selected
+                              value: selectedAvailability == true,
+                              tristate: true,
                               onChanged: (value) {
-                                // When Available is checked, set isAvailable to true
-                                onAvailableChanged(true);
+                                if (value == true) {
+                                  onAvailabilityChanged(true);
+                                } else {
+                                  onAvailabilityChanged(selectedAvailability == true ? null : selectedAvailability);
+                                }
                               },
                               activeColor: Colors.green,
                             ),
@@ -549,10 +559,14 @@ class _SubItemCard extends StatelessWidget {
                         Row(
                           children: [
                             Checkbox(
-                              value: !isAvailable, // true when Out of Stock is selected
+                              value: selectedAvailability == false,
+                              tristate: true,
                               onChanged: (value) {
-                                // When Out of Stock is checked, set isAvailable to false
-                                onAvailableChanged(false);
+                                if (value == true) {
+                                  onAvailabilityChanged(false);
+                                } else {
+                                  onAvailabilityChanged(selectedAvailability == false ? null : selectedAvailability);
+                                }
                               },
                               activeColor: Colors.red,
                             ),
@@ -563,7 +577,7 @@ class _SubItemCard extends StatelessWidget {
                     ),
                   ),
                   // Available Qty input (only if Out of Stock is selected)
-                  if (!isAvailable)
+                  if (selectedAvailability == false)
                     SizedBox(
                       width: 150,
                       child: TextField(
