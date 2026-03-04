@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'dart:developer' as developer;
 import '../../repositories/customers/customers_repository.dart';
 import '../../repositories/routes/routes_repository.dart';
 import '../../repositories/salesman/salesman_repository.dart';
@@ -438,14 +437,15 @@ class CustomersProvider extends ChangeNotifier {
   /// Create temporary order for customer
   Future<Order?> _createTempOrder(Customer customer) async {
     final userId = await StorageHelper.getUserId();
-    final lastResult = await _ordersRepository.getLastOrderEntry();
-    int orderId = 1;
-
-    lastResult.fold(
+    // Local-only temp/draft orders use negative orderId space to avoid clashing with server IDs.
+    // Next local orderId: -1, -2, -3, ...
+    final lastLocalResult = await _ordersRepository.getLastLocalOrderEntry();
+    int orderId = -1;
+    lastLocalResult.fold(
       (failure) => null,
       (order) {
         if (order != null) {
-          orderId = order.orderId + 1; // Use orderId (int), not orderInvNo (String)
+          orderId = order.orderId - 1;
         }
       },
     );
@@ -453,8 +453,7 @@ class CustomersProvider extends ChangeNotifier {
     final now = _getDBFormatDateTime();
     final tempOrder = Order(
       id: 0,
-      // IMPORTANT (KMP parity): temp/draft Orders.orderId is a locally generated positive ID,
-      // not -1. This value is later replaced by the server-assigned id when submitted.
+      // Local-only orderId is negative to guarantee no collision with server order IDs.
       orderId: orderId,
       uuid: '',
       orderInvNo: 'ORDER$orderId',

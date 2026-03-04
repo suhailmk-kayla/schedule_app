@@ -628,6 +628,29 @@ class OrdersRepository {
     }
   }
 
+  /// Get last local-only order entry (temp/draft) using negative orderId space.
+  /// Local-only orders MUST use orderId < 0 to avoid clashing with server IDs.
+  Future<Either<Failure, Order?>> getLastLocalOrderEntry() async {
+    try {
+      final db = await _database;
+      final maps = await db.query(
+        'Orders',
+        where: 'orderId < 0',
+        orderBy: 'orderId DESC', // e.g. -1 is "last", then -2, -3...
+        limit: 1,
+      );
+
+      if (maps.isEmpty) {
+        return const Right(null);
+      }
+
+      final order = Order.fromMap(maps.first);
+      return Right(order);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
   /// Get last inserted order sub
   Future<Either<Failure, OrderSub?>> getLastOrderSubEntry() async {
     try {
@@ -644,6 +667,72 @@ class OrdersRepository {
 
       final orderSub = OrderSub.fromMap(maps.first);
       return Right(orderSub);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Get last local-only order sub entry (belongs to temp/draft orders) using negative orderSubId space.
+  /// Local-only order subs MUST use orderSubId < 0 to avoid clashing with server IDs.
+  Future<Either<Failure, OrderSub?>> getLastLocalOrderSubEntry() async {
+    try {
+      final db = await _database;
+      final maps = await db.rawQuery(
+        '''
+        SELECT os.*
+        FROM OrderSub os
+        INNER JOIN Orders o ON o.orderId = os.orderId
+        WHERE o.flag IN (2, 3) AND os.orderSubId < 0
+        ORDER BY os.orderSubId DESC
+        LIMIT 1
+        ''',
+      );
+
+      if (maps.isEmpty) {
+        return const Right(null);
+      }
+
+      final orderSub = OrderSub.fromMap(maps.first);
+      return Right(orderSub);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Delete a local-only (temp/draft) order and all its subs by orderId.
+  /// Safe because local-only orders use negative orderId space, so it cannot match server orders.
+  Future<Either<Failure, void>> deleteLocalOrderAndSubsByOrderId(int orderId) async {
+    try {
+      final db = await _database;
+      await db.transaction((txn) async {
+        await txn.delete(
+          'OrderSub',
+          where: 'orderId = ?',
+          whereArgs: [orderId],
+        );
+        await txn.delete(
+          'Orders',
+          where: 'orderId = ? AND flag IN (2, 3)',
+          whereArgs: [orderId],
+        );
+      });
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+  /// Delete local-only order subs (negative orderSubId) for a given orderId.
+  /// Used for existing order "inline new items" placeholders before saving server response.
+  Future<Either<Failure, void>> deleteLocalOrderSubsByOrderId(int orderId) async {
+    try {
+      final db = await _database;
+      await db.delete(
+        'OrderSub',
+        where: 'orderId = ? AND orderSubId < 0',
+        whereArgs: [orderId],
+      );
+      return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
     }
@@ -1575,6 +1664,10 @@ class OrdersRepository {
       if (addResult.isLeft) {
         return addResult.map((_) => orderApi.data);
       }
+
+      // 3.5. Remove any local-only placeholder subs (negative IDs) so server-returned subs are the source of truth.
+      // This ensures inline new items get properly reassigned with server IDs after the API call.
+      await deleteLocalOrderSubsByOrderId(orderApi.data.orderId);
 
       // 4. Store order subs in local DB
       // Backend updates replacements in place (same ID), so INSERT OR REPLACE works correctly

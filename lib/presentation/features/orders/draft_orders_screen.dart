@@ -301,23 +301,23 @@ class _DraftOrdersScreenState extends State<DraftOrdersScreen> {
           );
         },
       ),
-      floatingActionButton: (_userType == 3 || _userType == 1)
-          ? FloatingActionButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const CreateOrderScreen(),
-                  ),
-                ).then((_) {
-                  // Reload draft orders after creating new one
-                  ordersProvider.loadDraftOrders();
-                });
-              },
-              backgroundColor: Colors.black,
-              child: const Icon(Icons.add, color: Colors.white),
-            )
-          : null,
+      // floatingActionButton: (_userType == 3 || _userType == 1)
+      //     ? FloatingActionButton(
+      //         onPressed: () {
+      //           Navigator.push(
+      //             context,
+      //             MaterialPageRoute(
+      //               builder: (_) => const CreateOrderScreen(),
+      //             ),
+      //           ).then((_) {
+      //             // Reload draft orders after creating new one
+      //             ordersProvider.loadDraftOrders();
+      //           });
+      //         },
+      //         backgroundColor: Colors.black,
+      //         child: const Icon(Icons.add, color: Colors.white),
+      //       )
+      //     : null,
         );
       },
     );
