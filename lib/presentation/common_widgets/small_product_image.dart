@@ -90,6 +90,7 @@ class SmallProductImage extends StatelessWidget {
             onTap: hasImage ? () => _showImagePreview(context, imageUrl!) : null,
             child: hasImage
                 ? Image.network(
+                    
                     ImageUrlFixer.fix(imageUrl!),
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Container(
