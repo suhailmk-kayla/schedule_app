@@ -902,6 +902,10 @@ class _SubItemCard extends StatelessWidget {
   /// Fix 2026-02-03, by AI: Green button handler. When pending supplier exists
   /// (after "out of stock" or "rejected" reselect), call onSendToPendingSupplier.
   VoidCallback? _getGreenButtonOnPressed() {
+    // Terminal state: no further actions once marked Not Available.
+    if (subItem.oospFlag == 4) {
+      return null;
+    }
     if (subItem.supplierId == -1 && pendingSupplierId == null) {
       return onSelectSupplier;
     }
@@ -918,6 +922,10 @@ class _SubItemCard extends StatelessWidget {
   /// Fix 2026-02-03, by AI: Green button label. "Send to Supplier" when pending
   /// selection exists (after out of stock or rejected reselect), else existing logic.
   String _getGreenButtonLabel() {
+    // Terminal state: no further actions once marked Not Available.
+    if (subItem.oospFlag == 4) {
+      return 'Not Available';
+    }
     if (subItem.supplierId == -1 && pendingSupplierId == null) {
       return 'Select Supplier';
     }
@@ -947,7 +955,9 @@ class _SubItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canShowActions = subItem.oospFlag == 0 || subItem.oospFlag == 3 || subItem.oospFlag == 4;
+    // Terminal state: once marked "Not Available" (oospFlag==4), admin should not be able
+    // to perform any further actions (no reject/not-available, no change supplier, no send).
+    final canShowActions = subItem.oospFlag == 0 || subItem.oospFlag == 3;
     // Fix 2026-02-03, by AI: Show pending supplier name when admin has selected
     // a new supplier (not yet sent) after original returned "out of stock"
     final supplierName = (pendingSupplierName?.isNotEmpty == true)

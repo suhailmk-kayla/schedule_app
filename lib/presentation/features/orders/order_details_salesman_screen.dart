@@ -561,13 +561,32 @@ final hasReportItem = items.any(
                 borderRadius: BorderRadius.circular(8),
                 color: Colors.green.withValues(alpha: 0.1),
               ),
-              child: const Text(
-                'Status : Order Completed',
-                style: TextStyle(
-                  color: Colors.green,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Status : Order Completed',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    order.orderIsBilled == 1
+                        ? 'Billed'
+                        : 'Not Billed',
+                    style: TextStyle(
+                      color: order.orderIsBilled == 1
+                          ? Colors.green
+                          : Colors.orange.shade700,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             ),
 
@@ -1122,7 +1141,10 @@ class _OrderItemCardState extends State<_OrderItemCard> {
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Colors.black12),
+        side: BorderSide(
+          color: orderSub.orderSubQty == 0 ? Colors.red : Colors.black12,
+          width: orderSub.orderSubQty == 0 ? 2 : 1,
+        ),
       ),
       elevation: 4,
       child: Padding(
@@ -1506,6 +1528,8 @@ class _OrderItemCardState extends State<_OrderItemCard> {
   
   ({String text, Color color}) _getStockStatus(OrderSub orderSub) {
   final orderFlag = orderSub.orderSubOrdrFlag;
+  final bool isCancelledItem =
+      orderSub.orderSubQty == 0 || orderFlag == OrderSubFlag.cancelled;
 
   // DEBUG: Log stock status evaluation inputs
   developer.log(
@@ -1516,6 +1540,11 @@ class _OrderItemCardState extends State<_OrderItemCard> {
     name: 'OrderDetailsSalesman',
   );
   
+  // Cancelled: never show as available / only X left
+  if (isCancelledItem) {
+    return (text: 'Cancelled', color: Colors.red);
+  }
+
   // Flag < 3 (inStock = 2, notChecked = 1, newItem = 0) = Available
   if (orderFlag < OrderSubFlag.outOfStock) {
     return (text: 'Available', color: Colors.green);
@@ -1628,14 +1657,20 @@ class _CompletedOrderItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final flag = item.orderSub.orderSubOrdrFlag;
-    final qtyLabel = flag > OrderSubFlag.inStock
+    final bool isCancelledItem =
+        item.orderSub.orderSubQty == 0 || flag == OrderSubFlag.cancelled;
+    final qtyLabel = isCancelledItem
+        ? '0'
+        : flag > OrderSubFlag.inStock
         ? item.orderSub.orderSubAvailableQty.toString()
         : item.orderSub.orderSubQty.toString();
 
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Colors.black12),
+        side: BorderSide(
+          color: item.orderSub.orderSubQty == 0 ? Colors.red : Colors.black12,
+        ),
       ),
       elevation: 2,
       child: Padding(

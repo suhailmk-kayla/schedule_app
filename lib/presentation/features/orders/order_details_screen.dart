@@ -204,6 +204,41 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 ),
               ),
             ),
+          if (order.orderApproveFlag == OrderApprovalFlag.completed)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                color: Colors.green.withOpacity(0.1),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Status: Order Completed',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    order.orderIsBilled == 1 ? 'Billed' : 'Not Billed',
+                    style: TextStyle(
+                      color: order.orderIsBilled == 1
+                          ? Colors.green
+                          : Colors.orange.shade700,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (order.orderNote?.isNotEmpty == true) ...[
             const Text(
               'Note',
@@ -526,7 +561,9 @@ class _OrderItemCard extends StatelessWidget {
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Colors.black12),
+        side: BorderSide(
+          color: item.orderSub.orderSubQty == 0 ? Colors.red : Colors.black12,
+        ),
       ),
       elevation: 2,
       child: Padding(
@@ -691,11 +728,13 @@ class _OrderItemCard extends StatelessWidget {
   }
 
   String _quantityDisplay(OrderItemDetail detail) {
-    final flag = detail.orderSub.orderSubFlag;
+    final flag = detail.orderSub.orderSubOrdrFlag;
+    final bool isCancelledItem =
+        detail.orderSub.orderSubQty == 0 || flag == OrderSubFlag.cancelled;
     final useAvailable = flag > OrderSubFlag.inStock;
-    final qty = useAvailable
-        ? detail.orderSub.orderSubAvailableQty
-        : detail.orderSub.orderSubQty;
+    final qty = isCancelledItem
+        ? 0
+        : (useAvailable ? detail.orderSub.orderSubAvailableQty : detail.orderSub.orderSubQty);
     return qty.toString();
   }
 
@@ -715,7 +754,7 @@ class _OrderItemCard extends StatelessWidget {
       return note.split(ApiConfig.noteSplitDel).last;
     }
     if (detail.orderSub.orderSubQty == 0 ||
-        detail.orderSub.orderSubFlag == OrderSubFlag.cancelled) {
+        detail.orderSub.orderSubOrdrFlag == OrderSubFlag.cancelled) {
       return 'This item is cancelled';
     }
     return '';
@@ -740,7 +779,9 @@ class _ReplacedOrderItemCard extends StatelessWidget {
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Colors.black12),
+        side: BorderSide(
+          color: original.orderSub.orderSubQty == 0 ? Colors.red : Colors.black12,
+        ),
       ),
       elevation: 2,
       child: Padding(
@@ -1011,14 +1052,20 @@ class _CompletedOrderItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final flag = item.orderSub.orderSubOrdrFlag;
-    final qtyLabel = flag > OrderSubFlag.inStock
+    final bool isCancelledItem =
+        item.orderSub.orderSubQty == 0 || flag == OrderSubFlag.cancelled;
+    final qtyLabel = isCancelledItem
+        ? '0'
+        : flag > OrderSubFlag.inStock
         ? item.orderSub.orderSubAvailableQty.toString()
         : item.orderSub.orderSubQty.toString();
 
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Colors.black12),
+        side: BorderSide(
+          color: item.orderSub.orderSubQty == 0 ? Colors.red : Colors.black12,
+        ),
       ),
       elevation: 2,
       child: Padding(

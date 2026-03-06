@@ -688,7 +688,7 @@ class _OrderItemCardState extends State<_OrderItemCard> {
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Colors.black12),
+        side:  BorderSide(color:orderSub.orderSubQty==0 ? Colors.red : Colors.black12,width: orderSub.orderSubQty==0 ? 2 : 1,),
       ),
       elevation: 4,
       child: Padding(
@@ -1022,6 +1022,7 @@ class _OrderItemCardState extends State<_OrderItemCard> {
             if (isChecked &&
                 !hasStatus &&
                 !isCheckingOrCancelled &&
+                orderSub.orderSubQty > 0 &&
                 _shouldShowPacking(orderSub)) ...[
               const SizedBox(height: 8),
               Row(
@@ -1131,6 +1132,18 @@ class _OrderItemCardState extends State<_OrderItemCard> {
   }
 
   Widget _buildStockStatus(OrderSub orderSub) {
+    final bool isCancelledItem =
+        orderSub.orderSubQty == 0 || orderSub.orderSubOrdrFlag == OrderSubFlag.cancelled;
+    if (isCancelledItem) {
+      return const Text(
+        'Cancelled',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Colors.red,
+        ),
+      );
+    }
     if (orderSub.orderSubOrdrFlag >= OrderSubFlag.outOfStock) {
       final orderFlag = orderSub.orderSubOrdrFlag;
       String statusText;
@@ -1202,14 +1215,20 @@ class _CompletedOrderItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final flag = item.orderSub.orderSubOrdrFlag;
-    final qtyLabel = flag > OrderSubFlag.inStock
+    final bool isCancelledItem =
+        item.orderSub.orderSubQty == 0 || flag == OrderSubFlag.cancelled;
+    final qtyLabel = isCancelledItem
+        ? '0'
+        : flag > OrderSubFlag.inStock
         ? item.orderSub.orderSubAvailableQty.toString()
         : item.orderSub.orderSubQty.toString();
 
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Colors.black12),
+        side: BorderSide(
+          color: item.orderSub.orderSubQty == 0 ? Colors.red : Colors.black12,
+        ),
       ),
       elevation: 2,
       child: Padding(

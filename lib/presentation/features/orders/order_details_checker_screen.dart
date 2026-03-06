@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -129,6 +128,11 @@ class _OrderDetailsCheckerScreenState
 
   bool _isItemCountable(OrderItemDetail detail) {
     final flag = detail.orderSub.orderSubOrdrFlag;
+    // Cancelled items should not be countable/required for checking or image upload.
+    // Treat as cancelled when either qty is 0 OR workflow flag is cancelled.
+    if (detail.orderSub.orderSubQty == 0 || flag == OrderSubFlag.cancelled) {
+      return false;
+    }
     if (flag <= OrderSubFlag.inStock) {
       return true;
     }
@@ -155,6 +159,11 @@ class _OrderDetailsCheckerScreenState
 
   bool _isSubmissionEnabled(List<OrderItemDetail> items) {
     final totalCount = _availableItemCount(items);
+    // When all items are cancelled, allow submit so the order can move forward.
+    // Cancelled items do not require images.
+    if (items.isNotEmpty && totalCount == 0) {
+      return true;
+    }
     if (totalCount == 0) {
       return false;
     }
@@ -929,6 +938,8 @@ class _CheckerOrderItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final flag = item.orderSub.orderSubOrdrFlag;
+    final bool isCancelledItem =
+        item.orderSub.orderSubQty == 0 || flag == OrderSubFlag.cancelled;
     final qtyLabel = flag > OrderSubFlag.inStock
         ? item.orderSub.orderSubAvailableQty.toString()
         : item.orderSub.orderSubQty.toString();
@@ -936,7 +947,9 @@ class _CheckerOrderItemCard extends StatelessWidget {
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Colors.black12),
+        side: BorderSide(
+          color: item.orderSub.orderSubQty == 0 ? Colors.red : Colors.black12,
+        ),
       ),
       elevation: 2,
       child: Padding(
@@ -947,10 +960,14 @@ class _CheckerOrderItemCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Checkbox(
-                  value: isChecked,
-                  onChanged: canCheck ? (value) => onCheckedChanged(value ?? false) : null,
-                ),
+                if (!isCancelledItem)
+                  Checkbox(
+                    value: isChecked,
+                    onChanged: canCheck
+                        ? (value) => onCheckedChanged(value ?? false)
+                        : null,
+                  ),
+                if (!isCancelledItem) const SizedBox(width: 8),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -1011,6 +1028,17 @@ class _CheckerOrderItemCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (isCancelledItem) ...[
+              const SizedBox(height: 6),
+              const Text(
+                'Status: Item Cancelled',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.red,
+                ),
+              ),
+            ],
             const SizedBox(height: 6),
             // _KeyValueRow(label: 'Brand', value: item.productBrand),
             // _KeyValueRow(label: 'Sub Brand', value: item.productSubBrand),
@@ -1052,123 +1080,125 @@ class _CheckerOrderItemCard extends StatelessWidget {
             //   ],
             // ),
             const SizedBox(height: 8),
-            if (!disableEditing)
+            if (!isCancelledItem) ...[
+              if (!disableEditing)
+                TextField(
+                  controller: qtyController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Quantity',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: onQtyChanged,
+                )
+              else
+                _KeyValueRow(
+                  label: 'Quantity',
+                  value: qtyController.text,
+                ),
+              const SizedBox(height: 8),
               TextField(
-                controller: qtyController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                controller: noteController,
+                enabled: !disableEditing,
                 decoration: const InputDecoration(
-                  labelText: 'Quantity',
+                  labelText: 'Note',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
-                onChanged: onQtyChanged,
-              )
-            else
-              _KeyValueRow(
-                label: 'Quantity',
-                value: qtyController.text,
+                minLines: 1,
+                maxLines: 1,
+                onChanged: onNoteChanged,
               ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: noteController,
-              enabled: !disableEditing,
-              decoration: const InputDecoration(
-                labelText: 'Note',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              minLines: 1,
-              maxLines: 1,
-              onChanged: onNoteChanged,
-            ),
-            if (!disableEditing) ...[
-              const SizedBox(height: 8),
-              // Image upload button - disabled if max reached
-              OutlinedButton.icon(
-                onPressed: (imageDataUris.length >= 3) ? null : onImagePick,
-                icon: const Icon(Icons.camera_alt, size: 18),
-                label: Text('Upload Image (${imageDataUris.length}/3)'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-              ),
-              // Image previews if images are selected
-              if (imageDataUris.isNotEmpty) ...[
+              if (!disableEditing) ...[
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: imageDataUris.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final imageDataUri = entry.value;
-                    // Check if it's a base64 data URI or a URL
-                    final isDataUri = imageDataUri.startsWith('data:image');
-                    return Stack(
-                      children: [
-                        InkWell(
-                          onTap: () => onImagePreview(context, imageDataUri),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.grey.shade300),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: isDataUri
-                                  ? Image.memory(
-                                      base64Decode(imageDataUri.split(',').last),
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return const Center(
-                                          child: Icon(Icons.error, color: Colors.red),
-                                        );
-                                      },
-                                    )
-                                  : Image.network(
-                                      imageDataUri,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return const Center(
-                                          child: Icon(Icons.error, color: Colors.red),
-                                        );
-                                      },
-                                      loadingBuilder: (context, child, loadingProgress) {
-                                        if (loadingProgress == null) return child;
-                                        return const Center(
-                                          child: SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(strokeWidth: 2),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          top: 2,
-                          right: 2,
-                          child: Material(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(10),
-                            child: InkWell(
-                              onTap: () => onImageRemove(index),
-                              borderRadius: BorderRadius.circular(10),
-                              child: const Padding(
-                                padding: EdgeInsets.all(3),
-                                child: Icon(Icons.remove, color: Colors.red, size: 14),
+                // Image upload button - disabled if max reached
+                OutlinedButton.icon(
+                  onPressed: (imageDataUris.length >= 3) ? null : onImagePick,
+                  icon: const Icon(Icons.camera_alt, size: 18),
+                  label: Text('Upload Image (${imageDataUris.length}/3)'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+                // Image previews if images are selected
+                if (imageDataUris.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: imageDataUris.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final imageDataUri = entry.value;
+                      // Check if it's a base64 data URI or a URL
+                      final isDataUri = imageDataUri.startsWith('data:image');
+                      return Stack(
+                        children: [
+                          InkWell(
+                            onTap: () => onImagePreview(context, imageDataUri),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: isDataUri
+                                    ? Image.memory(
+                                        base64Decode(imageDataUri.split(',').last),
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return const Center(
+                                            child: Icon(Icons.error, color: Colors.red),
+                                          );
+                                        },
+                                      )
+                                    : Image.network(
+                                        imageDataUri,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) {
+                                          return const Center(
+                                            child: Icon(Icons.error, color: Colors.red),
+                                          );
+                                        },
+                                        loadingBuilder: (context, child, loadingProgress) {
+                                          if (loadingProgress == null) return child;
+                                          return const Center(
+                                            child: SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(strokeWidth: 2),
+                                            ),
+                                          );
+                                        },
+                                      ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
-                ),
+                          Positioned(
+                            top: 2,
+                            right: 2,
+                            child: Material(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(10),
+                              child: InkWell(
+                                onTap: () => onImageRemove(index),
+                                borderRadius: BorderRadius.circular(10),
+                                child: const Padding(
+                                  padding: EdgeInsets.all(3),
+                                  child: Icon(Icons.remove, color: Colors.red, size: 14),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ],
               ],
             ],
             if (replacementItem != null) ...[
@@ -1196,6 +1226,8 @@ class _CompletedOrderItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final flag = item.orderSub.orderSubOrdrFlag;
+    final bool isCancelledItem =
+        item.orderSub.orderSubQty == 0 || flag == OrderSubFlag.cancelled;
     final qtyLabel = flag > OrderSubFlag.inStock
         ? item.orderSub.orderSubAvailableQty.toString()
         : item.orderSub.orderSubQty.toString();
@@ -1203,7 +1235,9 @@ class _CompletedOrderItemCard extends StatelessWidget {
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Colors.black12),
+        side: BorderSide(
+          color: item.orderSub.orderSubQty == 0 ? Colors.red : Colors.black12,
+        ),
       ),
       elevation: 2,
       child: Padding(
@@ -1230,6 +1264,17 @@ class _CompletedOrderItemCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (isCancelledItem) ...[
+              const SizedBox(height: 6),
+              const Text(
+                'Status: Item Cancelled',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.red,
+                ),
+              ),
+            ],
             const SizedBox(height: 6),
             _KeyValueRow(label: 'Brand', value: item.productBrand),
             // _KeyValueRow(label: 'Sub Brand', value: item.productSubBrand),
