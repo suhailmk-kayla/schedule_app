@@ -281,9 +281,7 @@ class _FinalBillTab extends StatefulWidget {
 class _FinalBillTabState extends State<_FinalBillTab> {
   bool _isMarkingAsBilled = false;
   final TextEditingController _freightController = TextEditingController();
-  double? _enteredFreightCharge;
   bool _hasInitializedFreightField = false;
-  bool _isSavingFreightCharge = false;
 
   @override
   void dispose() {
@@ -297,103 +295,10 @@ class _FinalBillTabState extends State<_FinalBillTab> {
     }
     if (freightCharge <= 0) {
       _freightController.clear();
-      _enteredFreightCharge = null;
     } else {
       _freightController.text = freightCharge.toStringAsFixed(2);
-      _enteredFreightCharge = freightCharge;
     }
     _hasInitializedFreightField = true;
-  }
-
-  void _onFreightChanged(String value) {
-    setState(() {
-      _enteredFreightCharge = double.tryParse(value.trim());
-    });
-  }
-
-  Future<void> _handleSaveFreightCharge() async {
-    if (_enteredFreightCharge == null) {
-      return;
-    }
-    setState(() {
-      _isSavingFreightCharge = true;
-    });
-    try {
-      final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
-      final currentOrder = ordersProvider.orderDetails?.order ?? widget.order;
-      final double newFreight = _enteredFreightCharge!;
-
-      final Order updatedOrder = Order(
-        id: currentOrder.id,
-        orderId: currentOrder.orderId,
-        uuid: currentOrder.uuid,
-        orderInvNo: currentOrder.orderInvNo,
-        orderCustId: currentOrder.orderCustId,
-        orderCustName: currentOrder.orderCustName,
-        orderSalesmanId: currentOrder.orderSalesmanId,
-        orderStockKeeperId: currentOrder.orderStockKeeperId,
-        orderBillerId: currentOrder.orderBillerId,
-        orderCheckerId: currentOrder.orderCheckerId,
-        orderDateTime: currentOrder.orderDateTime,
-        orderTotal: currentOrder.orderTotal,
-        orderFreightCharge: newFreight,
-        orderNote: currentOrder.orderNote,
-        orderApproveFlag: currentOrder.orderApproveFlag,
-        orderIsBilled: currentOrder.orderIsBilled,
-        orderFlag: currentOrder.orderFlag,
-        createdAt: currentOrder.createdAt,
-        updatedAt: currentOrder.updatedAt,
-        items: currentOrder.items,
-      );
-
-      final bool success = await ordersProvider.updateOrder(updatedOrder);
-
-      if (!mounted) {
-        return;
-      }
-
-      if (success) {
-        // Refresh order details so UI reflects latest values
-        await ordersProvider.loadOrderDetails(updatedOrder.orderId);
-        setState(() {
-          _hasInitializedFreightField = false;
-          _enteredFreightCharge = newFreight;
-          _isSavingFreightCharge = false;
-        });
-        _freightController.text = newFreight.toStringAsFixed(2);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Freight charge updated successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        setState(() {
-          _isSavingFreightCharge = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              ordersProvider.errorMessage ?? 'Failed to update freight charge',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isSavingFreightCharge = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to update freight charge: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
   }
 
   Future<void> _handleMarkAsBilled(bool? value) async {
@@ -844,7 +749,9 @@ class _EstimatedItemCard extends StatelessWidget {
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Colors.black12),
+        side: BorderSide(
+          color: orderSub.orderSubQty == 0 ? Colors.red : Colors.black12,
+        ),
       ),
       elevation: 2,
       child: Padding(
@@ -1002,9 +909,13 @@ class _FinalItemCard extends StatelessWidget {
     final orderSub = item.orderSub;
     final flag = orderSub.orderSubOrdrFlag;
     // Use availableQty if out of stock, otherwise use qty
-    final qty = flag > OrderSubFlag.inStock
-        ? orderSub.orderSubAvailableQty
-        : orderSub.orderSubQty;
+    final bool isCancelledItem =
+        orderSub.orderSubQty == 0 || flag == OrderSubFlag.cancelled;
+    final qty = isCancelledItem
+        ? 0
+        : (flag > OrderSubFlag.inStock
+            ? orderSub.orderSubAvailableQty
+            : orderSub.orderSubQty);
     final total = orderSub.orderSubUpdateRate * qty;
 
     final String checkerNote = _extractCheckerNote(orderSub.orderSubNote);
@@ -1012,7 +923,9 @@ class _FinalItemCard extends StatelessWidget {
     return Card(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Colors.black12),
+        side: BorderSide(
+          color: orderSub.orderSubQty == 0 ? Colors.red : Colors.black12,
+        ),
       ),
       elevation: 2,
       child: Padding(
@@ -1073,6 +986,17 @@ class _FinalItemCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (isCancelledItem) ...[
+              const SizedBox(height: 6),
+              const Text(
+                'Cancelled',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.red,
+                ),
+              ),
+            ],
             // Checker checked images (only in Final Bill)
             if (orderSub.checkerImages != null &&
                 orderSub.checkerImages!.isNotEmpty) ...[

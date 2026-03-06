@@ -3165,14 +3165,14 @@ _setError(failure.message);
     if (markAsReplaced) {
       orderFlag = OrderSubFlag.replaced;
     } else if (updatedQtyMap.containsKey(sub.orderSubId)) {
-      final newQty = updatedQtyMap[sub.orderSubId] ?? 0.0;
-      final message = newQty == 0
+      final double newQty = updatedQtyMap[sub.orderSubId] ?? 0.0;
+      final String message = newQty == 0
           ? 'Checker cancelled Item(qty : ${qty.toStringAsFixed(2)})'
           : 'Checker changed Item quantity (${qty.toStringAsFixed(2)} -> ${newQty.toStringAsFixed(2)})';
       note = _appendCheckerNote(note, message);
       qty = newQty;
       availableQty = 0.0;
-      orderFlag = OrderSubFlag.inStock;
+      orderFlag = newQty == 0 ? OrderSubFlag.cancelled : OrderSubFlag.inStock;
     }
 
     final payload = {
@@ -3213,9 +3213,10 @@ _setError(failure.message);
     String note = noteMap[sub.orderSubId]?.trim().isNotEmpty == true ? noteMap[sub.orderSubId]!.trim() : (sub.orderSubNote ?? '');
 
     if (updatedQtyMap.containsKey(sub.orderSubId)) {
-      qty = updatedQtyMap[sub.orderSubId] ?? 0.0;
+      final double newQty = updatedQtyMap[sub.orderSubId] ?? 0.0;
+      qty = newQty;
       availableQty = 0.0;
-      orderFlag = OrderSubFlag.inStock;
+      orderFlag = newQty == 0 ? OrderSubFlag.cancelled : OrderSubFlag.inStock;
     }
 
     final payload = {
@@ -3524,6 +3525,17 @@ _setError(failure.message);
           }
         },
       );
+      //get the current salesman for the orderfor notifying the change
+      final orderResult = await _ordersRepository.getOrderById(orderId);
+      orderResult.fold(
+        (_) {},
+        (order) {
+          userIds.add({
+            'user_id': order?.orderSalesmanId ?? -1,
+            'silent_push': 0,
+          });
+        },
+      );
       final dataIds = [
         {'table': 8, 'id': orderId}
       ];
@@ -3614,7 +3626,10 @@ _setError(failure.message);
           'order_sub_qty': sub.orderSubQty,
           'order_sub_available_qty': sub.orderSubAvailableQty,
           'order_sub_unit_base_qty': sub.orderSubUnitBaseQty,
-          'order_sub_ordr_flag': 1, // Normal flag
+          // If qty is set to 0 in edits, treat this line as cancelled.
+          // Otherwise keep normal flag (1) so storekeeper can re-check stock.
+          'order_sub_ordr_flag':
+              sub.orderSubQty == 0 ? OrderSubFlag.cancelled : 1,
           'order_sub_is_checked_flag': sub.orderSubIsCheckedFlag,
           'order_sub_note': sub.orderSubNote ?? '',
           'order_sub_narration': sub.orderSubNarration ?? '',
