@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'order_api.g.dart';
@@ -113,19 +115,25 @@ class OrderSubApi {
 /// Order Model
 /// Converted from KMP's Order class
 @JsonSerializable()
+
+/// Order Model
 class Order {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(defaultValue: -1, includeFromJson: false, includeToJson: false)
+  final int id; // Local DB primary key (AUTOINCREMENT)
+
+  @JsonKey(name: 'id', defaultValue: -1) // API 'id' maps to orderId
+  final int orderId; // Server ID
 
   @JsonKey(defaultValue: '')
   final String uuid;
 
   @JsonKey(
     name: 'order_inv_no',
-    defaultValue: 0,
-    fromJson: _intFromJsonZero,
+    defaultValue: '0',
+    fromJson: _stringFromJsonZero,
+    toJson: _stringToJsonInt,
   )
-  final int orderInvNo;
+  final String orderInvNo;
 
   @JsonKey(
     name: 'order_cust_id',
@@ -193,6 +201,13 @@ class Order {
   final int orderApproveFlag;
 
   @JsonKey(
+    name: 'order_is_billed',
+    defaultValue: 0,
+    fromJson: _intFromJsonZero,
+  )
+  final int orderIsBilled;
+
+  @JsonKey(
     name: 'order_flag',
     defaultValue: 1,
     fromJson: _intFromJsonOne,
@@ -209,8 +224,9 @@ class Order {
 
   const Order({
     this.id = -1,
+    this.orderId = -1,
     this.uuid = '',
-    this.orderInvNo = 0,
+    this.orderInvNo = '0',
     this.orderCustId = -1,
     this.orderCustName = '',
     this.orderSalesmanId = -1,
@@ -222,6 +238,7 @@ class Order {
     this.orderFreightCharge = 0.0,
     this.orderNote,
     this.orderApproveFlag = -1,
+    this.orderIsBilled = 0,
     this.orderFlag = 1,
     this.createdAt = '',
     this.updatedAt = '',
@@ -235,9 +252,10 @@ class Order {
   /// Convert from database map (camelCase column names)
   factory Order.fromMap(Map<String, dynamic> map) {
     return Order(
-      id: map['orderId'] as int? ?? -1,
+      id: map['id'] as int? ?? -1, // Local DB PK
+      orderId: map['orderId'] as int? ?? -1, // Server ID
       uuid: map['UUID'] as String? ?? '',
-      orderInvNo: int.tryParse(map['invoiceNo'] as String? ?? '0') ?? 0,
+      orderInvNo: map['invoiceNo'] as String? ?? '0', // Direct string, no parsing
       orderCustId: map['customerId'] as int? ?? -1,
       orderCustName: map['customerName'] as String? ?? '',
       orderSalesmanId: map['salesmanId'] as int? ?? -1,
@@ -249,6 +267,7 @@ class Order {
       orderFreightCharge: (map['freightCharge'] as num?)?.toDouble() ?? 0.0,
       orderNote: map['note'] as String?,
       orderApproveFlag: map['approveFlag'] as int? ?? -1,
+      orderIsBilled: map['isBilled'] as int? ?? 0,
       orderFlag: map['flag'] as int? ?? 1,
       createdAt: map['createdDateTime'] as String? ?? '',
       updatedAt: map['updatedDateTime'] as String? ?? '',
@@ -256,10 +275,11 @@ class Order {
   }
 
   /// Convert to database map (camelCase column names)
+  /// Note: 'id' column is omitted - SQLite will auto-increment
   Map<String, dynamic> toMap() {
     return {
-      'orderId': id,
-      'invoiceNo': orderInvNo.toString(),
+      'orderId': orderId,
+      'invoiceNo': orderInvNo,
       'UUID': uuid,
       'customerId': orderCustId,
       'customerName': orderCustName,
@@ -272,10 +292,11 @@ class Order {
       'total': orderTotal,
       'freightCharge': orderFreightCharge,
       'approveFlag': orderApproveFlag,
+      'isBilled': orderIsBilled,
       'createdDateTime': createdAt,
       'updatedDateTime': updatedAt,
       'flag': orderFlag,
-      'isProcessFinish': 0,
+      'isProcessFinish': 1,
     };
   }
 }
@@ -284,15 +305,19 @@ class Order {
 /// Converted from KMP's OrderSub class
 @JsonSerializable()
 class OrderSub {
-  @JsonKey(defaultValue: -1)
-  final int id;
+  @JsonKey(defaultValue: -1, includeFromJson: false, includeToJson: false)
+  final int id; // Local DB primary key (AUTOINCREMENT)
+
+  @JsonKey(name: 'id', defaultValue: -1) // API 'id' maps to orderSubId
+  final int orderSubId; // Server ID
 
   @JsonKey(
     name: 'order_sub_ordr_inv_id',
-    defaultValue: 0,
-    fromJson: _intFromJsonZero,
+    defaultValue: '0',
+    fromJson: _stringFromJsonZero,
+    toJson: _stringToJsonInt,
   )
-  final int orderSubOrdrInvId;
+  final String orderSubOrdrInvId;
 
   @JsonKey(
     name: 'order_sub_ordr_id',
@@ -414,11 +439,45 @@ class OrderSub {
   @JsonKey(name: 'updated_at', defaultValue: '')
   final String updatedAt;
 
-  final List<OrderSubSuggestion>? suggestions;
+  @JsonKey(
+    name: 'order_sub_checker_images',
+    fromJson: _checkerImagesFromJson,
+    toJson: _checkerImagesToJson,
+  )
+  final List<String>? checkerImages;
+
+  @JsonKey(
+    name: 'estimated_qty',
+    defaultValue: 0.0,
+    fromJson: _doubleFromJsonZero,
+  )
+  final double estimatedQty;
+
+  @JsonKey(
+    name: 'estimated_available_qty',
+    defaultValue: 0.0,
+    fromJson: _doubleFromJsonZero,
+  )
+  final double estimatedAvailableQty;
+
+  @JsonKey(
+    name: 'estimated_total',
+    defaultValue: 0.0,
+    fromJson: _doubleFromJsonZero,
+  )
+  final double estimatedTotal;
+
+@JsonKey(fromJson: _suggestionsFromJson)
+final List<OrderSubSuggestion>? suggestions;
+
+  // In-memory only field - not serialized to JSON or stored in DB
+  @JsonKey(includeFromJson: false, includeToJson: false, defaultValue: false)
+  final bool isReplaced; // Indicates if this order sub was replaced from a suggestion
 
   const OrderSub({
     this.id = -1,
-    this.orderSubOrdrInvId = 0,
+    this.orderSubId = -1,
+    this.orderSubOrdrInvId = '0',
     this.orderSubOrdrId = -1,
     this.orderSubCustId = -1,
     this.orderSubSalesmanId = -1,
@@ -434,13 +493,18 @@ class OrderSub {
     this.orderSubUnitBaseQty = 0.0,
     this.orderSubIsCheckedFlag = 0,
     this.orderSubOrdrFlag = 0,
-    this.orderSubNote,
-    this.orderSubNarration,
-    this.orderSubFlag = 1,
-    this.createdAt = '',
-    this.updatedAt = '',
-    this.suggestions,
-  });
+      this.orderSubNote,
+      this.orderSubNarration,
+      this.orderSubFlag = 1,
+      this.createdAt = '',
+      this.updatedAt = '',
+      this.checkerImages,
+      this.estimatedQty = 0.0,
+      this.estimatedAvailableQty = 0.0,
+      this.estimatedTotal = 0.0,
+      this.suggestions,
+      this.isReplaced = false,
+    });
 
   factory OrderSub.fromJson(Map<String, dynamic> json) =>
       _$OrderSubFromJson(json);
@@ -450,8 +514,9 @@ class OrderSub {
   /// Convert from database map (camelCase column names)
   factory OrderSub.fromMap(Map<String, dynamic> map) {
     return OrderSub(
-      id: map['orderSubId'] as int? ?? -1,
-      orderSubOrdrInvId: int.tryParse(map['invoiceNo'] as String? ?? '0') ?? 0,
+      id: map['id'] as int? ?? -1, // Local DB PK
+      orderSubId: map['orderSubId'] as int? ?? -1, // Server ID
+      orderSubOrdrInvId: map['invoiceNo'] as String? ?? '0', // Direct string, no parsing
       orderSubOrdrId: map['orderId'] as int? ?? -1,
       orderSubCustId: map['customerId'] as int? ?? -1,
       orderSubSalesmanId: map['salesmanId'] as int? ?? -1,
@@ -472,15 +537,21 @@ class OrderSub {
       orderSubFlag: map['flag'] as int? ?? 1,
       createdAt: map['createdDateTime'] as String? ?? '',
       updatedAt: map['updatedDateTime'] as String? ?? '',
+      checkerImages: _checkerImagesFromMap(map['checkerImage']),
+      estimatedQty: (map['estimatedQty'] as num?)?.toDouble() ?? 0.0,
+      estimatedAvailableQty: (map['estimatedAvailableQty'] as num?)?.toDouble() ?? 0.0,
+      estimatedTotal: (map['estimatedTotal'] as num?)?.toDouble() ?? 0.0,
+      isReplaced: false, // Always false when loading from DB/map
     );
   }
 
   /// Convert to database map (camelCase column names)
+  /// Note: 'id' column is omitted - SQLite will auto-increment
   Map<String, dynamic> toMap() {
     return {
-      'orderSubId': id,
+      'orderSubId': orderSubId,
       'orderId': orderSubOrdrId,
-      'invoiceNo': orderSubOrdrInvId.toString(),
+      'invoiceNo': orderSubOrdrInvId, // Direct string, no .toString() needed
       'UUID': '',
       'customerId': orderSubCustId,
       'salesmanId': orderSubSalesmanId,
@@ -501,6 +572,12 @@ class OrderSub {
       'updatedDateTime': updatedAt,
       'isCheckedflag': orderSubIsCheckedFlag,
       'flag': orderSubFlag,
+      'checkerImage': checkerImages != null && checkerImages!.isNotEmpty
+          ? jsonEncode(checkerImages)
+          : null,
+      'estimatedQty': estimatedQty,
+      'estimatedAvailableQty': estimatedAvailableQty,
+      'estimatedTotal': estimatedTotal,
     };
   }
 }
@@ -525,6 +602,9 @@ class OrderSubSuggestion {
 
   final int? flag;
 
+  /// Product name (from JOIN query, not stored in DB)
+  final String? productName;
+
   const OrderSubSuggestion({
     this.id = -1,
     this.orderSubId = -1,
@@ -532,6 +612,7 @@ class OrderSubSuggestion {
     this.price = 0.0,
     this.note,
     this.flag,
+    this.productName,
   });
 
   factory OrderSubSuggestion.fromJson(Map<String, dynamic> json) =>
@@ -548,6 +629,7 @@ class OrderSubSuggestion {
       price: (map['price'] as num?)?.toDouble() ?? 0.0,
       note: map['note'] as String?,
       flag: map['flag'] as int?,
+      productName: map['productName'] as String?,
     );
   }
 
@@ -593,3 +675,96 @@ int _intFromJsonZero(dynamic value) => _parseInt(value, 0);
 int _intFromJsonOne(dynamic value) => _parseInt(value, 1);
 double _doubleFromJsonZero(dynamic value) => _parseDouble(value, 0.0);
 
+ String _stringFromJsonZero(dynamic value) {
+  if (value == null) return '0';
+  // API sends int, convert to String
+  return value.toString();
+}
+
+ int _stringToJsonInt(String value) {
+  // For API, convert String to int
+  // If it's "ORDER1" format, return 0 (server will generate proper invoice number)
+  if (value.startsWith('ORDER')) {
+    return 0; // Server generates invoice number when creating order
+  }
+  return int.tryParse(value) ?? 0;
+}
+
+List<String>? _checkerImagesFromJson(dynamic json) {
+  if (json == null) return null;
+  if (json is String) {
+    // Handle single image (backward compatibility) or JSON string
+    if (json.isEmpty) return null;
+    try {
+      // Try parsing as JSON array
+      final decoded = jsonDecode(json) as List;
+      return decoded.map((e) => e.toString()).toList();
+    } catch (_) {
+      // If not JSON, treat as single image (backward compatibility)
+      return [json];
+    }
+  }
+  if (json is List) {
+    return json.map((e) => e.toString()).toList();
+  }
+  return null;
+}
+
+dynamic _checkerImagesToJson(List<String>? images) {
+  if (images == null || images.isEmpty) return null;
+  // Backend expects array, so return as List
+  return images;
+}
+
+List<String>? _checkerImagesFromMap(dynamic checkerImageData) {
+  if (checkerImageData == null) return null;
+  
+  // Handle Uint8List (BLOB) from SQLite - convert to String
+  String? imageString;
+  if (checkerImageData is Uint8List) {
+    imageString = utf8.decode(checkerImageData);
+  } else if (checkerImageData is String) {
+    imageString = checkerImageData;
+  } else {
+    // Try to convert to string
+    imageString = checkerImageData.toString();
+  }
+  
+  if (imageString.isEmpty) return null;
+  
+  try {
+    final decoded = jsonDecode(imageString) as List;
+    return decoded.map((e) => e.toString()).toList();
+  } catch (_) {
+    // Backward compatibility: single image stored as plain string
+    return [imageString];
+  }
+}
+
+List<OrderSubSuggestion>? _suggestionsFromJson(dynamic value) {
+  if (value == null) return null;
+
+  if (value is List<OrderSubSuggestion>) {
+    // Already parsed (in-memory or DB flow)
+    return value;
+  }
+
+  if (value is List) {
+    return value
+        .where((e) => e != null)
+        .map((e) {
+          if (e is OrderSubSuggestion) return e;
+          if (e is Map<String, dynamic>) {
+            return OrderSubSuggestion.fromJson(e);
+          }
+          throw ArgumentError(
+            'Invalid suggestion type: ${e.runtimeType}',
+          );
+        })
+        .toList();
+  }
+
+  throw ArgumentError(
+    'Invalid suggestions field type: ${value.runtimeType}',
+  );
+}

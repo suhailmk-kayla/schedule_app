@@ -108,9 +108,26 @@ class OrderSubSuggestionsRepository {
   ) async {
     try {
       final db = await _database;
+      
+      // Generate unique sugId for new suggestions (id = -1)
+      int sugId = suggestion.id;
+      if (sugId == -1) {
+        // Get last entry ID and increment to ensure uniqueness
+        final lastIdResult = await getLastEntryId();
+        final lastId = lastIdResult.fold(
+          (_) => 0,
+          (id) => id ?? 0,
+        );
+        sugId = lastId + 1;
+      }
+      
+      // Use INSERT OR REPLACE (matches KMP pattern)
+      // For new suggestions: inserts with unique sugId
+      // For updates from server: replaces existing row with same sugId
       await db.rawInsert(
         '''
         INSERT OR REPLACE INTO OrderSubSuggestions (
+          id,
           sugId,
           orderSubId,
           productId,
@@ -118,11 +135,11 @@ class OrderSubSuggestionsRepository {
           note,
           flag
         ) VALUES (
-          ?, ?, ?, ?, ?, ?
+          NULL, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
-          suggestion.id,
+          sugId,
           suggestion.orderSubId,
           suggestion.prodId,
           suggestion.price,
@@ -142,6 +159,14 @@ class OrderSubSuggestionsRepository {
   ) async {
     try {
       final db = await _database;
+      
+      // Get starting sugId for new suggestions
+      final lastIdResult = await getLastEntryId();
+      int nextSugId = lastIdResult.fold(
+        (_) => 1,
+        (id) => (id ?? 0) + 1,
+      );
+      
       await db.transaction((txn) async {
         const sql = '''
         INSERT OR REPLACE INTO OrderSubSuggestions (
@@ -156,10 +181,16 @@ class OrderSubSuggestionsRepository {
         )
         ''';
         for (final suggestion in suggestions) {
+          // Generate unique sugId for new suggestions
+          int sugId = suggestion.id;
+          if (sugId == -1) {
+            sugId = nextSugId++;
+          }
+          
           await txn.rawInsert(
             sql,
             [
-              suggestion.id,
+              sugId,
               suggestion.orderSubId,
               suggestion.prodId,
               suggestion.price,

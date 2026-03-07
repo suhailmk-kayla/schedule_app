@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../provider/users_provider.dart';
@@ -20,6 +21,7 @@ class CreateSupplierScreen extends StatefulWidget {
 }
 
 class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
+  final _formKey = GlobalKey<FormState>();
   final TextEditingController _codeController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
@@ -77,24 +79,16 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
   }
 
   Future<void> _handleSave() async {
+    // Validate form
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
     final code = _codeController.text.trim();
     final name = _nameController.text.trim();
     final phone = _phoneController.text.trim().isEmpty ? '0' : _phoneController.text.trim();
     final address = _addressController.text.trim();
     final password = _passwordController.text.trim();
-
-    if (code.isEmpty) {
-      ToastHelper.showWarning('Enter code');
-      return;
-    }
-    if (name.isEmpty) {
-      ToastHelper.showWarning('Enter name');
-      return;
-    }
-    if (widget.userId == null && password.isEmpty) {
-      ToastHelper.showWarning('Enter password');
-      return;
-    }
 
     final usersProvider = Provider.of<UsersProvider>(context, listen: false);
     final success = widget.userId == null
@@ -118,6 +112,7 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
     if (!mounted) return;
 
     if (success) {
+      ToastHelper.showSuccess('Supplier created successfully');
       Navigator.of(context).pop(true);
     } else {
       setState(() {
@@ -155,74 +150,114 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
         ),
         body: Stack(
           children: [
-            SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: _codeController,
-                    decoration: const InputDecoration(
-                      labelText: 'Code',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (value) {
-                      if (value.contains(' ')) {
-                        final sanitized = value.replaceAll(' ', '');
-                        _codeController.value = TextEditingValue(
-                          text: sanitized,
-                          selection: TextSelection.collapsed(offset: sanitized.length),
-                        );
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Name',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _phoneController,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone Number',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.phone,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _addressController,
-                    decoration: const InputDecoration(
-                      labelText: 'Address',
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: 1,
-                  ),
-                  if (widget.userId == null) ...[
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _passwordController,
+            Form(
+              key: _formKey,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextFormField(
+                      maxLength: 20,
+                      controller: _codeController,
                       decoration: const InputDecoration(
-                        labelText: 'Password',
+                        counterText: '',
+                        labelText: 'Code',
                         border: OutlineInputBorder(),
-                        
                       ),
-                      obscureText: true,
+                      textCapitalization: TextCapitalization.none,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Enter code';
+                        }
+                        return null;
+                      },
                       onChanged: (value) {
                         if (value.contains(' ')) {
                           final sanitized = value.replaceAll(' ', '');
-                          _passwordController.value = TextEditingValue(
+                          _codeController.value = TextEditingValue(
                             text: sanitized,
                             selection: TextSelection.collapsed(offset: sanitized.length),
                           );
                         }
                       },
                     ),
-                  ],
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      maxLength: 50,
+                      controller: _nameController,
+                      decoration: const InputDecoration(
+                        counterText: '',
+                        labelText: 'Name',
+                        border: OutlineInputBorder(),
+                      ),
+                      textCapitalization: TextCapitalization.words,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Enter name';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      maxLength: 10,
+                      controller: _phoneController,
+                      decoration: const InputDecoration(
+                        counterText: '',
+                        labelText: 'Phone Number',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9]'))],
+                      validator: (value) {
+                        if (value != null && value.trim().isNotEmpty) {
+                          if (value.trim().length < 10) {
+                            return 'Phone number must be 10 digits';
+                          }
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      maxLength: 100,
+                      controller: _addressController,
+                      decoration: const InputDecoration(
+                        counterText: '',
+                        labelText: 'Address',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 1,
+                    ),
+                    if (widget.userId == null) ...[
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        maxLength: 50,
+                        controller: _passwordController,
+                        decoration: const InputDecoration(
+                          labelText: 'Password',
+                          border: OutlineInputBorder(),
+                          counterText: '',
+                        ),
+                        obscureText: true,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Enter password';
+                          }
+                          return null;
+                        },
+                        onChanged: (value) {
+                          if (value.contains(' ')) {
+                            final sanitized = value.replaceAll(' ', '');
+                            _passwordController.value = TextEditingValue(
+                              text: sanitized,
+                              selection: TextSelection.collapsed(offset: sanitized.length),
+                            );
+                          }
+                        },
+                      ),
+                    ],
                   const SizedBox(height: 24),
                   // if (_codeController.text.isNotEmpty &&
                   //     _nameController.text.isNotEmpty &&
@@ -243,6 +278,7 @@ class _CreateSupplierScreenState extends State<CreateSupplierScreen> {
                 ],
               ),
             ),
+          ),
             Consumer<UsersProvider>(
               builder: (context, provider, _) {
                 if (!provider.isLoading) return const SizedBox.shrink();

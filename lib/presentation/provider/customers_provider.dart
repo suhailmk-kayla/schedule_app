@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'dart:developer' as developer;
 import '../../repositories/customers/customers_repository.dart';
 import '../../repositories/routes/routes_repository.dart';
 import '../../repositories/salesman/salesman_repository.dart';
@@ -232,14 +231,14 @@ class CustomersProvider extends ChangeNotifier {
         
         // Send push notification (matches KMP lines 146-152)
         final dataIds = [
-          PushData(table: NotificationId.customer, id: createdCustomer.id),
+          PushData(table: NotificationId.customer, id: createdCustomer.customerId!),
         ];
         _pushNotificationSender.sendPushNotification(
           dataIds: dataIds,
           message: 'Customer updates',
           customUserIds: notificationUserIds,
         ).catchError((e) {
-          developer.log('CustomersProvider: Error sending push notification: $e');
+           
         });
         
         loadCustomers(); // Reload list
@@ -302,7 +301,7 @@ class CustomersProvider extends ChangeNotifier {
 
     // Create customer object with updated data
     final customer = Customer(
-      id: customerId,
+      customerId: customerId, // Use server ID, not local id (id is AUTOINCREMENT)
       code: code,
       name: name,
       phoneNo: phone,
@@ -329,7 +328,7 @@ class CustomersProvider extends ChangeNotifier {
           message: 'Customer updates',
           customUserIds: notificationUserIds,
         ).catchError((e) {
-          developer.log('CustomersProvider: Error sending push notification: $e');
+           
         });
         
         loadCustomers(); // Reload list
@@ -379,7 +378,7 @@ class CustomersProvider extends ChangeNotifier {
           message: 'Customer updates',
           customUserIds: notificationUserIds,
         ).catchError((e) {
-          developer.log('CustomersProvider: Error sending push notification: $e');
+           
         });
         
         loadCustomers(); // Reload list
@@ -438,14 +437,15 @@ class CustomersProvider extends ChangeNotifier {
   /// Create temporary order for customer
   Future<Order?> _createTempOrder(Customer customer) async {
     final userId = await StorageHelper.getUserId();
-    final lastResult = await _ordersRepository.getLastOrderEntry();
-    int orderId = 1;
-
-    lastResult.fold(
+    // Local-only temp/draft orders use negative orderId space to avoid clashing with server IDs.
+    // Next local orderId: -1, -2, -3, ...
+    final lastLocalResult = await _ordersRepository.getLastLocalOrderEntry();
+    int orderId = -1;
+    lastLocalResult.fold(
       (failure) => null,
       (order) {
         if (order != null) {
-          orderId = order.orderInvNo + 1;
+          orderId = order.orderId - 1;
         }
       },
     );
@@ -453,9 +453,11 @@ class CustomersProvider extends ChangeNotifier {
     final now = _getDBFormatDateTime();
     final tempOrder = Order(
       id: 0,
+      // Local-only orderId is negative to guarantee no collision with server order IDs.
+      orderId: orderId,
       uuid: '',
-      orderInvNo: orderId,
-      orderCustId: customer.id,
+      orderInvNo: 'ORDER$orderId',
+      orderCustId: customer.customerId!,
       orderCustName: customer.name,
       orderSalesmanId: userId,
       orderStockKeeperId: -1,
@@ -473,9 +475,25 @@ class CustomersProvider extends ChangeNotifier {
 
     final result = await _ordersRepository.addOrder(tempOrder);
     Order? order;
-    result.fold(
-      (failure) => _setError(failure.message),
-      (_) => order = tempOrder,
+    await result.fold(
+      (failure) async {
+        _setError(failure.message);
+      },
+      (_) async {
+        // Query for the temp order we just created to get its local ID
+        final tempResult = await _ordersRepository.getTempOrders();
+        tempResult.fold(
+          (failure) => null,
+          (orders) {
+            // Find the order we just created by customer ID and invoiceNo
+            // This ensures we get the correct order even if there are multiple temp orders
+            order = orders.firstWhere(
+              (o) => o.orderCustId == customer.customerId! && o.orderInvNo == 'ORDER$orderId',
+              orElse: () => tempOrder, // Fallback to tempOrder if not found
+            );
+          },
+        );
+      },
     );
 
     return order;

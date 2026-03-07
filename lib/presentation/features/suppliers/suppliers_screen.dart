@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/presentation/provider/users_provider.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../provider/suppliers_provider.dart';
 import '../../../models/supplier_model.dart';
 import '../../../utils/asset_images.dart';
 import '../../../utils/storage_helper.dart';
 import 'create_supplier_screen.dart';
 import 'supplier_details_screen.dart';
+import '../out_of_stock/out_of_stock_list_supplier_screen.dart';
 
 /// Suppliers Screen
 /// Displays list of suppliers with search functionality
@@ -24,9 +27,9 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_)async{
       final provider = Provider.of<SuppliersProvider>(context, listen: false);
-      provider.getSuppliers();
+      await provider.getSuppliers();
     });
   }
 
@@ -74,8 +77,15 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           ),
         ],
       ),
-      body: Consumer<SuppliersProvider>(
-        builder: (context, provider, child) {
+      body: Consumer3<SuppliersProvider,UsersProvider,NotificationManager>(
+        builder: (context, provider, usersProvider, notificationManager, child) {
+          if(notificationManager.notificationTrigger){
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              notificationManager.resetTrigger();
+              provider.getSuppliers();
+              usersProvider.loadUsers();
+            });
+          }
           if (provider.isLoading && provider.suppliersList.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -127,15 +137,13 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                   );
                 },
                 onReportTap: () {
-                  // TODO: Navigate to out of stock supplier view
-                  // Navigator.push(
-                  //   context,
-                  //   MaterialPageRoute(
-                  //     builder: (_) => OutOfStockListSupplierScreen(userId: supplier.userId),
-                  //   ),
-                  // );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Out of stock view for supplier ${supplier.name}')),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => OutOfStockListSupplierScreen(
+                        userId: supplier.userId ?? -1,
+                      ),
+                    ),
                   );
                 },
               );

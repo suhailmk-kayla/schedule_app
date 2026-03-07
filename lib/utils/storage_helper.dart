@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:schedule_frontend_flutter/helpers/user_type_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Storage Helper
@@ -118,7 +119,7 @@ class StorageHelper {
       final jsonString = await _storageChannel.invokeMethod<String>('getPendingNotifications');
       
       if (jsonString == null || jsonString.isEmpty) {
-        developer.log('StorageHelper: No pending notifications found');
+         
         return [];
       }
       
@@ -127,7 +128,7 @@ class StorageHelper {
           .map((item) => item as Map<String, dynamic>)
           .toList();
     } catch (e) {
-      developer.log('StorageHelper: Error getting pending notifications: $e');
+       
       return [];
     }
   }
@@ -137,7 +138,7 @@ class StorageHelper {
     try {
       await _storageChannel.invokeMethod('clearPendingNotifications');
     } catch (e) {
-      developer.log('StorageHelper: Error clearing pending notifications: $e');
+       
       // Ignore errors
     }
   }
@@ -150,7 +151,7 @@ class StorageHelper {
         'timestamp': timestamp,
       });
     } catch (e) {
-      developer.log('StorageHelper: Error removing pending notification: $e');
+       
       // Ignore errors
     }
   }

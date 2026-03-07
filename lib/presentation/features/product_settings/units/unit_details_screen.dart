@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../provider/units_provider.dart';
 import '../../../../models/master_data_api.dart';
-import 'edit_unit_screen.dart';
+import 'unit_form_screen.dart';
 
 /// Unit Details Screen
 /// Displays unit information with edit button
@@ -21,17 +21,20 @@ class UnitDetailsScreen extends StatefulWidget {
 
 class _UnitDetailsScreenState extends State<UnitDetailsScreen> {
   String _baseUnitSt = '';
+  Units? _currentUnit; // Store current unit data
 
   @override
   void initState() {
     super.initState();
+    _currentUnit = widget.unit;
     _loadBaseUnit();
   }
 
   Future<void> _loadBaseUnit() async {
-    if (widget.unit.type == 1 && widget.unit.baseId != -1) {
+    final unit = _currentUnit ?? widget.unit;
+    if (unit.type == 1 && unit.baseId != -1) {
       final provider = Provider.of<UnitsProvider>(context, listen: false);
-      final baseUnit = await provider.getUnitByUnitId(widget.unit.baseId);
+      final baseUnit = await provider.getUnitByUnitId(unit.baseId);
       if (baseUnit == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -46,24 +49,39 @@ class _UnitDetailsScreenState extends State<UnitDetailsScreen> {
     }
   }
 
+  Future<void> _reloadUnit() async {
+    if (_currentUnit == null) return;
+    
+    final provider = Provider.of<UnitsProvider>(context, listen: false);
+    final updatedUnit = await provider.getUnitByUnitId(_currentUnit!.unitId);
+    
+    if (updatedUnit != null && mounted) {
+      setState(() {
+        _currentUnit = updatedUnit;
+      });
+      _loadBaseUnit();
+    }
+  }
+
   void _handleEdit() {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => EditUnitScreen(unit: widget.unit),
+        builder: (_) => UnitFormScreen(unit: _currentUnit ?? widget.unit), // Edit mode (unit is provided)
       ),
     ).then((_) {
-      // Refresh details if needed
+      // Reload unit data to reflect changes
       if (mounted) {
-        _loadBaseUnit();
+        _reloadUnit();
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final unitTypeSt = widget.unit.type == 0 ? 'Base Unit' : 'Derived Unit';
-    final baseQtySt = widget.unit.baseQty.toString();
+    final unit = _currentUnit ?? widget.unit;
+    final unitTypeSt = unit.type == 0 ? 'Base Unit' : 'Derived Unit';
+    final baseQtySt = unit.baseQty.toString();
 
     return Scaffold(
       appBar: AppBar(
@@ -81,21 +99,21 @@ class _UnitDetailsScreenState extends State<UnitDetailsScreen> {
             // Type
             _buildDetailField('Type', unitTypeSt),
             // Base Unit (only for Derived Unit)
-            if (widget.unit.type == 1) ...[
+            if (unit.type == 1) ...[
               const SizedBox(height: 6),
               _buildDetailField('Base Unit', _baseUnitSt),
             ],
             // Code
             const SizedBox(height: 6),
-            _buildDetailField('Code', widget.unit.code),
+            _buildDetailField('Code', unit.code),
             // Name
             const SizedBox(height: 6),
-            _buildDetailField('Name', widget.unit.name),
+            _buildDetailField('Name', unit.name),
             // Display Name
             const SizedBox(height: 6),
-            _buildDetailField('Display Name', widget.unit.displayName),
+            _buildDetailField('Display Name', unit.displayName),
             // Base Qty (only for Derived Unit)
-            if (widget.unit.type == 1) ...[
+            if (unit.type == 1) ...[
               const SizedBox(height: 6),
               _buildDetailField('Base Qty', baseQtySt),
             ],

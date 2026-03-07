@@ -48,7 +48,7 @@ class SalesManRepository {
           'SalesMan',
           where: 'flag = ?',
           whereArgs: [1],
-          orderBy: 'name ASC',
+          orderBy: 'LOWER(name) ASC',
         );
       } else {
         final searchPattern = '%$searchKey%';
@@ -56,7 +56,7 @@ class SalesManRepository {
           'SalesMan',
           where: 'flag = 1 AND (LOWER(name) LIKE LOWER(?) OR LOWER(code) LIKE LOWER(?))',
           whereArgs: [searchPattern, searchPattern],
-          orderBy: 'name ASC',
+          orderBy: 'LOWER(name) ASC',
         );
       }
 
@@ -127,10 +127,10 @@ class SalesManRepository {
       await db.rawInsert(
         '''
         INSERT OR REPLACE INTO SalesMan(
-          id, salesManId, userId, code, name, phone, address, 
+          salesManId, userId, code, name, phone, address, 
           deviceToken, createdDateTime, updatedDateTime, flag
         ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
@@ -148,7 +148,7 @@ class SalesManRepository {
       );
       return const Right(null);
     } catch (e) {
-      developer.log('SalesManRepository: Error adding salesman: $e');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -171,10 +171,10 @@ class SalesManRepository {
           batch.rawInsert(
             '''
             INSERT OR REPLACE INTO SalesMan(
-              id, salesManId, userId, code, name, phone, address, 
+              salesManId, userId, code, name, phone, address, 
               deviceToken, createdDateTime, updatedDateTime, flag
             ) VALUES (
-              NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             ''',
             [
@@ -193,11 +193,11 @@ class SalesManRepository {
         }
         // CRITICAL: Commit all inserts at once - matches SQLDelight's optimized behavior
         await batch.commit(noResult: true);
-        developer.log('SalesManRepository: ${salesmen.length} salesmen added successfully');
+         
       });
       return const Right(null);
     } catch (e) {
-      developer.log('SalesManRepository: Error adding salesmen: $e');
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }

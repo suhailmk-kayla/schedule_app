@@ -99,13 +99,17 @@ class CarBrandRepository {
   Future<Either<Failure, void>> addCarBrand(Brand brand) async {
     try {
       final db = await _database;
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
-        INSERT OR REPLACE INTO CarBrand (id,carBrandId, name, flag)
-        VALUES (NULL, ?, ?, ?)
+        INSERT OR REPLACE INTO CarBrand (
+          carBrandId, name, flag
+        ) VALUES (
+          ?, ?, ?
+        )
         ''',
         [
-          brand.id,
+          brand.carBrandId,
           brand.brandName,
           brand.flag ?? 1,
         ],
@@ -117,25 +121,29 @@ class CarBrandRepository {
   }
 
   /// Add multiple car brands to local DB (transaction)
-  /// Priority 1: Optimized batch insert (uses batch.commit instead of await in loop)
   Future<Either<Failure, void>> addCarBrands(List<Brand> brands) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT OR REPLACE INTO CarBrand (id, carBrandId, name, flag)
-        VALUES (NULL, ?, ?, ?)
-        ''';
+        final batch = txn.batch();
         for (final brand in brands) {
-          await txn.rawInsert(
-            sql,
+          // Use INSERT OR REPLACE (matches KMP pattern)
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO CarBrand (
+              carBrandId, name, flag
+            ) VALUES (
+              ?, ?, ?
+            )
+            ''',
             [
-              brand.id,
+              brand.carBrandId,
               brand.brandName,
               brand.flag ?? 1,
             ],
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -290,7 +298,7 @@ class CarBrandRepository {
 
       // 3. Store in local DB
       final updateResult = await updateCarBrandLocal(
-        carBrandId: carApi.carBrand.id,
+        carBrandId: carApi.carBrand.carBrandId,
         name: carApi.carBrand.brandName,
       );
       if (updateResult.isLeft) {

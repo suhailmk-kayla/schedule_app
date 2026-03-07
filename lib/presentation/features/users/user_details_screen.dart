@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../provider/users_provider.dart';
 import '../../../helpers/user_type_helper.dart';
+import '../../../utils/toast_helper.dart';
 import 'create_user_screen.dart';
 
 /// User Details Screen
@@ -20,13 +21,9 @@ class UserDetailsScreen extends StatefulWidget {
 }
 
 class _UserDetailsScreenState extends State<UserDetailsScreen> {
-  bool _showChangePasswordDialog = false;
-  bool _showConfirmDialog = false;
-  String _confirmMessage = '';
-  int _confirmDialogType = 0; // 0-change password, 1-logout devices, 2-delete user
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
-  bool _passwordError = false;
+  bool _passwordError = false; // Local to dialog, reset each time dialog opens
 
   @override
   void initState() {
@@ -62,81 +59,207 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
   }
 
   void _handleDelete() {
-    setState(() {
-      _confirmMessage =
-          'This will delete the user permanently. And also logout from the login devices?\n\nDo you want to continue?';
-      _confirmDialogType = 2;
-      _showConfirmDialog = true;
-    });
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm'),
+        content: const Text(
+          'This will delete the user permanently. And also logout from the login devices?\n\nDo you want to continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog first
+              _performDelete(); // Then perform delete
+            },
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _handleChangePassword() {
-    setState(() {
-      _showChangePasswordDialog = true;
-    });
+    _passwordController.clear();
+    _confirmPasswordController.clear();
+    _passwordError = false; // Reset error state
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Change password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _passwordController,
+                decoration: const InputDecoration(
+                  labelText: 'New Password',
+                  border: OutlineInputBorder(),
+                ),
+                obscureText: true,
+                onChanged: (_) {
+                  if (_passwordError) {
+                    setDialogState(() {
+                      _passwordError = false;
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _confirmPasswordController,
+                decoration: InputDecoration(
+                  labelText: 'Confirm Password',
+                  border: const OutlineInputBorder(),
+                  errorText: _passwordError ? 'Passwords do not match' : null,
+                ),
+                obscureText: true,
+                onChanged: (_) {
+                  if (_passwordError) {
+                    setDialogState(() {
+                      _passwordError = false;
+                    });
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                _passwordController.clear();
+                _confirmPasswordController.clear();
+                _passwordError = false;
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (_passwordController.text != _confirmPasswordController.text) {
+                  setDialogState(() {
+                    _passwordError = true;
+                  });
+                  return;
+                }
+                if (_passwordController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Enter password')),
+                  );
+                  return;
+                }
+                Navigator.pop(context); // Close password dialog
+                _showChangePasswordConfirmation(); // Show confirmation
+              },
+              child: const Text('Update'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _handleLogoutDevice() {
-    setState(() {
-      _confirmMessage = 'Do you want to Logout from this user devices?';
-      _confirmDialogType = 1;
-      _showConfirmDialog = true;
-    });
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm'),
+        content: const Text('Do you want to Logout from this user devices?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog first
+              _performLogout(); // Then perform logout
+            },
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
   }
 
-  Future<void> _handleConfirm() async {
+  void _showChangePasswordConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm'),
+        content: const Text('Do you want to change the user password?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog first
+              _performChangePassword(); // Then perform change password
+            },
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _performChangePassword() async {
     final provider = Provider.of<UsersProvider>(context, listen: false);
-    bool success = false;
-
-    switch (_confirmDialogType) {
-      case 0: // Change password
-        success = await provider.changeUserPassword(
-          userId: widget.userId,
-          password: _passwordController.text.trim(),
-          confirmPassword: _confirmPasswordController.text.trim(),
-        );
-        if (success) {
-          _passwordController.clear();
-          _confirmPasswordController.clear();
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Password changed successfully')),
-            );
-          }
-        }
-        break;
-
-      case 1: // Logout devices
-        success = await provider.logoutFromDevices(widget.userId);
-        if (success && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User logged out from all devices')),
-          );
-        }
-        break;
-
-      case 2: // Delete user
-        final currentUser = provider.currentUser;
-        if (currentUser != null) {
-          success = await provider.deleteUser(
-            userId: widget.userId,
-            categoryId: currentUser.user.catId,
-          );
-          if (success && mounted) {
-            Navigator.of(context).pop();
-          }
-        }
-        break;
-    }
-
-    if (!success && mounted) {
+    final success = await provider.changeUserPassword(
+      userId: widget.userId,
+      password: _passwordController.text.trim(),
+      confirmPassword: _confirmPasswordController.text.trim(),
+    );
+    
+    if (success && mounted) {
+      _passwordController.clear();
+      _confirmPasswordController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password changed successfully')),
+      );
+    } else if (mounted) {
       _showErrorDialog(provider.errorMessage ?? 'Operation failed');
     }
+  }
 
-    setState(() {
-      _showConfirmDialog = false;
-      _showChangePasswordDialog = false;
-    });
+  Future<void> _performLogout() async {
+    final provider = Provider.of<UsersProvider>(context, listen: false);
+    final success = await provider.logoutFromDevices(widget.userId);
+    
+    if (success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('User logged out from all devices')),
+      );
+    } else if (mounted) {
+      _showErrorDialog(provider.errorMessage ?? 'Operation failed');
+    }
+  }
+
+  Future<void> _performDelete() async {
+    final provider = Provider.of<UsersProvider>(context, listen: false);
+    final currentUser = provider.currentUser;
+    
+    if (currentUser != null) {
+      final success = await provider.deleteUser(
+        userId: widget.userId,
+        categoryId: currentUser.user.catId,
+      );
+      
+      if (success && mounted) {
+        ToastHelper.showSuccess('User deleted successfully');
+        Navigator.of(context).pop(true); // Return true to indicate deletion
+      } else if (mounted) {
+        _showErrorDialog(provider.errorMessage ?? 'Operation failed');
+      }
+    }
   }
 
   void _showErrorDialog(String message) {
@@ -165,13 +288,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
-      body: Stack(
-        children: [
-          _buildBody(),
-          if (_showChangePasswordDialog) _buildChangePasswordDialog(),
-          if (_showConfirmDialog) _buildConfirmDialog(),
-        ],
-      ),
+      body: _buildBody(),
       bottomNavigationBar: Consumer<UsersProvider>(
         builder: (context, provider, _) {
           return SafeArea(
@@ -397,109 +514,5 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
     );
   }
 
-  Widget _buildChangePasswordDialog() {
-    return Container(
-      color: Colors.black54,
-      child: Center(
-        child: AlertDialog(
-          title: const Text('Change password'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _passwordController,
-                decoration: const InputDecoration(
-                  labelText: 'New Password',
-                  border: OutlineInputBorder(),
-                ),
-                obscureText: true,
-                onChanged: (_) {
-                  setState(() {
-                    _passwordError = false;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _confirmPasswordController,
-                decoration: InputDecoration(
-                  labelText: 'Confirm Password',
-                  border: const OutlineInputBorder(),
-                  errorText: _passwordError ? 'Passwords do not match' : null,
-                ),
-                obscureText: true,
-                onChanged: (_) {
-                  setState(() {
-                    _passwordError = false;
-                  });
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _showChangePasswordDialog = false;
-                  _passwordController.clear();
-                  _confirmPasswordController.clear();
-                });
-              },
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                if (_passwordController.text != _confirmPasswordController.text) {
-                  setState(() {
-                    _passwordError = true;
-                  });
-                  return;
-                }
-                if (_passwordController.text.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Enter password')),
-                  );
-                  return;
-                }
-                setState(() {
-                  _confirmMessage = 'Do you want to change the user password?';
-                  _confirmDialogType = 0;
-                  _showChangePasswordDialog = false;
-                  _showConfirmDialog = true;
-                });
-              },
-              child: const Text('Update'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildConfirmDialog() {
-    return Container(
-      color: Colors.black54,
-      child: Center(
-        child: AlertDialog(
-          title: const Text('Confirm'),
-          content: Text(_confirmMessage),
-          actions: [
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _showConfirmDialog = false;
-                });
-              },
-              child: const Text('No'),
-            ),
-            TextButton(
-              onPressed: _handleConfirm,
-              child: const Text('Yes'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 

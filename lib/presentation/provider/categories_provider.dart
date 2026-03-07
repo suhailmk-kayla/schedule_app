@@ -99,13 +99,13 @@ class CategoriesProvider extends ChangeNotifier {
       (createdCategory) {
         // Send push notification (matches KMP lines 60-62)
         final dataIds = [
-          PushData(table: NotificationId.category, id: createdCategory.id),
+          PushData(table: NotificationId.category, id: createdCategory.categoryId),
         ];
         _pushNotificationSender.sendPushNotification(
           dataIds: dataIds,
           message: 'Category updates',
         ).catchError((e) {
-          developer.log('CategoriesProvider: Error sending push notification: $e');
+           
         });
 
         _isLoading = false;
@@ -165,7 +165,7 @@ class CategoriesProvider extends ChangeNotifier {
           dataIds: dataIds,
           message: 'Category updates',
         ).catchError((e) {
-          developer.log('CategoriesProvider: Error sending push notification: $e');
+           
         });
 
         _isLoading = false;

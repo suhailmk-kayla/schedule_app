@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 import 'package:either_dart/either.dart';
 import 'package:sqflite/sqflite.dart';
@@ -155,18 +157,24 @@ class CategoriesRepository {
   Future<Either<Failure, void>> addCategory(Category category) async {
     try {
       final db = await _database;
+      
+      // Use INSERT OR REPLACE (matches KMP pattern)
       await db.rawInsert(
         '''
-        INSERT OR REPLACE INTO Category (id, categoryId, name, remark, flag)
-        VALUES (NULL, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO Category (
+          categoryId, name, remark, flag
+        ) VALUES (
+          ?, ?, ?, ?
+        )
         ''',
         [
-          category.id,
+          category.categoryId,
           category.name,
-          category.remark,
-          1,
+          category.remark ?? '',
+          1, // flag (default 1)
         ],
       );
+      
       return const Right(null);
     } catch (e) {
       return Left(DatabaseFailure.fromError(e));
@@ -174,26 +182,30 @@ class CategoriesRepository {
   }
 
   /// Add multiple categories to local DB (transaction)
-  /// Priority 1: Optimized batch insert (uses batch.commit instead of await in loop)
   Future<Either<Failure, void>> addCategories(List<Category> categories) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT OR REPLACE INTO Category (id, categoryId, name, remark, flag)
-        VALUES (NULL, ?, ?, ?, ?)
-        ''';
+        final batch = txn.batch();
         for (final category in categories) {
-          await txn.rawInsert(
-            sql,
+          // Use INSERT OR REPLACE (matches KMP pattern)
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO Category (
+              categoryId, name, remark, flag
+            ) VALUES (
+              ?, ?, ?, ?
+            )
+            ''',
             [
-              category.id,
+              category.categoryId,
               category.name,
-              category.remark,
-              1,
+              category.remark ?? '',
+               1,
             ],
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -207,9 +219,12 @@ class CategoriesRepository {
       final db = await _database;
       await db.update(
         'Category',
-        {'name': category.name},
+        {
+          'name': category.name,
+          'remark': category.remark,
+        },
         where: 'categoryId = ?',
-        whereArgs: [category.id],
+        whereArgs: [category.categoryId], // Use server ID, not local id
       );
       return const Right(null);
     } catch (e) {
@@ -222,8 +237,10 @@ class CategoriesRepository {
     try {
       final db = await _database;
       await db.delete('Category');
+       
       return const Right(null);
     } catch (e) {
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -325,7 +342,23 @@ class CategoriesRepository {
     required String name,
   }) async {
     try {
-      // 1. Call API
+      // 1. Get existing category from local DB (to preserve other fields like remark)
+      final existingCategoryResult = await getCategoryById(categoryId);
+      Category? existingCategory;
+      existingCategoryResult.fold(
+        (_) {},
+        (cat) => existingCategory = cat,
+      );
+
+      // Build base category with NEW values overlaid on existing fields
+      final baseCategory = Category(
+        id: existingCategory?.id ?? -1,
+        categoryId: existingCategory?.categoryId ?? categoryId,
+        name: name,
+        remark: existingCategory?.remark ?? '',
+      );
+
+      // 2. Call API
       final response = await _dio.post(
         ApiEndpoints.updateCategory,
         data: {
@@ -334,15 +367,18 @@ class CategoriesRepository {
         },
       );
 
-      // 2. Parse response
-      final categoryApi = CategoryApi.fromJson(response.data);
+      // 3. Parse response with merge support (handles partial responses)
+      final categoryApi = CategoryApi.fromJsonWithMerge(
+        response.data,
+        existingCategory: baseCategory,
+      );
       if (categoryApi.status != 1) {
         return Left(ServerFailure.fromError(
           'Failed to update category: ${categoryApi.message}',
         ));
       }
 
-      // 3. Store in local DB
+      // 4. Store in local DB
       final updateResult = await updateCategoryLocal(categoryApi.data);
       if (updateResult.isLeft) {
         return updateResult.map((_) => categoryApi.data);

@@ -3,24 +3,32 @@ import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:schedule_frontend_flutter/presentation/common_widgets/sync_refresh_button.dart';
 import 'package:schedule_frontend_flutter/presentation/features/home/home_drawer.dart';
 import 'package:schedule_frontend_flutter/presentation/features/orders/order_details_storekeeper_screen.dart';
 import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../provider/orders_provider.dart';
+import '../../provider/home_provider.dart';
 import '../../../models/order_api.dart';
 import '../../../models/order_with_name.dart';
-import '../../../utils/order_flags.dart';
 import '../../../utils/storage_helper.dart';
 import 'create_order_screen.dart';
 import 'order_details_checker_screen.dart';
 import 'order_details_screen.dart';
 import 'order_details_salesman_screen.dart';
+import 'order_details_biller_screen.dart';
 
 /// Orders Screen
 /// Displays list of orders with search, route filter, and date filter
 /// Converted from KMP's OrderListScreen.kt
 class OrdersScreen extends StatefulWidget {
-  const OrdersScreen({super.key});
+  final int? salesmanId; // If provided, filters orders by this salesman
+
+  const OrdersScreen({
+    super.key,
+    this.salesmanId,
+  });
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -39,6 +47,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
       ordersProvider.loadRoutes();
+      
+      // If salesmanId is provided, set it as filter
+      // Matches KMP's SalesmanOrderListScreen behavior
+      if (widget.salesmanId != null) {
+        ordersProvider.setSalesmanFilter(widget.salesmanId!);
+      }
+      
       ordersProvider.loadOrders();
     });
   }
@@ -61,15 +76,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
   @override
   Widget build(BuildContext context) {
     final ordersProvider = Provider.of<OrdersProvider>(context);
-    final isMenuIcon = _userType == 7 || _userType == 5 || _userType == 6;
 
     return Consumer<NotificationManager>(
-      builder: (context, notificationManager, _) {
+      builder: (context, notificationManager,_) {
         // Listen to notification trigger and refresh data
         if (notificationManager.notificationTrigger) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             final provider = Provider.of<OrdersProvider>(context, listen: false);
-            provider.loadOrders();
+            provider.loadOrders(toRefresh: true);
             notificationManager.resetTrigger();
           });
         }
@@ -90,7 +104,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   ordersProvider.loadOrders();
                 },
               )
-            : const Text('Order List'),
+            : Text(widget.salesmanId != null 
+                ? 'Salesman Orders' 
+                : 'Order List'),
      
         actions: [
           IconButton(
@@ -134,6 +150,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
           return Column(
             children: [
+              // Sync refresh button (for checker, biller, driver who don't have HomeScreen)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                child: SyncRefreshButton(),
+              ),
               // Filter Row
               _FilterRow(
                 routeSt: provider.routeSt,
@@ -156,42 +177,128 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     : ListView.builder(
                         itemCount: provider.orderList.length,
                         itemBuilder: (context, index) {
-                          final order = provider.orderList[index];
-                          final orderWithName = OrderWithName.fromOrder(order);
+                          final orderWithName = provider.orderList[index];
                           return _OrderListItem(
                             orderWithName: orderWithName,
                             userType: _userType,
                             userId: _userId,
-                            onTap: () {
+                            onTap: () async {
+                              final order = orderWithName.order;
                               if (_userType == 1) {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) =>
-                                        OrderDetailsScreen(orderId: order.id),
+                                        OrderDetailsScreen(orderId: order.orderId),
                                   ),
-                                );
+                                ).then((_) {
+                                  final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                                  homeProvider.refreshCounts();
+                                  provider.loadOrders(toRefresh: true);
+                                });
                               } else if (_userType == 2) {
-                                developer.log(
-                                    'The current role is storekeeper: ${order.id}');
+                                // Storekeeper flow: claim if unassigned, otherwise validate ownership
+                                if (order.orderStockKeeperId == -1) {
+                                  final success = await provider.claimOrderAsStorekeeper(
+                                    orderId: order.orderId,
+                                    storekeeperId: _userId,
+                                  );
+                                  if (!success) {
+                                    final msg = provider.errorMessage ??
+                                        'Failed to claim order. Please try again.';
+                                    if (context.mounted) {
+                                      ToastHelper.showError(msg);
+                                    }
+                                    return;
+                                  }
+                                } else if (order.orderStockKeeperId != _userId) {
+                                  if (context.mounted) {
+                                    ToastHelper.showSuccess('Another storekeeper is checking this order.');
+                                  }
+                                  return;
+                                }
+
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) =>
-                                        OrderDetailsStorekeeperScreen(
-                                            orderId: order.id),
+                                        OrderDetailsStorekeeperScreen(orderId: order.orderId),
                                   ),
-                                );
+                                ).then((_) {
+                                  // Refresh badge counts and orders list when returning
+                                  final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                                  homeProvider.refreshCounts();
+                                  provider.loadOrders(toRefresh: true);
+                                });
                               } else if (_userType == 3) {
+                                // Check if it's a draft order (flag = 3) - if so, navigate to CreateOrderScreen for editing
+                                // This matches KMP's behavior (BaseScreen.kt lines 394-397)
+                                if (order.orderFlag == 3) {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => OrderDetailsSalesmanScreen(
-                                        orderId: order.id),
+                                    builder: (_) => CreateOrderScreen(orderId: order.orderId.toString()),
                                   ),
-                                );
+                                ).then((_) {
+                                  // Refresh badge counts and orders list when returning
+                                  final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                                  homeProvider.refreshCounts();
+                                  provider.loadOrders(toRefresh: true);
+                                });
+                                } else {
+                                  // For non-draft orders, navigate to OrderDetailsSalesmanScreen
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => OrderDetailsSalesmanScreen(orderId: order.orderId),
+                                    ),
+                                  ).then((_) {
+                                    // Refresh badge counts and orders list when returning
+                                    final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                                    homeProvider.refreshCounts();
+                                    provider.loadOrders(toRefresh: true);
+                                  });
+                                }
                               } else if (_userType == 6) {
-                                _handleCheckerOrderTap(context, order);
+                                // Checker flow: claim if unassigned, otherwise validate ownership
+                                if (order.orderCheckerId < 1 && order.orderCheckerId != _userId) {
+                                  final success = await provider.claimOrderAsChecker(
+                                    orderId: order.orderId,
+                                    checkerId: _userId,
+                                  );
+                                  if (!success) {
+                                    final msg = provider.errorMessage ??
+                                        'Failed to claim order for checking. Please try again.';
+                                    if (context.mounted) {
+                                      ToastHelper.showSuccess(msg);
+                                      // ScaffoldMessenger.of(context).showSnackBar(
+                                      //   SnackBar(content: Text(msg)),
+                                      // );
+                                    }
+                                    return;
+                                  }
+                                } else if (order.orderCheckerId != _userId) {
+                                  if (context.mounted) {
+                                   ToastHelper.showSuccess('Another checker is currently working on this order.');
+                                   return;
+                                  }
+                                  return;
+                                }
+
+                                // Navigate to checker order details
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => OrderDetailsCheckerScreen(orderId: order.orderId),
+                                  ),
+                                ).then((_) {
+                                  // Refresh badge counts and orders list when returning
+                                  final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+                                  homeProvider.refreshCounts();
+                                  provider.loadOrders(toRefresh: true);
+                                });
+                              } else if (_userType == 5) {
+                                _handleBillerOrderTap(context, order);
                               } else {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
@@ -275,18 +382,19 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  
-  Future<void> _handleCheckerOrderTap(BuildContext context, Order order) async {
+  Future<void> _handleBillerOrderTap(BuildContext context, Order order) async {
     final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
-    if (order.orderCheckerId == -1) {
+    // Biller can claim order if not already assigned (matches KMP line 290)
+    // Check for both 0 and -1 (KMP checks: order.billerId == 0L || order.billerId == -1L)
+    if (order.orderBillerId == -1 || order.orderBillerId == 0) {
       final success = await ordersProvider.sendToBillerOrChecker(
-        isBiller: false,
+        isBiller: true,
         userId: _userId,
         order: order,
-        approvalFlag: OrderApprovalFlag.checkerIsChecking,
+        // No approvalFlag - preserves current order state (matches KMP line 292)
       );
 
       if (!mounted) return;
@@ -295,33 +403,35 @@ class _OrdersScreenState extends State<OrdersScreen> {
           SnackBar(
             content: Text(
               ordersProvider.errorMessage ??
-                  'Failed to claim order for checking.',
+                  'Failed to claim order for billing.',
             ),
           ),
         );
         return;
       }
-    } else if (order.orderApproveFlag == OrderApprovalFlag.checkerIsChecking &&
-        order.orderCheckerId != _userId) {
+    } else if (order.orderBillerId != _userId) {
+      // Another biller is working on this order
       if (!mounted) return;
       messenger.showSnackBar(
         const SnackBar(
-          content:
-              Text('Another checker is currently working on this order.'),
+          content: Text('Another biller is currently working on this order.'),
         ),
       );
       return;
     }
 
+    // Navigate to biller-specific order details screen with Estimated/Final Bill tabs
     if (!mounted) return;
     await navigator.push(
       MaterialPageRoute(
-        builder: (_) => OrderDetailsCheckerScreen(orderId: order.id),
+        builder: (_) => OrderDetailsBillerScreen(orderId: order.orderId),
       ),
-    );
-
-    if (!mounted) return;
-    ordersProvider.loadOrders();
+    ).then((_) {
+      // Refresh badge counts and orders list when returning
+      final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+      homeProvider.refreshCounts();
+      ordersProvider.loadOrders(toRefresh: true);
+    });
   }
 }
 
@@ -401,6 +511,51 @@ class _OrderListItem extends StatelessWidget {
     required this.onTap,
   });
 
+  Widget _buildRoleSubmitStatusIcon(Order order) {
+    // Storekeeper (2): pending until VERIFIED_BY_STOREKEEPER (2) or beyond
+    if (userType == 2) {
+      final bool isMyOrder =
+          order.orderStockKeeperId == -1 || order.orderStockKeeperId == userId;
+
+      if (!isMyOrder) return const SizedBox.shrink();
+
+      final bool isPending = order.orderApproveFlag == 1; // SEND_TO_STOREKEEPER
+      final bool isCompleted = order.orderApproveFlag >= 2; // VERIFIED_BY_STOREKEEPER+
+
+      if (isPending) {
+        return const Icon(Icons.pending_actions, size: 20, color: Colors.orange);
+      }
+      if (isCompleted) {
+        return const Icon(Icons.check_circle, size: 20, color: Colors.green);
+      }
+
+      return const SizedBox.shrink();
+    }
+
+    // Checker (6): pending while in SEND_TO_CHECKER (6) / CHECKER_IS_CHECKING (7)
+    if (userType == 6) {
+      final bool isMyOrder =
+          order.orderCheckerId == -1 || order.orderCheckerId == userId;
+
+      if (!isMyOrder) return const SizedBox.shrink();
+
+      final bool isPending =
+          order.orderApproveFlag == 6 || order.orderApproveFlag == 7;
+      final bool isCompleted = order.orderApproveFlag >= 3; // COMPLETED+
+
+      if (isPending) {
+        return const Icon(Icons.pending_actions, size: 18, color: Colors.orange);
+      }
+      if (isCompleted) {
+        return const Icon(Icons.check_circle, size: 18, color: Colors.green);
+      }
+
+      return const SizedBox.shrink();
+    }
+
+    return const SizedBox.shrink();
+  }
+
   @override
   Widget build(BuildContext context) {
     final order = orderWithName.order;
@@ -423,7 +578,7 @@ class _OrderListItem extends StatelessWidget {
               // Invoice No and Date
               Row(
                 children: [
-                    Expanded(
+                  Expanded(
                     child: Text(
                       order.orderInvNo.toString(),
                       style: TextStyle(
@@ -432,27 +587,39 @@ class _OrderListItem extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(width: 10),
                   Text(
                     _formatDate(order.updatedAt),
                     style: TextStyle(
                       fontSize: 14,
-                      fontWeight: isPending ? FontWeight.bold : FontWeight.normal,
+                      fontWeight:
+                          isPending ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 4),
               // Customer
-              Text(
-                'customer: ${orderWithName.customerName.isNotEmpty ? orderWithName.customerName : order.orderCustName}',
-                style: TextStyle(
-                  fontWeight: isPending ? FontWeight.bold : FontWeight.normal,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'customer: ${orderWithName.customerName.isNotEmpty ? orderWithName.customerName : order.orderCustName}',
+                      style: TextStyle(
+                        fontWeight: isPending ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  _buildRoleSubmitStatusIcon(order),
+                ],
               ),
               // Salesman (if exists and not salesman user)
               if (order.orderSalesmanId != -1 && userType != 3) ...[
                 const SizedBox(height: 4),
+                //  
                 Text(
+                  // 'Salesman: ${orderWithName.salesManName.isNotEmpty ? orderWithName.salesManName : "N/A"}',
                   'Salesman: ${_getSalesmanName(orderWithName, userType, userId)}',
                   style: TextStyle(
                     fontWeight: isPending ? FontWeight.bold : FontWeight.normal,
@@ -502,6 +669,26 @@ class _OrderListItem extends StatelessWidget {
                   ],
                 ),
               ],
+              // Billed tag at right bottom of list tile
+              if (order.orderIsBilled == 1) ...[
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.green),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        'Billed',
+                        style: TextStyle(fontSize: 10, color: Colors.green.shade700, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -513,6 +700,7 @@ class _OrderListItem extends StatelessWidget {
     if (userType == 1 && orderWithName.order.orderSalesmanId == userId) {
       return '${orderWithName.salesManName}(SELF ORDER)';
     }
+     
     return orderWithName.salesManName.isNotEmpty
         ? orderWithName.salesManName
         : 'N/A';
@@ -556,17 +744,40 @@ class _OrderListItem extends StatelessWidget {
       case 5: // CANCELLED
         return 'Order Cancelled';
       case 6: // SEND_TO_CHECKER
-        if (userType == 5) {
-          return 'Pending';
-        } else {
-          return 'Pending in Checker';
+        switch (userType){
+          case 5:
+            return 'Pending';
+          case 3:
+            return 'Send to Biller and Checker';
+          case 6:
+            return 'Pending';
+          default:
+            return 'Pending in Checker';
         }
+        // if (userType == 5) {
+        //   return 'Pending';
+        // } else {
+        //   return 'Pending in Checker';
+        // }
       case 7: // CHECKER_IS_CHECKING
-        if (userType == 5) {
+        switch (userType){
+          case 5:
           return 'Pending';
-        } else {
+          case 6:
+          if(order.orderCheckerId == userId){
+            return 'Waiting for your submission';
+          }else{
+            return 'Pending in Checker';
+          }
+          default:
           return 'Checker is checking';
         }
+        // if (userType == 5) {
+        //   return 'Pending';
+        
+        // } else {
+        //   return 'Checker is checking';
+        // }
       default:
         return 'Error 404';
     }
@@ -661,7 +872,7 @@ class _RouteFilterBottomSheet extends StatelessWidget {
             onTap: () => onRouteSelected(-1, 'All Routes'),
           ),
           ...routeList.map((route) {
-            final routeId = route.id;
+            final routeId = route.routeId ?? -1;
             final routeName = route.name;
             return ListTile(
               title: Text(routeName),

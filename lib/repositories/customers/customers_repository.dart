@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:dio/dio.dart';
 import 'package:either_dart/either.dart';
 import 'package:sqflite/sqflite.dart';
@@ -111,10 +113,13 @@ class CustomersRepository {
           );
         }
       }
-
+      if(maps.isEmpty) {
+         
+      }
       final customers = maps.map((map) => CustomerWithNames.fromMap(map)).toList();
       return Right(customers);
     } catch (e) {
+       
       return Left(DatabaseFailure.fromError(e));
     }
   }
@@ -207,6 +212,44 @@ class CustomersRepository {
     }
   }
 
+Future<Either<Failure, void>> editCustomer(Customer customer) async {
+  try {
+    final db = await _database;
+
+    // Manually create the map of fields to update
+    final Map<String, Object?> updateMap = {
+      'code': customer.code,
+      'name': customer.name,
+      'phone': customer.phoneNo,
+      'address': customer.address,
+      'routId': customer.routId,
+      'salesmanId': customer.salesManId,
+      'rating': customer.rating,
+      'deviceToken': '', // or keep existing if needed
+      'createdDateTime': customer.createdAt ?? '',
+      'updatedDateTime': customer.updatedAt ?? '',
+      'flag': customer.flag ?? 1,
+    };
+
+    // Update using SDK method
+    await db.update(
+      'Customers',
+      updateMap,
+      where: 'customerId = ?',
+      whereArgs: [customer.customerId], // Use API ID
+    );
+
+    return const Right(null);
+  } catch (e) {
+    return Left(DatabaseFailure.fromError(e));
+  }
+}
+
+
+
+
+
+
   // ============================================================================
   // LOCAL DB WRITE METHODS (Used by sync and write operations)
   // ============================================================================
@@ -218,7 +261,6 @@ class CustomersRepository {
       await db.rawInsert(
         '''
         INSERT OR REPLACE INTO Customers (
-          id,
           customerId,
           code,
           name,
@@ -232,11 +274,11 @@ class CustomersRepository {
           updatedDateTime,
           flag
         ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
         ''',
         [
-          customer.id,
+          customer.customerId,
           customer.code,
           customer.name,
           customer.phoneNo,
@@ -256,35 +298,76 @@ class CustomersRepository {
     }
   }
 
+  /// Update customer in local DB
+  /// Preserves deviceToken and createdDateTime from existing record
+  Future<Either<Failure, void>> updateCustomerLocal(Customer customer) async {
+    try {
+      final db = await _database;
+
+      // Get existing deviceToken and createdDateTime to preserve them
+      final existingMap = await db.query(
+        'Customers',
+        columns: ['deviceToken', 'createdDateTime'],
+        where: 'customerId = ?',
+        whereArgs: [customer.customerId],
+        limit: 1,
+      );
+
+      final deviceToken = existingMap.isNotEmpty 
+          ? (existingMap.first['deviceToken'] as String? ?? '')
+          : '';
+      
+      final createdDateTime = existingMap.isNotEmpty
+          ? (existingMap.first['createdDateTime'] as String? ?? customer.createdAt ?? '')
+          : (customer.createdAt ?? '');
+
+      // Update with merged customer data, preserving deviceToken and createdDateTime
+      await db.update(
+        'Customers',
+        {
+          'code': customer.code,
+          'name': customer.name,
+          'phone': customer.phoneNo,
+          'address': customer.address,
+          'routId': customer.routId,
+          'salesmanId': customer.salesManId,
+          'rating': customer.rating,
+          'deviceToken': deviceToken, // Preserve existing deviceToken
+          'createdDateTime': createdDateTime, // Preserve existing createdDateTime
+          'updatedDateTime': customer.updatedAt ?? '',
+          'flag': customer.flag ?? 1,
+        },
+        where: 'customerId = ?',
+        whereArgs: [customer.customerId],
+      );
+
+      return const Right(null);
+    } catch (e) {
+       
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
+
   /// Add multiple customers to local DB (transaction)
   Future<Either<Failure, void>> addCustomers(List<Customer> customers) async {
     try {
       final db = await _database;
       await db.transaction((txn) async {
-        const sql = '''
-        INSERT OR REPLACE INTO Customers (
-          id,
-          customerId,
-          code,
-          name,
-          phone,
-          address,
-          routId,
-          salesmanId,
-          rating,
-          deviceToken,
-          createdDateTime,
-          updatedDateTime,
-          flag
-        ) VALUES (
-          NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-        ''';
+        final batch = txn.batch();
         for (final customer in customers) {
-          await txn.rawInsert(
-            sql,
+          // Use INSERT OR REPLACE (matches KMP pattern)
+          batch.rawInsert(
+            '''
+            INSERT OR REPLACE INTO Customers (
+              customerId, code, name, phone, address, routId, salesmanId, 
+              rating, deviceToken, createdDateTime, updatedDateTime, flag
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            ''',
             [
-              customer.id,
+              customer.customerId,
               customer.code,
               customer.name,
               customer.phoneNo,
@@ -292,13 +375,14 @@ class CustomersRepository {
               customer.routId,
               customer.salesManId,
               customer.rating,
-              '',
+              '', // deviceToken
               customer.createdAt ?? '',
               customer.updatedAt ?? '',
               customer.flag ?? 1,
             ],
           );
         }
+        await batch.commit(noResult: true);
       });
       return const Right(null);
     } catch (e) {
@@ -306,12 +390,32 @@ class CustomersRepository {
     }
   }
 
-  /// Update customer flag
-  Future<Either<Failure, void>> updateCustomerFlag({
+  /// Update customer flag via API and update local DB
+  /// Converted from KMP's updateCustomerFlag function
+  /// Matches KMP pattern: API call first, then update local DB
+  Future<Either<Failure, Customer>> updateCustomerFlag({
     required int customerId,
     required int flag,
   }) async {
     try {
+      // 1. Call API
+      final response = await _dio.post(
+        ApiEndpoints.updateCustomerFlag,
+        data: {
+          'id': customerId,
+          'flag': flag,
+        },
+      );
+
+      // 2. Parse response
+      final customerSuccessApi = CustomerSuccessApi.fromJson(response.data);
+      if (customerSuccessApi.status != 1) {
+        return Left(ServerFailure.fromError(
+          'Failed to update customer flag: ${customerSuccessApi.message}',
+        ));
+      }
+
+      // 3. Update local DB
       final db = await _database;
       await db.update(
         'Customers',
@@ -319,9 +423,12 @@ class CustomersRepository {
         where: 'customerId = ?',
         whereArgs: [customerId],
       );
-      return const Right(null);
+
+      return Right(customerSuccessApi.data);
+    } on DioException catch (e) {
+      return Left(NetworkFailure.fromDioError(e));
     } catch (e) {
-      return Left(DatabaseFailure.fromError(e));
+      return Left(UnknownFailure.fromError(e));
     }
   }
 
@@ -422,26 +529,55 @@ class CustomersRepository {
   }
 
   /// Update customer via API and update local DB
+  /// Uses custom deserialization to merge partial API response with existing data
   Future<Either<Failure, Customer>> updateCustomer(Customer customer) async {
     try {
-      // 1. Call API
+      // 1. Get existing customer from local DB (used to preserve fields like deviceToken/createdAt)
+      final existingCustomerResult = await getCustomerById(customer.customerId!);
+      Customer? existingCustomer;
+      existingCustomerResult.fold(
+        (_) {},
+        (cust) => existingCustomer = cust,
+      );
+
+      // 2. Build base customer with NEW values from the caller overlaid on existing fields
+      //    This ensures merge uses the latest user edits instead of stale local data.
+      final baseCustomer = (existingCustomer ?? customer).copyWith(
+        customerId: existingCustomer?.customerId ?? customer.customerId,
+        code: customer.code,
+        name: customer.name,
+        phoneNo: customer.phoneNo,
+        address: customer.address,
+        routId: customer.routId,
+        salesManId: customer.salesManId,
+        rating: customer.rating,
+        flag: customer.flag,
+        createdAt: existingCustomer?.createdAt ?? customer.createdAt,
+        updatedAt: customer.updatedAt ?? existingCustomer?.updatedAt,
+      );
+
+      // 3. Call API
       final response = await _dio.post(
         ApiEndpoints.updateCustomer,
         data: customer.toJson(),
       );
 
-      // 2. Parse response
-      final customerSuccessApi = CustomerSuccessApi.fromJson(response.data);
+      // 4. Parse response with merge support (handles partial responses)
+      final customerSuccessApi = CustomerSuccessApi.fromJsonWithMerge(
+        response.data,
+        existingCustomer: baseCustomer,
+      );
+      
       if (customerSuccessApi.status != 1) {
         return Left(ServerFailure.fromError(
           'Failed to update customer: ${customerSuccessApi.message}',
         ));
       }
 
-      // 3. Store in local DB
-      final addResult = await addCustomer(customerSuccessApi.data);
-      if (addResult.isLeft) {
-        return addResult.map((_) => customerSuccessApi.data);
+      // 5. Update local DB with merged data
+      final updateResult = await updateCustomerLocal(customerSuccessApi.data);
+      if (updateResult.isLeft) {
+        return updateResult.map((_) => customerSuccessApi.data);
       }
 
       return Right(customerSuccessApi.data);

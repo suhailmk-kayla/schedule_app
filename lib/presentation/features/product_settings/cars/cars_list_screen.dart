@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
 import '../../../../utils/asset_images.dart';
 import '../../../provider/cars_provider.dart';
 import '../../../../models/cars.dart';
@@ -10,7 +11,12 @@ import 'create_car_screen.dart';
 /// Displays list of cars with search
 /// Converted from KMP's CarsListScreen.kt
 class CarsListScreen extends StatefulWidget {
-  const CarsListScreen({super.key});
+  final int? productId; // If provided, this is for adding car to product
+
+  const CarsListScreen({
+    super.key,
+    this.productId,
+  });
 
   @override
   State<CarsListScreen> createState() => _CarsListScreenState();
@@ -18,6 +24,8 @@ class CarsListScreen extends StatefulWidget {
 
 class _CarsListScreenState extends State<CarsListScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _showSearchBar = false;
 
   @override
   void initState() {
@@ -31,19 +39,40 @@ class _CarsListScreenState extends State<CarsListScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
   void _handleSearch(String searchKey) {
     final provider = Provider.of<CarsProvider>(context, listen: false);
-    provider.getCars(searchKey: searchKey);
+    provider.getCars(searchKey: searchKey.trim());
+  }
+
+  void _toggleSearchBar() {
+    setState(() {
+      _showSearchBar = !_showSearchBar;
+      if (!_showSearchBar) {
+        // Clear search when closing
+        _searchController.clear();
+        _handleSearch('');
+      }
+    });
+    // Focus search field when opened
+    if (_showSearchBar) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _searchFocusNode.requestFocus();
+      });
+    }
   }
 
   void _handleItemClick(Cars car) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => CarsDetailsScreen(car: car),
+        builder: (_) => CarsDetailsScreen(
+          car: car,
+          productId: widget.productId,
+        ),
       ),
     );
   }
@@ -61,71 +90,55 @@ class _CarsListScreenState extends State<CarsListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Car List'),
+        title: _showSearchBar
+            ? TextField(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                style: const TextStyle(color: Colors.black),
+                decoration: InputDecoration(
+                  hintText: 'Search',
+                  hintStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[200],
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
+                onChanged: (value) {
+                  _handleSearch(value);
+                },
+              )
+            : const Text('Car List'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              // Show search dialog
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Search'),
-                  content: TextField(
-                    controller: _searchController,
-                    decoration: const InputDecoration(
-                      hintText: 'Enter search key',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (value) {
-                      Navigator.pop(context);
-                      _handleSearch(value);
-                    },
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _handleSearch(_searchController.text);
-                      },
-                      child: const Text('Search'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                  ],
-                ),
-              );
-            },
+            icon: Icon(_showSearchBar ? Icons.close : Icons.search),
+            onPressed: _toggleSearchBar,
           ),
         ],
       ),
       body: Column(
         children: [
-          // Search bar
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Search cars...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onChanged: _handleSearch,
-              onSubmitted: _handleSearch,
-            ),
-          ),
           // Cars list
           Expanded(
-            child: Consumer<CarsProvider>(
-              builder: (context, provider, _) {
+            child: Consumer2<CarsProvider,NotificationManager>(
+              builder: (context, provider, notificationManager, _) {
+                if(notificationManager.notificationTrigger){
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    notificationManager.resetTrigger();
+                    provider.getCars();
+                    provider.getAllCarBrands();
+                    ;
+                  });
+                }
                 if (provider.isLoading && provider.carsList.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }

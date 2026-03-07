@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../../../models/car_api.dart';
 import '../../../../models/cars.dart';
 import '../../../provider/cars_provider.dart';
@@ -61,37 +62,37 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
 
   void _handleBrandSelected(Brand brand) {
     setState(() {
-      _selectedBrandId = brand.id;
+      _selectedBrandId = brand.carBrandId;
       _selectedBrandName = brand.brandName;
       _selectedNameId = -1;
       _selectedNameName = 'Select Name';
       _modelAndVersionList.clear();
     });
     final provider = Provider.of<CarsProvider>(context, listen: false);
-    provider.getCarNames(brand.id);
+    provider.getCarNames(brand.carBrandId);
   }
 
   void _handleNameSelected(Name name) {
     setState(() {
-      _selectedNameId = name.id;
+      _selectedNameId = name.carNameId;
       _selectedNameName = name.carName;
       _modelAndVersionList.clear();
     });
     final provider = Provider.of<CarsProvider>(context, listen: false);
-    provider.getCarModels(brandId: _selectedBrandId, nameId: name.id);
+    provider.getCarModels(brandId: _selectedBrandId, nameId: name.carNameId);
   }
 
   Future<void> _handleAddBrand() async {
     final brandName = _brandNameController.text.trim();
     if (brandName.isEmpty) {
-      _showError('Please enter brand name');
+      ToastHelper.showError('Please enter brand name');
       return;
     }
 
     final provider = Provider.of<CarsProvider>(context, listen: false);
     final exists = await provider.checkCarBrandExist(brandName);
     if (exists) {
-      _showError('Brand already exists');
+    ToastHelper.showError('Brand already exists');
       return;
     }
 
@@ -110,13 +111,13 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
 
   Future<void> _handleAddName() async {
     if (_selectedBrandId == -1 && _selectedBrandName == 'Select Brand') {
-      _showError('Please select or create a brand first');
+      
       return;
     }
 
     final carName = _carNameController.text.trim();
     if (carName.isEmpty) {
-      _showError('Please enter car name');
+      ToastHelper.showError('Please enter car name');
       return;
     }
 
@@ -126,7 +127,7 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
     if (_selectedBrandId != -1) {
       final exists = await provider.checkCarNameExist(carName, _selectedBrandId);
       if (exists) {
-        _showError('Car name already exists');
+        ToastHelper.showError('Car name already exists');
         return;
       }
     }
@@ -145,13 +146,13 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
 
   void _handleAddVersion() {
     if (_selectedModelForVersion == null) {
-      _showError('Please select a model first');
+      ToastHelper.showError('Please select a model first');
       return;
     }
 
     final versionName = _versionNameController.text.trim();
     if (versionName.isEmpty) {
-      _showError('Please enter version name');
+      ToastHelper.showError('Please enter version name');
       return;
     }
 
@@ -161,19 +162,19 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
           versionName,
           _selectedBrandId,
           _selectedNameId,
-          _selectedModelForVersion!.carModel.id,
+          _selectedModelForVersion!.carModel.carModelId,
         )
         .then((exists) {
       if (exists) {
-        _showError('Version already exists');
+        ToastHelper.showError('Version already exists');
         return;
       }
 
       final newVersion = Version(
-        id: -1,
+        carVersionId: -1,
         carBrandId: _selectedBrandId,
         carNameId: _selectedNameId,
-        carModelId: _selectedModelForVersion!.carModel.id,
+        carModelId: _selectedModelForVersion!.carModel.carModelId,
         versionName: versionName,
       );
 
@@ -211,12 +212,12 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
 
   Future<void> _handleSubmit() async {
     if (_selectedBrandId == -1 && _selectedBrandName == 'Select Brand') {
-      _showError('Please select or create a brand');
+     ToastHelper.showError('Please select or create a brand');
       return;
     }
 
     if (_selectedNameId == -1 && _selectedNameName == 'Select Name') {
-      _showError('Please select or create a car name');
+      ToastHelper.showError('Please select or create a car name');
       return;
     }
 
@@ -236,33 +237,29 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
 
     result.fold(
       (failure) {
-        _showError(failure.message);
+      ToastHelper.showError(failure.message);
       },
       (_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Car created successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        ToastHelper.showSuccess('Car created successfully');
         Navigator.pop(context);
+        provider.getCars();
       },
     );
   }
 
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
-    );
-  }
+  // void _showError(String message) {
+  //   ScaffoldMessenger.of(context).showSnackBar(
+  //     SnackBar(
+  //       content: Text(message),
+  //       backgroundColor: Colors.red,
+  //     ),
+  //   );
+  // }
 
   void _showBrandBottomSheet() {
     final provider = Provider.of<CarsProvider>(context, listen: false);
     if (provider.brandList.isEmpty && _selectedBrandName == 'Select Brand') {
-      _showError('No car brands found');
+    ToastHelper.showError('No car brands found');
       return;
     }
 
@@ -277,7 +274,7 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
             itemCount: provider.brandList.length,
             itemBuilder: (context, index) {
               final brand = provider.brandList[index];
-              final isSelected = _selectedBrandId == brand.id;
+              final isSelected = _selectedBrandId == brand.carBrandId;
               return ListTile(
                 title: Text(brand.brandName),
                 trailing: isSelected ? const Icon(Icons.check, color: Colors.blue) : null,
@@ -295,7 +292,7 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
 
   void _showNameBottomSheet() {
     if (_selectedBrandId == -1) {
-      _showError('Please select a brand first');
+     ToastHelper.showError('Please select a brand first');
       return;
     }
 
@@ -313,7 +310,7 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
             itemCount: provider.nameList.length,
             itemBuilder: (context, index) {
               final name = provider.nameList[index];
-              final isSelected = _selectedNameId == name.id;
+              final isSelected = _selectedNameId == name.carNameId;
               return ListTile(
                 title: Text(name.carName),
                 trailing: isSelected ? const Icon(Icons.check, color: Colors.blue) : null,
@@ -396,7 +393,7 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
     // IDs can be -1 if brand/name were created (not selected)
     // Matches KMP: passes carBrandId and carNameId which can be -1 (line 467-468)
     if (_selectedBrandName == 'Select Brand' || _selectedNameName == 'Select Name') {
-      _showError('Please select or create brand and name first');
+      ToastHelper.showError('Please select or create brand and name first');
       return;
     }
 
@@ -416,7 +413,7 @@ class _CreateCarScreenState extends State<CreateCarScreen> {
             (item) => item.carModel.modelName == carModelAndVersion.carModel.modelName,
           );
           if (modelNameExists) {
-            _showError('Model Name already added');
+            ToastHelper.showError('Model Name already added');
             return;
           }
 
@@ -930,7 +927,7 @@ class _AddModelDialogState extends State<_AddModelDialog> {
 
   void _createModelAndVersion(String modelName) {
     final carModel = Model(
-      id: _selectedModelId > -1 ? _selectedModelId : -1,
+      carModelId: _selectedModelId > -1 ? _selectedModelId : -1,
       carBrandId: widget.brandId,
       carNameId: widget.nameId,
       modelName: modelName,
@@ -968,13 +965,13 @@ class _AddModelDialogState extends State<_AddModelDialog> {
             itemCount: provider.modelList.length,
             itemBuilder: (context, index) {
               final model = provider.modelList[index];
-              final isSelected = _selectedModelId == model.id;
+              final isSelected = _selectedModelId == model.carModelId;
               return ListTile(
                 title: Text(model.modelName),
                 trailing: isSelected ? const Icon(Icons.check, color: Colors.blue) : null,
                 onTap: () {
                   setState(() {
-                    _selectedModelId = model.id;
+                    _selectedModelId = model.carModelId;
                     _selectedModel = model;
                     _modelController.text = model.modelName;
                   });

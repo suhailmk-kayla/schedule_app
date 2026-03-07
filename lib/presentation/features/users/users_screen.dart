@@ -28,9 +28,15 @@ class _UsersScreenState extends State<UsersScreen> {
         builder: (_) => const CreateUserScreen(),
       ),
     ).then((_) {
-      developer.log('CreateUserScreen returned');
-      // Refresh users list after returning
-      Provider.of<UsersProvider>(context, listen: false).loadUsers();
+       
+      // Refresh users list after returning - use postFrameCallback for safety
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            Provider.of<UsersProvider>(context, listen: false).loadUsers();
+          }
+        });
+      }
     });
   }
 
@@ -154,12 +160,23 @@ class _UsersScreenState extends State<UsersScreen> {
                         ],
                       ),
                       onTap: () {
+                        // Get provider reference before navigation for safety
+                        final provider = Provider.of<UsersProvider>(context, listen: false);
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => UserDetailsScreen(userId: u.id),
+                            builder: (_) => UserDetailsScreen(userId: u.userId ?? -1),
                           ),
-                        );
+                        ).then((result) {
+                          // Refresh users list if user was deleted - use postFrameCallback for safety
+                          if (result == true && mounted) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) {
+                                provider.loadUsers();
+                              }
+                            });
+                          }
+                        });
                       },
                     );
                   },

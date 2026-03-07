@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../provider/customers_provider.dart';
 import '../../../utils/storage_helper.dart';
+import '../../../utils/toast_helper.dart';
 import '../../../models/master_data_api.dart';
 import 'create_customer_screen.dart';
 
@@ -101,74 +102,65 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     });
 
     final provider = Provider.of<CustomersProvider>(context, listen: false);
+    final newFlag = _customer!.flag == 1 ? 0 : 1;
     final success = await provider.updateCustomerFlag(
       customerId: widget.customerId,
       salesmanId: _customer!.salesmanId,
-      flag: _customer!.flag == 1 ? 0 : 1,
+      flag: newFlag,
     );
 
     if (!mounted) return;
 
-    setState(() {
-      _isLoading = false;
-    });
-
     if (success) {
+      // Wait for provider to reload customers list
+      await provider.loadCustomers();
+      
       // Reload customer details to get updated data
       await _loadCustomerDetails();
       
       if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Message'),
-            content: Text(_customer!.flag == 1
-                ? 'Customer activated'
-                : 'Customer suspended'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Ok'),
-              ),
-            ],
-          ),
+        setState(() {
+          _isLoading = false;
+        });
+        
+        // Show success toast
+        ToastHelper.showSuccess(
+          newFlag == 1
+              ? 'Customer activated successfully'
+              : 'Customer suspended successfully',
         );
       }
     } else {
+      setState(() {
+        _isLoading = false;
+      });
+      
       if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Error'),
-            content: Text(provider.errorMessage ?? 'Failed to update customer status'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Ok'),
-              ),
-            ],
-          ),
+        // Show error toast
+        ToastHelper.showError(
+          provider.errorMessage ?? 'Failed to update customer status',
         );
       }
     }
   }
 
-  void _handleEdit() {
-    Navigator.push(
+  Future<void> _handleEdit() async {
+    final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => CreateCustomerScreen(
           customerId: widget.customerId,
         ),
       ),
-    ).then((result) {
-      // Reload customer details if customer was updated
-      if (result == true && mounted) {
-        final provider = Provider.of<CustomersProvider>(context, listen: false);
-        provider.loadCustomers();
-        _loadCustomerDetails();
-      }
-    });
+    );
+    
+    // Reload customer details if customer was updated
+    if (result == true && mounted) {
+      final provider = Provider.of<CustomersProvider>(context, listen: false);
+      // Wait for customers list to reload before loading details
+      await provider.loadCustomers();
+      await _loadCustomerDetails();
+    }
   }
 
   Widget _buildStarRating(int rating) {

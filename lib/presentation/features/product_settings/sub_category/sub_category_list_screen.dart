@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/utils/notification_manager.dart';
+import 'package:schedule_frontend_flutter/utils/toast_helper.dart';
 import '../../../../utils/asset_images.dart';
 import '../../../provider/sub_categories_provider.dart';
 import '../../../../models/master_data_api.dart';
@@ -16,6 +18,8 @@ class SubCategoryListScreen extends StatefulWidget {
 
 class _SubCategoryListScreenState extends State<SubCategoryListScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _showSearchBar = false;
   String _errorMessage = '';
 
   @override
@@ -30,12 +34,30 @@ class _SubCategoryListScreenState extends State<SubCategoryListScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
   void _handleSearch(String searchKey) {
     final provider = Provider.of<SubCategoriesProvider>(context, listen: false);
-    provider.getSubCategories(searchKey: searchKey);
+    provider.getSubCategories(searchKey: searchKey.trim());
+  }
+
+  void _toggleSearchBar() {
+    setState(() {
+      _showSearchBar = !_showSearchBar;
+      if (!_showSearchBar) {
+        // Clear search when closing
+        _searchController.clear();
+        _handleSearch('');
+      }
+    });
+    // Focus search field when opened
+    if (_showSearchBar) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _searchFocusNode.requestFocus();
+      });
+    }
   }
 
   void _handleEditClick(SubCategoryWithCategory subCategoryWithCategory) {
@@ -79,9 +101,7 @@ class _SubCategoryListScreenState extends State<SubCategoryListScreen> {
     int parentId,
   ) async {
     if (parentId == -1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select category')),
-      );
+     ToastHelper.showError('Select category');
       return;
     }
 
@@ -108,100 +128,74 @@ class _SubCategoryListScreenState extends State<SubCategoryListScreen> {
       // Refresh list
       provider.getSubCategories(searchKey: _searchController.text);
       if (!isEdit) {
-        _errorMessage = 'Sub-Category Added successfully';
-        _showErrorDialog();
+        ToastHelper.showSuccess('Sub-Category Added successfully');
+        // _errorMessage = 'Sub-Category Added successfully';
+        // _showErrorDialog();
+      }else{
+        ToastHelper.showSuccess('Sub-Category Updated successfully');
       }
     } else {
-      _errorMessage = provider.errorMessage ?? 'Failed to save sub-category';
-      _showErrorDialog();
+      ToastHelper.showError(provider.errorMessage ?? 'Failed to save sub-category');
+      // _errorMessage = provider.errorMessage ?? 'Failed to save sub-category';
+      // _showErrorDialog();
     }
   }
 
-  void _showErrorDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Message'),
-        content: Text(_errorMessage),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sub Category List'),
+        title: _showSearchBar
+            ? TextField(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                style: const TextStyle(color: Colors.black),
+                decoration: InputDecoration(
+                  hintText: 'Search',
+                  hintStyle: const TextStyle(color: Colors.grey),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[200],
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
+                onChanged: (value) {
+                  _handleSearch(value);
+                },
+              )
+            : const Text('Sub Category List'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              // Show search dialog
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Search'),
-                  content: TextField(
-                    controller: _searchController,
-                    decoration: const InputDecoration(
-                      hintText: 'Enter search key',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (value) {
-                      Navigator.pop(context);
-                      _handleSearch(value);
-                    },
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _handleSearch(_searchController.text);
-                      },
-                      child: const Text('Search'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                  ],
-                ),
-              );
-            },
+            icon: Icon(_showSearchBar ? Icons.close : Icons.search),
+            onPressed: _toggleSearchBar,
           ),
         ],
       ),
       body: Column(
         children: [
-          // Search bar
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Search sub-categories...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onChanged: _handleSearch,
-              onSubmitted: _handleSearch,
-            ),
-          ),
           // Sub-categories list
           Expanded(
-            child: Consumer<SubCategoriesProvider>(
-              builder: (context, provider, _) {
+            child: Consumer2<SubCategoriesProvider,NotificationManager>(
+
+              builder: (context, provider, notificationManager, _) {
+                if(notificationManager.notificationTrigger){
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    notificationManager.resetTrigger();
+                    provider.getSubCategories();
+                    provider.getAllCategories();
+                  });
+                }
                 if (provider.isLoading && provider.subCategoriesList.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }
@@ -362,14 +356,16 @@ class _AddSubCategoryDialogState extends State<_AddSubCategoryDialog> {
     _nameController = TextEditingController(
       text: widget.subCategory?.name ?? '',
     );
-    if (widget.isAddNew) {
-      // Load categories for selection
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final provider =
-            Provider.of<SubCategoriesProvider>(context, listen: false);
-        provider.getAllCategories();
-      });
-    } else {
+    
+    // Load categories for both add and edit modes
+    // In edit mode, we need categories loaded to display the selected category name
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider =
+          Provider.of<SubCategoriesProvider>(context, listen: false);
+      provider.getAllCategories();
+    });
+    
+    if (!widget.isAddNew) {
       // Edit mode - set category from sub-category
       _categoryId = widget.subCategory?.catId ?? -1;
     }
@@ -395,7 +391,8 @@ class _AddSubCategoryDialogState extends State<_AddSubCategoryDialog> {
               return DropdownButtonFormField<int>(
                 value: _categoryId == -1 ? null : _categoryId,
                 decoration: const InputDecoration(
-                  suffixIcon: Icon(Icons.arrow_drop_down),
+
+                  
                   labelText: 'Category',
                   border: OutlineInputBorder(),
                   isDense: true,
@@ -403,11 +400,11 @@ class _AddSubCategoryDialogState extends State<_AddSubCategoryDialog> {
                 hint: const Text('Select Category'),
                 items: provider.categoriesList.map((category) {
                   return DropdownMenuItem<int>(
-
-                    value: category.id,
-                    child: Text(category.name,
-                    style: const TextStyle(
-                        fontSize: 16,
+                    value: category.categoryId, // Use server ID, not local DB primary key
+                    child: Text(
+                      category.name,
+                      style: const TextStyle(
+                        fontSize: 12,
                       ),
                     ),
                   );
@@ -463,7 +460,7 @@ class _AddSubCategoryDialogState extends State<_AddSubCategoryDialog> {
             }
             widget.onConfirmation(
               _categoryId,
-              widget.subCategory?.id ?? -1,
+              widget.subCategory?.subCategoryId ?? -1, // Use server ID, not local DB primary key
               _nameController.text.trim(),
             );
           },
