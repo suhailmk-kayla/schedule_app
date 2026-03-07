@@ -82,8 +82,8 @@ class _OutOfStockDetailsSupplierScreenState
 
     // Initialize controllers
     _noteController.text = sub.note;
-    // Initialize available qty with existing value if present, otherwise 0
-    _availableQtyController.text = sub.availQty > 0 ? sub.availQty.toString() : '0';
+    // Initialize available qty with existing value if present, otherwise empty (no default)
+    _availableQtyController.text = sub.availQty > 0 ? sub.availQty.toString() : '';
     // No default selection: user must choose Available or Out of Stock
     _selectedAvailability = null;
 
@@ -222,7 +222,12 @@ class _OutOfStockDetailsSupplierScreenState
                         availableQtyController: _availableQtyController,
                         selectedAvailability: _selectedAvailability,
                         onAvailabilityChanged: (value) {
-                          setState(() => _selectedAvailability = value);
+                          setState(() {
+                            _selectedAvailability = value;
+                            if (value == false) {
+                              _availableQtyController.clear();
+                            }
+                          });
                         },
                         canEdit: canEdit,
                         canShowInformButton: canShowInformButton,
