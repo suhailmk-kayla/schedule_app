@@ -584,28 +584,26 @@ class _OrderListItem extends StatelessWidget {
                 ),
               ],
               // Status
-              if (userType != 5) ...[
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Text(
-                      'Status: ',
-                      style: TextStyle(
-                        fontWeight: FontWeight.normal,
-                        color: Colors.black87,
-                      ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Text(
+                    'Status: ',
+                    style: TextStyle(
+                      fontWeight: FontWeight.normal,
+                      color: Colors.black87,
                     ),
-                    Text(
-                      _getOrderStatus(order, userType, userId),
-                      style: TextStyle(
-                        fontWeight: isPending ? FontWeight.bold : FontWeight.normal,
-                        fontStyle: FontStyle.italic,
-                        color: _getStatusColor(order, userType, userId),
-                      ),
+                  ),
+                  Text(
+                    _getOrderStatus(order, userType, userId),
+                    style: TextStyle(
+                      fontWeight: isPending ? FontWeight.bold : FontWeight.normal,
+                      fontStyle: FontStyle.italic,
+                      color: _getStatusColor(order, userType, userId),
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ],
           ),
         ),

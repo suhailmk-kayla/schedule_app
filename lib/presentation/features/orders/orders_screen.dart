@@ -1,4 +1,3 @@
-import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -647,28 +646,26 @@ class _OrderListItem extends StatelessWidget {
                 ),
               ],
               // Status
-              if (userType != 5) ...[
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Text(
-                      'Status: ',
-                      style: TextStyle(
-                        fontWeight: FontWeight.normal,
-                        color: Colors.black87,
-                      ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Text(
+                    'Status: ',
+                    style: TextStyle(
+                      fontWeight: FontWeight.normal,
+                      color: Colors.black87,
                     ),
-                    Text(
-                      _getOrderStatus(order, userType, userId),
-                      style: TextStyle(
-                        fontWeight: isPending ? FontWeight.bold : FontWeight.normal,
-                        fontStyle: FontStyle.italic,
-                        color: _getStatusColor(order, userType, userId),
-                      ),
+                  ),
+                  Text(
+                    _getOrderStatus(order, userType, userId),
+                    style: TextStyle(
+                      fontWeight: isPending ? FontWeight.bold : FontWeight.normal,
+                      fontStyle: FontStyle.italic,
+                      color: _getStatusColor(order, userType, userId),
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
               // Billed tag at right bottom of list tile
               if (order.orderIsBilled == 1) ...[
                 const SizedBox(height: 6),
@@ -745,7 +742,7 @@ class _OrderListItem extends StatelessWidget {
         return 'Order Cancelled';
       case 6: // SEND_TO_CHECKER
         switch (userType){
-          
+
           case 5:
             return 'Pending';
           case 3:
