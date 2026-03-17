@@ -955,9 +955,7 @@ class _SubItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Terminal state: once marked "Not Available" (oospFlag==4), admin should not be able
-    // to perform any further actions (no reject/not-available, no change supplier, no send).
-    final canShowActions = subItem.oospFlag == 0 || subItem.oospFlag == 3;
+    final canShowActions = subItem.oospFlag == 0 || subItem.oospFlag == 3 || subItem.oospFlag == 4;
     // Fix 2026-02-03, by AI: Show pending supplier name when admin has selected
     // a new supplier (not yet sent) after original returned "out of stock"
     final supplierName = (pendingSupplierName?.isNotEmpty == true)
