@@ -723,7 +723,7 @@ class _OrderListItem extends StatelessWidget {
           if (order.orderStockKeeperId == -1 || order.orderStockKeeperId == userId) {
             return 'Pending';
           } else {
-            return 'Checking';
+            return 'Store keeper Checking';
           }
         }
       case 2: // VERIFIED_BY_STOREKEEPER
@@ -745,6 +745,7 @@ class _OrderListItem extends StatelessWidget {
         return 'Order Cancelled';
       case 6: // SEND_TO_CHECKER
         switch (userType){
+          
           case 5:
             return 'Pending';
           case 3:
@@ -772,12 +773,7 @@ class _OrderListItem extends StatelessWidget {
           default:
           return 'Checker is checking';
         }
-        // if (userType == 5) {
-        //   return 'Pending';
-        
-        // } else {
-        //   return 'Checker is checking';
-        // }
+
       default:
         return 'Error 404';
     }
