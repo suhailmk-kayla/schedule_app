@@ -720,7 +720,7 @@ class _OrderListItem extends StatelessWidget {
           if (order.orderStockKeeperId == -1 || order.orderStockKeeperId == userId) {
             return 'Pending';
           } else {
-            return 'Store keeper Checking';
+            return 'Storekeeper is checking';
           }
         }
       case 2: // VERIFIED_BY_STOREKEEPER

@@ -2138,6 +2138,15 @@ _setError(failure.message);
       // Get users for notifications
       final adminsResult = await _usersRepository.getUsersByCategory(1);
       final List<Map<String, dynamic>> userIds = [];
+      void addUserIfMissing({required int targetUserId, int silentPush = 1}) {
+        if (targetUserId < 1) return;
+        final exists = userIds.any(
+          (e) => (e['user_id'] as int?) == targetUserId,
+        );
+        if (!exists) {
+          userIds.add({'user_id': targetUserId, 'silent_push': silentPush});
+        }
+      }
 
       adminsResult.fold(
         (_) {},
@@ -2150,6 +2159,9 @@ _setError(failure.message);
           }
         },
       );
+
+      // Salesman should receive all updates about their order.
+      addUserIfMissing(targetUserId: order.orderSalesmanId, silentPush: 1);
 
       if (isBiller) {
         final billersResult = await _usersRepository.getUsersByCategory(5);
@@ -2170,10 +2182,6 @@ _setError(failure.message);
       }
 
       if (approvalFlag != null) {
-        userIds.add({
-          'user_id': order.orderSalesmanId,
-          'silent_push': 1,
-        });
         final checkersResult = await _usersRepository.getUsersByCategory(6);
         checkersResult.fold(
           (_) {},
@@ -3264,6 +3272,20 @@ _setError(failure.message);
     _clearError();
 
     try {
+      // Get order so we can notify its salesman (salesman should receive all updates about their order)
+      final orderResult = await _ordersRepository.getOrderById(orderId);
+      if (orderResult.isLeft) {
+        _setError('Failed to get order: ${orderResult.left.message}');
+        _setLoading(false);
+        return false;
+      }
+      final order = orderResult.right;
+      if (order == null) {
+        _setError('Order not found');
+        _setLoading(false);
+        return false;
+      }
+
       // 1. Get admins (category 1) - matches KMP line 2141
       final adminsResult = await _usersRepository.getUsersByCategory(1);
       if (adminsResult.isLeft) {
@@ -3287,6 +3309,14 @@ _setError(failure.message);
       for (final admin in adminsResult.right) {
         userIds.add({
           'user_id': admin.userId ?? -1,
+          'silent_push': 1,
+        });
+      }
+
+      // Always notify the salesman assigned to this order.
+      if (order.orderSalesmanId != -1) {
+        userIds.add({
+          'user_id': order.orderSalesmanId,
           'silent_push': 1,
         });
       }
