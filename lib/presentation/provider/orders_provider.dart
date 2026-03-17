@@ -2407,7 +2407,13 @@ _setError(failure.message);
         (failure) => _setError(failure.message),
         (_) {
           success = true;
-          // Local DB is already updated by the repository method
+          // Update checker ID in local DB (set to 0 since no specific checker is assigned yet)
+          _ordersRepository.updateOrderBillerOrCheckerId(
+            orderId: order.id,
+            isBiller: false,
+            userId: 0, // 0 means available for any checker to claim
+          );
+          // Approval flag is already updated by updateOrderApproveFlag in repository
         },
       );
 

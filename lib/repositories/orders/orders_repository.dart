@@ -1832,6 +1832,28 @@ class OrdersRepository {
     }
   }
 
+  /// Update biller or checker ID in local DB
+  Future<Either<Failure, void>> updateOrderBillerOrCheckerId({
+    required int orderId,
+    required bool isBiller,
+    required int userId,
+  }) async {
+    try {
+      final db = await _database;
+      final field = isBiller ? 'billerId' : 'checkerId';
+      // If userId is 0, set to -1 (unassigned/available for any user)
+      await db.update(
+        'Orders',
+        {field: userId == 0 ? -1 : userId},
+        where: 'orderId = ?',
+        whereArgs: [orderId],
+      );
+      return const Right(null);
+    } catch (e) {
+      return Left(DatabaseFailure.fromError(e));
+    }
+  }
+
   /// Update order sub flag
   /// Converted from KMP's updateOrderSubFlag
   Future<Either<Failure, void>> updateOrderSubFlag({
