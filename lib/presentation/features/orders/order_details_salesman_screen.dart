@@ -410,10 +410,14 @@ class _OrderDetailsSalesmanScreenState
         final isLoading = ordersProvider.orderDetailsLoading && !_didInit;
 
         // KMP: Order Details (Salesman) has only Edit in app bar; Cancel Order is on Edit screen
+        // Edit until a storekeeper claims the order (orderStockKeeperId == -1).
+        // Hide Edit once order is sent to checker / checker is working (flags 6–7).
         final canEdit = order != null &&
-            order.order.orderApproveFlag != OrderApprovalFlag.sendToStorekeeper &&
+            order.order.orderStockKeeperId == -1 &&
             order.order.orderApproveFlag != OrderApprovalFlag.completed &&
-            order.order.orderApproveFlag != OrderApprovalFlag.cancelled;
+            order.order.orderApproveFlag != OrderApprovalFlag.cancelled &&
+            order.order.orderApproveFlag != OrderApprovalFlag.sendToChecker &&
+            order.order.orderApproveFlag != OrderApprovalFlag.checkerIsChecking;
 
         return Scaffold(
           appBar: AppBar(
@@ -512,8 +516,10 @@ final hasReportItem = items.any(
           _OrderHeader(order: order, orderWithName: orderWithName),
           const SizedBox(height: 12),
           
-          // "You cannot edit" message
-          if (order.orderApproveFlag == OrderApprovalFlag.sendToStorekeeper)
+          // Edit blocked while a storekeeper has claimed this order
+          if (order.orderStockKeeperId != -1 &&
+              order.orderApproveFlag != OrderApprovalFlag.completed &&
+              order.orderApproveFlag != OrderApprovalFlag.cancelled)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -523,7 +529,7 @@ final hasReportItem = items.any(
                 color: Colors.red.withValues(alpha: 0.1),
               ),
               child: const Text(
-                'You cannot edit this order until you receive a response from the storekeeper',
+                'A storekeeper has claimed this order. You cannot edit it while they process it.',
                 style: TextStyle(
                   color: Colors.red,
                   fontSize: 14,
@@ -617,11 +623,11 @@ final hasReportItem = items.any(
               const Spacer(),
               // Plus button to add any product to order
               Visibility(
-                visible: order.orderApproveFlag != OrderApprovalFlag.sendToStorekeeper &&
+                visible: order.orderStockKeeperId == -1 &&
                     order.orderApproveFlag != OrderApprovalFlag.completed &&
-                    order.orderApproveFlag != OrderApprovalFlag.cancelled && 
-                    order.orderApproveFlag != OrderApprovalFlag.checkerIsChecking
-                    && order.orderApproveFlag != OrderApprovalFlag.sendToChecker,
+                    order.orderApproveFlag != OrderApprovalFlag.cancelled &&
+                    order.orderApproveFlag != OrderApprovalFlag.checkerIsChecking &&
+                    order.orderApproveFlag != OrderApprovalFlag.sendToChecker,
                 child: IconButton(
                   icon: const Icon(Icons.add_circle_outline),
                   color: Theme.of(context).primaryColor,
@@ -689,8 +695,7 @@ final hasReportItem = items.any(
     final items = ordersProvider.orderDetailItems;
     final hasEdits = _hasEdits(items);
 
-    final shouldShowButton = order.orderApproveFlag !=
-            OrderApprovalFlag.sendToStorekeeper &&
+    final shouldShowButton = order.orderStockKeeperId == -1 &&
         order.orderApproveFlag != OrderApprovalFlag.completed &&
         order.orderApproveFlag != OrderApprovalFlag.cancelled &&
         _showSendButton;

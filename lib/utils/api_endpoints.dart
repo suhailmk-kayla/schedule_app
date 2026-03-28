@@ -61,6 +61,7 @@ class ApiEndpoints {
   static const String addOrder = 'api/orders/add';
   static const String updateOrder = 'api/orders/update_order';
   static const String updateOrderSub = 'api/orders/update_order_sub';
+  static const String cancelOrderSub = 'api/order_sub/cancel';
   static const String updateBillerOrChecker = 'api/orders/update_biller_adn_checker';
   static const String updateOrderApproveFlag = 'api/orders/update_order_flag';
   static const String updateStoreKeeper = 'api/orders/update_store_keeper';

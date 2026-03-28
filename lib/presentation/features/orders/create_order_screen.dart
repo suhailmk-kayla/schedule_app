@@ -92,6 +92,66 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     return total + freight;
   }
 
+  Future<bool> _confirmCancelItem(BuildContext context) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel item'),
+        content: const Text('Do you want to cancel this item?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    return confirmed == true;
+  }
+
+  /// Cancels a single line item by setting quantity to 0.
+  /// This preserves existing business logic: "cancelled" == "qty = 0".
+  Future<void> _cancelLineItem(OrderSubWithDetails item) async {
+    final OrdersProvider ordersProvider =
+        Provider.of<OrdersProvider>(context, listen: false);
+
+    // If already cancelled, do nothing.
+    if (item.orderSub.orderSubQty == 0) {
+      ToastHelper.showSuccess('Item already cancelled');
+      return;
+    }
+
+    // Remote-only: this API requires a server OrderSub id.
+    final int serverOrderSubId = item.orderSub.orderSubId;
+    if (serverOrderSubId <= 0) {
+      ToastHelper.showError('Unable to cancel: invalid item id');
+      return;
+    }
+
+    if (!mounted) return;
+    final bool confirmed = await _confirmCancelItem(context);
+    if (!confirmed) return;
+
+    // Call backend cancellation API immediately (no "Check Stock" needed for cancel-only change).
+    final bool success = await ordersProvider.cancelOrderSubRemote(
+      orderSubId: serverOrderSubId,
+    );
+    if (!success) {
+      ToastHelper.showError(
+        ordersProvider.errorMessage ?? 'Failed to cancel item',
+      );
+      return;
+    }
+
+    await ordersProvider.getAllOrderSubAndDetails();
+    ToastHelper.showSuccess('Item cancelled');
+  }
+
   /// Shows confirmation dialog and cancels order if user confirms
   /// Matching KMP's EditOrder Cancel Order flow
   Future<void> _handleCancelOrder(
@@ -406,7 +466,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           final canCancel = widget.orderId != null &&
               widget.orderId!.isNotEmpty &&
               orderMaster != null &&
-              orderMaster.orderApproveFlag != OrderApprovalFlag.sendToStorekeeper &&
+              orderMaster.orderStockKeeperId == -1 &&
               orderMaster.orderApproveFlag != OrderApprovalFlag.completed &&
               orderMaster.orderApproveFlag != OrderApprovalFlag.cancelled;
 
@@ -552,6 +612,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                               slNo: index + 1,
                               item: item,
                               enableSwipeDelete: !isEditMode,
+                              showCancelItemAction: isEditMode,
+                              onCancelItem: () => _cancelLineItem(item),
                               onDelete: () {
                                 final orderSubId = item.orderSub.orderSubId;
                                 ordersProvider.removeOrderSubOptimistically(orderSubId);
@@ -672,6 +734,8 @@ class _OrderItemCard extends StatelessWidget {
   final int slNo;
   final OrderSubWithDetails item;
   final bool enableSwipeDelete;
+  final bool showCancelItemAction;
+  final VoidCallback? onCancelItem;
   final VoidCallback onDelete;
   final VoidCallback onTap;
 
@@ -680,12 +744,16 @@ class _OrderItemCard extends StatelessWidget {
     required this.slNo,
     required this.item,
     this.enableSwipeDelete = true,
+    this.showCancelItemAction = false,
+    this.onCancelItem,
     required this.onDelete,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final bool isCancelledItem = item.orderSub.orderSubQty == 0;
+
     final card = Card(
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(
@@ -848,6 +916,21 @@ class _OrderItemCard extends StatelessWidget {
                     ),
                   ],
                 ),
+              if (showCancelItemAction && !isCancelledItem) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: onCancelItem,
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      minimumSize: const Size(44, 44),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Cancel item ->'),
+                  ),
+                ),
+              ],
               ],
             ),
           ),

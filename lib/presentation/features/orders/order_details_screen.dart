@@ -550,7 +550,7 @@ class _OrderItemCard extends StatelessWidget {
         index: index,
         original: item,
         replacement: replacement!,
-        showRate: userType == 5,
+        showRate: userType == 1 || userType == 5,
       );
     }
 
@@ -644,21 +644,31 @@ class _OrderItemCard extends StatelessWidget {
             const SizedBox(height: 6),
             _KeyValueRow(label: 'Brand', value: item.productBrand),
             _KeyValueRow(label: 'Sub Brand', value: item.productSubBrand),
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: _KeyValueRow(
-                    label: 'Unit',
-                    value: item.unitDisplayName,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _KeyValueRow(
+                        label: 'Unit',
+                        value: item.unitDisplayName,
+                      ),
+                    ),
+                    Text(
+                      qty,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  qty,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                if (userType == 1)
+                  _KeyValueRow(
+                    label: 'Rate',
+                    value: item.orderSub.orderSubUpdateRate.toString(),
                   ),
-                ),
               ],
             ),
             if (note.isNotEmpty)
@@ -875,26 +885,31 @@ class _ReplacementSection extends StatelessWidget {
             const SizedBox(height: 4),
             _KeyValueRow(label: 'Brand', value: item.productBrand),
             _KeyValueRow(label: 'Sub Brand', value: item.productSubBrand),
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: _KeyValueRow(
-                    label: 'Unit',
-                    value: item.unitDisplayName,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _KeyValueRow(
+                        label: 'Unit',
+                        value: item.unitDisplayName,
+                      ),
+                    ),
+                    Text(
+                      qty,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
                 if (showRate)
                   _KeyValueRow(
                     label: 'Rate',
                     value: item.orderSub.orderSubUpdateRate.toString(),
                   ),
-                Text(
-                  qty,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
               ],
             ),
             if (highlightText != null)

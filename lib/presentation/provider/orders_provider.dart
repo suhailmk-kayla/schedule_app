@@ -503,6 +503,31 @@ class OrdersProvider extends ChangeNotifier {
     return success;
   }
 
+  /// Cancel a single order sub on server immediately (qty -> 0, flag -> cancelled),
+  /// then refresh local DB + UI list.
+  Future<bool> cancelOrderSubRemote({
+    required int orderSubId,
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    final result = await _ordersRepository.cancelOrderSub(orderSubId: orderSubId);
+
+    bool success = false;
+    result.fold(
+      (failure) => _setError(failure.message),
+      (_) {
+        success = true;
+        if (_currentOrder != null) {
+          loadOrderSubs(_currentOrder!.orderId);
+        }
+      },
+    );
+
+    _setLoading(false);
+    return success;
+  }
+
   /// Delete order sub
   Future<bool> deleteOrderSub(int orderSubId) async {
     _setLoading(true);

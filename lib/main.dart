@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:schedule_frontend_flutter/helpers/admin_registration_helper.dart';
 import 'package:schedule_frontend_flutter/utils/background_sync_worker.dart';
 import 'package:workmanager/workmanager.dart';
 import 'di.dart';
@@ -31,7 +32,6 @@ void main() async {
   // Initialize OneSignal for push notifications (must be before setupDependencies)
   try {
     await PushNotificationHelper.initialize();
-    
   } catch (e) {
     // Log error but don't block app startup
     debugPrint('OneSignal initialization failed: $e');
@@ -47,6 +47,7 @@ void main() async {
     await BackgroundSyncWorker.registerPeriodicTask();
      
   } catch (e) {
+
     // Log error but don't block app startup
   }
   // await BackgroundSyncWorker.registerTestTask();

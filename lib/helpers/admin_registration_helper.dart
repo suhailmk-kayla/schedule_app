@@ -144,15 +144,15 @@ Future<void> createAdminAccount() async {
   
   final result = await registerAdmin(
     tpin: '1234',
-    code: 'FOMSADMIN', // Change this to a unique code
-    name: 'FOMSADMIN', // Change this
-    phoneNo: '7306548087', // Change this
+    code: 'DEVELOPER', // Change this to a unique code
+    name: 'DEVELOPER', // Change this
+    phoneNo: '9876543210', // Change this
     password: '123456', // Change this to a secure password
     address: 'Admin Address', // Optional
   );
 
   if (result['success']) {
-     
+     developer.log('Admin account created successfully');
      
   } else {
     print('❌ Error: ${result['message']}');

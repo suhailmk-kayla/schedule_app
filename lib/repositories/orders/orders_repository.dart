@@ -1730,6 +1730,42 @@ class OrdersRepository {
     }
   }
 
+  /// Cancel an order sub item via API and update local DB.
+  /// Backend contract: POST `api/order_sub/cancel` with `order_sub_id` (server OrderSub id).
+  Future<Either<Failure, OrderSub>> cancelOrderSub({
+    required int orderSubId,
+  }) async {
+    try {
+      final response = await _dio.post(
+        ApiEndpoints.cancelOrderSub,
+        data: <String, dynamic>{
+          'order_sub_id': orderSubId,
+        },
+      );
+
+      final orderSubApi = OrderSubApi.fromJson(response.data);
+      if (orderSubApi.status != 1) {
+        return Left(ServerFailure.fromError(
+          'Failed to cancel order sub: ${orderSubApi.message}',
+        ));
+      }
+
+      // Store updated sub in local DB (INSERT OR REPLACE)
+      final addResult = await addOrderSub(orderSubApi.data);
+      if (addResult.isLeft) {
+        return addResult.map((_) => orderSubApi.data);
+      }
+
+      return Right(orderSubApi.data);
+    } on DioException catch (e) {
+      developer.log('Failed to cancel order sub: ${e.response?.data}');
+      return Left(NetworkFailure.fromDioError(e));
+    } catch (e) {
+      developer.log('Failed to cancel order sub: $e');
+      return Left(UnknownFailure.fromError(e));
+    }
+  }
+
   /// Send order (check stock) - calls API
   /// Converted from KMP's OrderViewModel.sendOrder
   /// Builds order payload with all order subs and sends to API
