@@ -452,6 +452,7 @@ class OrdersRepository {
           Product.brand AS productBrand,
           Product.subBrand AS productSubBrand,
           Product.photoUrl AS productPhoto,
+          Product.price AS productPrice,
           OrderSub.*
         FROM OrderSub
         LEFT JOIN Units ON Units.unitId = OrderSub.unitId
@@ -485,6 +486,7 @@ class OrdersRepository {
           Product.brand AS productBrand,
           Product.subBrand AS productSubBrand,
           Product.photoUrl AS productPhoto,
+          Product.price AS productPrice,
           OrderSub.*
         FROM OrderSub
         LEFT JOIN Units ON Units.unitId = OrderSub.unitId

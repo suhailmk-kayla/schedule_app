@@ -11,6 +11,8 @@ class OrderSubWithDetails {
   final String? productBrand;
   final String? productSubBrand;
   final String? productPhoto; // Product image URL
+  /// Catalog price from Product.price (JOIN). Compare to [OrderSub.orderSubUpdateRate].
+  final double? productPrice;
   final OrderSub orderSub;
 
   const OrderSubWithDetails({
@@ -21,6 +23,7 @@ class OrderSubWithDetails {
     this.productBrand,
     this.productSubBrand,
     this.productPhoto,
+    this.productPrice,
     required this.orderSub,
   });
 
@@ -34,6 +37,7 @@ class OrderSubWithDetails {
       productBrand: map['productBrand'] as String?,
       productSubBrand: map['productSubBrand'] as String?,
       productPhoto: map['productPhoto'] as String?,
+      productPrice: (map['productPrice'] as num?)?.toDouble(),
       orderSub: OrderSub.fromMap(map),
     );
   }

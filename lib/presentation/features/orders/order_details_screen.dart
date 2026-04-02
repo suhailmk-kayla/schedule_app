@@ -551,6 +551,7 @@ class _OrderItemCard extends StatelessWidget {
         original: item,
         replacement: replacement!,
         showRate: userType == 1 || userType == 5,
+        isAdmin: userType == 1,
       );
     }
 
@@ -669,6 +670,8 @@ class _OrderItemCard extends StatelessWidget {
                     label: 'Rate',
                     value: item.orderSub.orderSubUpdateRate.toString(),
                   ),
+                if (userType == 1)
+                  _AdminBelowProductPriceNotice(item: item),
               ],
             ),
             if (note.isNotEmpty)
@@ -776,12 +779,14 @@ class _ReplacedOrderItemCard extends StatelessWidget {
   final OrderItemDetail original;
   final OrderItemDetail replacement;
   final bool showRate;
+  final bool isAdmin;
 
   const _ReplacedOrderItemCard({
     required this.index,
     required this.original,
     required this.replacement,
     required this.showRate,
+    required this.isAdmin,
   });
 
   @override
@@ -803,6 +808,7 @@ class _ReplacedOrderItemCard extends StatelessWidget {
               item: original,
               borderColor: Colors.red,
               highlightText: 'Replaced this item with below item',
+              showAdminPriceNotice: isAdmin,
             ),
             const Icon(Icons.keyboard_arrow_down),
             _ReplacementSection(
@@ -810,6 +816,7 @@ class _ReplacedOrderItemCard extends StatelessWidget {
               item: replacement,
               borderColor: Colors.black,
               showRate: showRate,
+              showAdminPriceNotice: isAdmin,
             ),
           ],
         ),
@@ -824,6 +831,7 @@ class _ReplacementSection extends StatelessWidget {
   final Color borderColor;
   final String? highlightText;
   final bool showRate;
+  final bool showAdminPriceNotice;
 
   const _ReplacementSection({
     required this.title,
@@ -831,6 +839,7 @@ class _ReplacementSection extends StatelessWidget {
     required this.borderColor,
     this.highlightText,
     this.showRate = false,
+    this.showAdminPriceNotice = false,
   });
 
   @override
@@ -910,6 +919,8 @@ class _ReplacementSection extends StatelessWidget {
                     label: 'Rate',
                     value: item.orderSub.orderSubUpdateRate.toString(),
                   ),
+                if (showAdminPriceNotice)
+                  _AdminBelowProductPriceNotice(item: item),
               ],
             ),
             if (highlightText != null)
@@ -925,6 +936,48 @@ class _ReplacementSection extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Admin order details: product catalog price vs salesman line rate ([OrderSub.orderSubUpdateRate]).
+class _AdminBelowProductPriceNotice extends StatelessWidget {
+  final OrderItemDetail item;
+
+  const _AdminBelowProductPriceNotice({required this.item});
+
+  static const double _epsilon = 1e-6;
+
+  @override
+  Widget build(BuildContext context) {
+    final double? catalogPrice = item.productPrice;
+    if (catalogPrice == null || catalogPrice <= 0) {
+      return const SizedBox.shrink();
+    }
+    final double salesmanRate = item.orderSub.orderSubUpdateRate;
+    if (salesmanRate + _epsilon >= catalogPrice) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.amber.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.amber.shade200),
+        ),
+        child: Text(
+          'Product price is ${catalogPrice.toStringAsFixed(2)}; salesman entered ${salesmanRate.toStringAsFixed(2)} (below product price).',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.amber.shade900,
+          ),
         ),
       ),
     );

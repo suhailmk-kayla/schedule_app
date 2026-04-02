@@ -466,7 +466,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
           final canCancel = widget.orderId != null &&
               widget.orderId!.isNotEmpty &&
               orderMaster != null &&
-              orderMaster.orderStockKeeperId == -1 &&
+              orderMaster.orderApproveFlag != OrderApprovalFlag.sendToStorekeeper &&
               orderMaster.orderApproveFlag != OrderApprovalFlag.completed &&
               orderMaster.orderApproveFlag != OrderApprovalFlag.cancelled;
 

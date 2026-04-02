@@ -22,6 +22,8 @@ class OrderItemDetail {
   String get unitName => details.unitName ?? '';
   String get unitDisplayName =>
       details.unitDispName?.isNotEmpty == true ? details.unitDispName! : unitName;
+
+  double? get productPrice => details.productPrice;
 }
 
 

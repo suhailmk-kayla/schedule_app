@@ -2006,7 +2006,8 @@ _setError(failure.message);
       String productPhoto = '';
       String productBrand = '';
       String productSubBrand = '';
-      
+      double? productCatalogPrice;
+
       if (_productsRepository != null) {
         final productResult = await _productsRepository.getProductById(productId);
         productResult.fold(
@@ -2018,6 +2019,7 @@ _setError(failure.message);
               productPhoto = product.photo;
               productBrand = product.brand;
               productSubBrand = product.sub_brand;
+              productCatalogPrice = product.price;
             }
           },
         );
@@ -2032,6 +2034,7 @@ _setError(failure.message);
         productPhoto: productPhoto,
         productBrand: productBrand,
         productSubBrand: productSubBrand,
+        productPrice: productCatalogPrice,
         orderSub: newOrderSub,
       );
 
