@@ -36,7 +36,7 @@ void main() async {
     // Log error but don't block app startup
     debugPrint('OneSignal initialization failed: $e');
   }
-  // Initialize dependencies (database, dio, repositories, providers)
+  // Initialize dependencies (database, dio, repositories, providers)P
   await setupDependencies();
   // Initialize WorkManager for background sync
   try {

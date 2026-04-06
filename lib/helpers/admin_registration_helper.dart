@@ -144,9 +144,9 @@ Future<void> createAdminAccount() async {
   
   final result = await registerAdmin(
     tpin: '1234',
-    code: 'DEVELOPER', // Change this to a unique code
-    name: 'DEVELOPER', // Change this
-    phoneNo: '9876543210', // Change this
+    code: 'SA001', // Change this to a unique code
+    name: 'Superadmin', // Change this
+    phoneNo: '9876a543210', // Change this
     password: '123456', // Change this to a secure password
     address: 'Admin Address', // Optional
   );

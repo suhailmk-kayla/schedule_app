@@ -243,6 +243,12 @@ class _EstimatedBillTab extends StatelessWidget {
     double total = 0.0;
     for (final item in items) {
       final orderSub = item.orderSub;
+      final bool isCancelledItem =
+          orderSub.orderSubQty == 0 ||
+          orderSub.orderSubOrdrFlag == OrderSubFlag.cancelled;
+      if (isCancelledItem) {
+        continue;
+      }
       // Use same logic as _EstimatedItemCard:
       // Use estimatedQty if > 0, otherwise use orderSubQty
       final qty = orderSub.estimatedQty > 0
@@ -573,8 +579,15 @@ class _FinalBillTabState extends State<_FinalBillTab> {
   double _calculateFinalTotal(List<OrderItemDetail> items) {
     double total = 0.0;
     for (final item in items) {
-        // Formula: updateRate * quantity
-        total += item.orderSub.orderSubUpdateRate * item.orderSub.orderSubQty;
+      final orderSub = item.orderSub;
+      final bool isCancelledItem =
+          orderSub.orderSubQty == 0 ||
+          orderSub.orderSubOrdrFlag == OrderSubFlag.cancelled;
+      if (isCancelledItem) {
+        continue;
+      }
+      // Formula: updateRate * quantity
+      total += orderSub.orderSubUpdateRate * orderSub.orderSubQty;
     }
     return total;
   }
@@ -710,6 +723,14 @@ class _EstimatedItemsList extends StatelessWidget {
         final item = entry.value;
 
 
+
+        final orderSub = item.orderSub;
+        final bool isCancelledItem =
+            orderSub.orderSubQty == 0 ||
+            orderSub.orderSubOrdrFlag == OrderSubFlag.cancelled;
+        if (isCancelledItem) {
+          return const SizedBox.shrink();
+        }
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -874,6 +895,11 @@ class _FinalItemsList extends StatelessWidget {
         final item = entry.value;
 
         final flag = item.orderSub.orderSubOrdrFlag;
+        final bool isCancelledItem =
+            item.orderSub.orderSubQty == 0 || flag == OrderSubFlag.cancelled;
+        if (isCancelledItem) {
+          return const SizedBox.shrink();
+        }
 
 
         // Only show items that are in stock or have available quantity
