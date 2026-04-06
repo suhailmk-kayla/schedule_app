@@ -7,7 +7,6 @@ import '../../../helpers/user_type_helper.dart';
 import '../../provider/users_provider.dart';
 import 'user_details_screen.dart';
 import 'create_user_screen.dart';
-import 'dart:developer' as developer;
 
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
@@ -140,43 +139,59 @@ class _UsersScreenState extends State<UsersScreen> {
                 if (provider.users.isEmpty) {
                   return const Center(child: Text('No users'));
                 }
-                return ListView.separated(
-                  itemCount: provider.users.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final u = provider.users[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: AssetImage(AssetImages.imagesUsers),
-                        
-                      ),
-                      title: Text(u.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Code: ${u.code}'),
-                          if (u.phoneNo.isNotEmpty) Text('Phone: ${u.phoneNo}'),
-                          Text('Category: ${UserTypeHelper.nameFromCatId(u.catId)}'),
-                        ],
-                      ),
-                      onTap: () {
-                        // Get provider reference before navigation for safety
-                        final provider = Provider.of<UsersProvider>(context, listen: false);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => UserDetailsScreen(userId: u.userId ?? -1),
+                return FutureBuilder<int>(
+                  future: StorageHelper.getUserId(),
+                  builder: (context, snapshot) {
+                    final int currentUserId = snapshot.data ?? -1;
+                    final List usersToShow = provider.users
+                        // Exclude Admins (categoryId == 1)
+                        .where((u) => u.catId != 1)
+                        // Exclude current user
+                        .where((u) => (u.userId ?? -1) != currentUserId)
+                        .toList();
+
+                    if (usersToShow.isEmpty) {
+                      return const Center(child: Text('No users'));
+                    }
+
+                    return ListView.separated(
+                      itemCount: usersToShow.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final u = usersToShow[index];
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundImage: AssetImage(AssetImages.imagesUsers),
                           ),
-                        ).then((result) {
-                          // Refresh users list if user was deleted - use postFrameCallback for safety
-                          if (result == true && mounted) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) {
-                                provider.loadUsers();
+                          title: Text(u.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Code: ${u.code}'),
+                              if (u.phoneNo.isNotEmpty) Text('Phone: ${u.phoneNo}'),
+                              Text('Category: ${UserTypeHelper.nameFromCatId(u.catId)}'),
+                            ],
+                          ),
+                          onTap: () {
+                            // Get provider reference before navigation for safety
+                            final provider = Provider.of<UsersProvider>(context, listen: false);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => UserDetailsScreen(userId: u.userId ?? -1),
+                              ),
+                            ).then((result) {
+                              // Refresh users list if user was deleted - use postFrameCallback for safety
+                              if (result == true && mounted) {
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  if (mounted) {
+                                    provider.loadUsers();
+                                  }
+                                });
                               }
                             });
-                          }
-                        });
+                          },
+                        );
                       },
                     );
                   },
