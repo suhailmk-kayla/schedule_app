@@ -129,8 +129,10 @@ class _OrderDetailsCheckerScreenState
   bool _isItemCountable(OrderItemDetail detail) {
     final flag = detail.orderSub.orderSubOrdrFlag;
     // Cancelled items should not be countable/required for checking or image upload.
-    // Treat as cancelled when either qty is 0 OR workflow flag is cancelled.
-    if (detail.orderSub.orderSubQty == 0 || flag == OrderSubFlag.cancelled) {
+    // Treat as excluded when either qty is 0 OR workflow flag is cancelled/not available.
+    if (detail.orderSub.orderSubQty == 0 ||
+        flag == OrderSubFlag.cancelled ||
+        flag == OrderSubFlag.notAvailable) {
       return false;
     }
     if (flag <= OrderSubFlag.inStock) {
@@ -502,6 +504,13 @@ class _OrderDetailsCheckerScreenState
 
     final order = orderWithName.order;
     final items = provider.orderDetailItems;
+    // Cancelled (qty = 0) and Not Available items should not be rendered on checker screen.
+    final visibleItems = items
+        .where((e) =>
+            e.orderSub.orderSubQty != 0 &&
+            e.orderSub.orderSubOrdrFlag != OrderSubFlag.cancelled &&
+            e.orderSub.orderSubOrdrFlag != OrderSubFlag.notAvailable)
+        .toList();
     final replacedMap = provider.replacedOrderSubIds;
     final replacedItems = provider.replacedOrderItems;
     final disableEditing = order.orderApproveFlag == OrderApprovalFlag.completed ||
@@ -573,7 +582,7 @@ class _OrderDetailsCheckerScreenState
               ),
             ),
             const SizedBox(height: 8),
-            ...items.asMap().entries.map((entry) {
+            ...visibleItems.asMap().entries.map((entry) {
               final index = entry.key;
               final item = entry.value;
               final id = item.orderSub.orderSubId;

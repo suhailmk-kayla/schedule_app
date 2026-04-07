@@ -557,10 +557,12 @@ class OutOfStockProvider extends ChangeNotifier {
     _setLoading(true);
     _clearError();
     final effectiveSupplierId = supplierIdOverride ?? subItem.supplierId;
-    if (effectiveSupplierId == -1) {
-      _setError('No supplier selected');
+    // Block sending when supplier is not selected.
+    // Treat any non-positive id as "not selected" (covers -1 sentinel and unexpected 0).
+    if (effectiveSupplierId <= 0) {
+      _setError('Supplier is not selected');
       _setLoading(false);
-      onFailure('No supplier selected');
+      onFailure('Supplier is not selected');
       return;
     }
     try {

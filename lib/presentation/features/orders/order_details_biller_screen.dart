@@ -243,10 +243,11 @@ class _EstimatedBillTab extends StatelessWidget {
     double total = 0.0;
     for (final item in items) {
       final orderSub = item.orderSub;
-      final bool isCancelledItem =
+      final bool isExcludedItem =
           orderSub.orderSubQty == 0 ||
-          orderSub.orderSubOrdrFlag == OrderSubFlag.cancelled;
-      if (isCancelledItem) {
+          orderSub.orderSubOrdrFlag == OrderSubFlag.cancelled ||
+          orderSub.orderSubOrdrFlag == OrderSubFlag.notAvailable;
+      if (isExcludedItem) {
         continue;
       }
       // Use same logic as _EstimatedItemCard:
@@ -580,10 +581,11 @@ class _FinalBillTabState extends State<_FinalBillTab> {
     double total = 0.0;
     for (final item in items) {
       final orderSub = item.orderSub;
-      final bool isCancelledItem =
+      final bool isExcludedItem =
           orderSub.orderSubQty == 0 ||
-          orderSub.orderSubOrdrFlag == OrderSubFlag.cancelled;
-      if (isCancelledItem) {
+          orderSub.orderSubOrdrFlag == OrderSubFlag.cancelled ||
+          orderSub.orderSubOrdrFlag == OrderSubFlag.notAvailable;
+      if (isExcludedItem) {
         continue;
       }
       // Formula: updateRate * quantity
@@ -725,10 +727,11 @@ class _EstimatedItemsList extends StatelessWidget {
 
 
         final orderSub = item.orderSub;
-        final bool isCancelledItem =
+        final bool isExcludedItem =
             orderSub.orderSubQty == 0 ||
-            orderSub.orderSubOrdrFlag == OrderSubFlag.cancelled;
-        if (isCancelledItem) {
+            orderSub.orderSubOrdrFlag == OrderSubFlag.cancelled ||
+            orderSub.orderSubOrdrFlag == OrderSubFlag.notAvailable;
+        if (isExcludedItem) {
           return const SizedBox.shrink();
         }
 
@@ -895,9 +898,11 @@ class _FinalItemsList extends StatelessWidget {
         final item = entry.value;
 
         final flag = item.orderSub.orderSubOrdrFlag;
-        final bool isCancelledItem =
-            item.orderSub.orderSubQty == 0 || flag == OrderSubFlag.cancelled;
-        if (isCancelledItem) {
+        final bool isExcludedItem =
+            item.orderSub.orderSubQty == 0 ||
+            flag == OrderSubFlag.cancelled ||
+            flag == OrderSubFlag.notAvailable;
+        if (isExcludedItem) {
           return const SizedBox.shrink();
         }
 

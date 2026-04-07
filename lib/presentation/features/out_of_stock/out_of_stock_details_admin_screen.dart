@@ -124,6 +124,12 @@ class _OutOfStockDetailsAdminScreenState
   }
 
   void _handleSendToSupplier(OutOfStockSubWithDetails subItem) {
+    // Block sending when no supplier is selected (prevents orphaned enquiries).
+    // Treat any non-positive id as "not selected" (covers -1 sentinel and any unexpected 0).
+    if (subItem.supplierId <= 0) {
+      ToastHelper.showError('Supplier is not selected');
+      return;
+    }
     final provider = Provider.of<OutOfStockProvider>(context, listen: false);
     setState(() => _isLoading = true);
 
@@ -145,7 +151,11 @@ class _OutOfStockDetailsAdminScreenState
   /// when original supplier returned "out of stock". Uses supplierIdOverride.
   void _handleSendToPendingSupplier(OutOfStockSubWithDetails subItem) {
     final pendingId = _pendingSupplierByOospId[subItem.oospId];
-    if (pendingId == null || pendingId == -1) return;
+    // Defensive: pending supplier must be selected before sending.
+    if (pendingId == null || pendingId <= 0) {
+      ToastHelper.showError('Supplier is not selected');
+      return;
+    }
 
     final provider = Provider.of<OutOfStockProvider>(context, listen: false);
     setState(() => _isLoading = true);
@@ -906,7 +916,9 @@ class _SubItemCard extends StatelessWidget {
     if (subItem.oospFlag == 4) {
       return null;
     }
-    if (subItem.supplierId == -1 && pendingSupplierId == null) {
+    // Block action until a valid supplier is selected.
+    // Treat any non-positive id as "not selected" (covers -1 sentinel and unexpected 0).
+    if (subItem.supplierId <= 0 && pendingSupplierId == null) {
       return onSelectSupplier;
     }
     if (subItem.oospFlag == 3 || subItem.oospFlag == 4) {
@@ -922,11 +934,20 @@ class _SubItemCard extends StatelessWidget {
   /// Fix 2026-02-03, by AI: Green button label. "Send to Supplier" when pending
   /// selection exists (after out of stock or rejected reselect), else existing logic.
   String _getGreenButtonLabel() {
+    developer.log('subItem.supplierId: ${subItem.supplierId}, pendingSupplierId: $pendingSupplierId');
+    developer.log('supplier name: ${subItem.supplierName}');
+    developer.log('product id: ${subItem.productId}');
     // Terminal state: no further actions once marked Not Available.
     if (subItem.oospFlag == 4) {
       return 'Not Available';
     }
-    if (subItem.supplierId == -1 && pendingSupplierId == null) {
+    // Supplier not selected yet.
+    if (
+      subItem.supplierId <= 0
+      && 
+      pendingSupplierId == null) {
+        developer.log('subItem.supplierId: ${subItem.supplierId}, pendingSupplierId: $pendingSupplierId');
+        developer.log('supplier name: ${subItem.supplierName}');
       return 'Select Supplier';
     }
     if (subItem.oospFlag == 3 || subItem.oospFlag == 4) {

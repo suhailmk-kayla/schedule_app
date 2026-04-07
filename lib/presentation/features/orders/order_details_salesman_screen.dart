@@ -119,7 +119,11 @@ class _OrderDetailsSalesmanScreenState
     // (matches UI stock status logic in _getStockStatus)
     final items = ordersProvider.orderDetailItems;
     final hasAnyNotInStock = items.any(
-      (item) => item.orderSub.orderSubOrdrFlag >= OrderSubFlag.outOfStock,
+      (item) {
+        final flag = item.orderSub.orderSubOrdrFlag;
+        // NotAvailable is terminal and should not block proceeding.
+        return flag == OrderSubFlag.outOfStock || flag == OrderSubFlag.reported;
+      },
     );
     if (hasAnyNotInStock) {
       if (!mounted) return;
@@ -492,8 +496,7 @@ class _OrderDetailsSalesmanScreenState
     // Check if any item has orderFlag == 3 (out of stock) and not already reported
     // Around line 452-455, update:
 final hasReportItem = items.any(
-  (item) => item.orderSub.orderSubOrdrFlag == OrderSubFlag.outOfStock ||
-            item.orderSub.orderSubOrdrFlag == OrderSubFlag.notAvailable,
+  (item) => item.orderSub.orderSubOrdrFlag == OrderSubFlag.outOfStock 
 );
 
     if (hasReportItem != _isHaveReportItem) {
@@ -702,10 +705,16 @@ final hasReportItem = items.any(
     final showCheckStock = hasEdits && shouldShowButton;
     final showSendToBillerChecker = !hasEdits && shouldShowButton;
 
-    // Block send if ANY item is not in stock (outOfStock, reported, notAvailable, etc.)
-    final hasAnyNotInStock = items.any(
-      (item) => item.orderSub.orderSubOrdrFlag >= OrderSubFlag.outOfStock,
-    );
+    // Block send only if there are items still pending stock resolution.
+    // NotAvailable is terminal and should not block proceeding.
+    final hasAnyNotInStock = items.any((item) {
+      final flag = item.orderSub.orderSubOrdrFlag;
+      return flag == OrderSubFlag.outOfStock || flag == OrderSubFlag.reported;
+    });
+
+    // Total shown to salesman should ignore terminal non-billable items (notAvailable, cancelled, etc.).
+    // Use in-stock items only (flag <= inStock) to avoid keeping totals stuck.
+    final double inStockTotal = _calculateInStockTotal(items) + order.orderFreightCharge;
 
     // DEBUG: Log bottom bar decision
     developer.log(
@@ -758,7 +767,7 @@ final hasReportItem = items.any(
                     style: TextStyle(fontSize: 14, color: Colors.black),
                   ),
                   Text(
-                    (order.orderTotal).toString(),
+                    inStockTotal.toStringAsFixed(2),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -912,6 +921,19 @@ final hasReportItem = items.any(
         );
       }
     }
+  }
+
+  /// Calculate total price for in-stock items only.
+  /// This ignores terminal flags like notAvailable/cancelled so the order can proceed.
+  double _calculateInStockTotal(List<OrderItemDetail> items) {
+    double total = 0.0;
+    for (final item in items) {
+      final flag = item.orderSub.orderSubOrdrFlag;
+      if (flag <= OrderSubFlag.inStock) {
+        total += item.orderSub.orderSubUpdateRate * item.orderSub.orderSubQty;
+      }
+    }
+    return total;
   }
 }
 
